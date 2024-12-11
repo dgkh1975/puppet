@@ -17,6 +17,7 @@ confine :to, {}, agents.select { |agent| supports_systemd?(agent) }
 package_name = {'el'     => 'httpd',
                 'centos' => 'httpd',
                 'fedora' => 'httpd',
+                'amazon' => 'httpd',
                 'sles'   => 'apache2',
                 'debian' => 'cron', # apache2 does not create systemd service symlinks in Debian
                 'ubuntu' => 'cron', # See https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1447807
@@ -24,11 +25,15 @@ package_name = {'el'     => 'httpd',
 
 agents.each do |agent|
   platform = agent.platform.variant
+  init_script_systemd = "/usr/lib/systemd/system/#{package_name[platform]}.service"
 
-  if agent['platform'] =~ /(debian|ubuntu)/
+  if agent['platform'] =~ /(ubuntu)/
+    version = on(agent, facter('os.release.full')).stdout.chomp.to_i
+    if version < 24
+      init_script_systemd = "/lib/systemd/system/#{package_name[platform]}.service"
+    end
+  elsif agent['platform'] =~ /debian/
     init_script_systemd = "/lib/systemd/system/#{package_name[platform]}.service"
-  else
-    init_script_systemd = "/usr/lib/systemd/system/#{package_name[platform]}.service"
   end
 
   symlink_systemd = "/etc/systemd/system/multi-user.target.wants/#{package_name[platform]}.service"
@@ -42,13 +47,6 @@ agents.each do |agent|
   manifest_install_package = %Q{
     package { '#{package_name[platform]}':
       ensure => present,
-    }
-    if ($::operatingsystem == 'Fedora') and ($::operatingsystemmajrelease == '23') {
-      package{'libnghttp2':
-        ensure => latest,
-        install_options => '--best',
-        before => Package['httpd'],
-      }
     }
   }
   manifest_service_masked = %Q{
@@ -77,21 +75,21 @@ agents.each do |agent|
 
   step "Masking the #{package_name[platform]} service"
   apply_manifest_on(agent, manifest_service_masked, :catch_failures => true)
-  on(agent, puppet_resource('service', package_name[platform])) do
-    assert_match(/ensure.+=> 'stopped'/, stdout, "Expected #{package_name[platform]} service to be stopped")
-    assert_match(/enable.+=> 'false'/, stdout, "Expected #{package_name[platform]} service to be masked")
-    on(agent, "readlink #{masked_symlink_systemd}") do
-      assert_equal('/dev/null', stdout.chomp, "Expected service symlink to point to /dev/null")
+  on(agent, puppet_resource('service', package_name[platform])) do |result|
+    assert_match(/ensure.+=> 'stopped'/, result.stdout, "Expected #{package_name[platform]} service to be stopped")
+    assert_match(/enable.+=> 'false'/, result.stdout, "Expected #{package_name[platform]} service to be masked")
+    on(agent, "readlink #{masked_symlink_systemd}") do |readlink_result|
+      assert_equal('/dev/null', readlink_result.stdout.chomp, "Expected service symlink to point to /dev/null")
     end
   end
 
   step "Enabling the #{package_name[platform]} service"
   apply_manifest_on(agent, manifest_service_enabled, :catch_failures => true)
-  on(agent, puppet_resource('service', package_name[platform])) do
-    assert_match(/ensure.+=> 'running'/, stdout, "Expected #{package_name[platform]} service to be running")
-    assert_match(/enable.+=> 'true'/, stdout, "Expected #{package_name[platform]} service to be enabled")
-    on(agent, "readlink #{symlink_systemd}") do
-      assert_equal(init_script_systemd, stdout.chomp, "Expected service symlink to point to systemd init script")
+  on(agent, puppet_resource('service', package_name[platform])) do |result|
+    assert_match(/ensure.+=> 'running'/, result.stdout, "Expected #{package_name[platform]} service to be running")
+    assert_match(/enable.+=> 'true'/, result.stdout, "Expected #{package_name[platform]} service to be enabled")
+    on(agent, "readlink #{symlink_systemd}") do |readlink_result|
+      assert_equal(init_script_systemd, readlink_result.stdout.chomp, "Expected service symlink to point to systemd init script")
     end
   end
 end

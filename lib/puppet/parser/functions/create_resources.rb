@@ -1,6 +1,8 @@
-Puppet::Parser::Functions::newfunction(:create_resources, :arity => -3, :doc => <<-'ENDHEREDOC') do |args|
+# frozen_string_literal: true
+
+Puppet::Parser::Functions.newfunction(:create_resources, :arity => -3, :doc => <<-'ENDHEREDOC') do |args|
     Converts a hash into a set of resources and adds them to the catalog.
-    
+
     **Note**: Use this function selectively. It's generally better to write resources in
      [Puppet](https://puppet.com/docs/puppet/latest/lang_resources.html), as
      resources created with `create_resource` are difficult to read and troubleshoot.
@@ -50,17 +52,19 @@ Puppet::Parser::Functions::newfunction(:create_resources, :arity => -3, :doc => 
     data binding and Puppet default value expressions are considered (in that order) for the
     final value of a parameter (just as when setting a parameter to `undef` in a Puppet language
     resource declaration).
-  ENDHEREDOC
+ENDHEREDOC
   if Puppet[:tasks]
     raise Puppet::ParseErrorWithIssue.from_issue_and_stack(
       Puppet::Pops::Issues::CATALOG_OPERATION_NOT_SUPPORTED_WHEN_SCRIPTING,
-      {:operation => 'create_resources'})
+      { :operation => 'create_resources' }
+    )
   end
 
   raise ArgumentError, (_("create_resources(): wrong number of arguments (%{count}; must be 2 or 3)") % { count: args.length }) if args.length > 3
-  raise ArgumentError, (_('create_resources(): second argument must be a hash')) unless args[1].is_a?(Hash)
+  raise ArgumentError, _('create_resources(): second argument must be a hash') unless args[1].is_a?(Hash)
+
   if args.length == 3
-    raise ArgumentError, (_('create_resources(): third argument, if provided, must be a hash')) unless args[2].is_a?(Hash)
+    raise ArgumentError, _('create_resources(): third argument, if provided, must be a hash') unless args[2].is_a?(Hash)
   end
 
   type, instances, defaults = args
@@ -89,22 +93,22 @@ Puppet::Parser::Functions::newfunction(:create_resources, :arity => -3, :doc => 
 
   instances.map do |title, params|
     # Add support for iteration if title is an array
-    resource_titles = title.is_a?(Array) ? title  : [title]
+    resource_titles = title.is_a?(Array) ? title : [title]
     Puppet::Pops::Evaluator::Runtime3ResourceSupport.create_resources(
       file, line,
       self,
       virtual, exported,
       type_name,
       resource_titles,
-      defaults.merge(params).map do |name, value|
+      defaults.merge(params).filter_map do |name, value|
         value = nil if value == :undef
         Puppet::Parser::Resource::Param.new(
-          :name   => name,
-          :value  => value, # wide open to various data types, must be correct
-          :source => self.source, # TODO: support :line => line, :file => file,
-          :add    => false
+          :name => name,
+          :value => value, # wide open to various data types, must be correct
+          :source => source, # TODO: support :line => line, :file => file,
+          :add => false
         )
-      end.compact
-      )
+      end
+    )
   end.flatten.compact
 end

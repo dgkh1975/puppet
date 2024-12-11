@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2009 Thomas Bellman
 #
 # Permission is hereby granted, free of charge, to any person obtaining
@@ -24,15 +26,15 @@
 # other dealings in this Software without prior written authorization
 # from Thomas Bellman.
 
-Puppet::Parser::Functions::newfunction(
+Puppet::Parser::Functions.newfunction(
   :sprintf, :type => :rvalue,
-  :arity => -2,
-  :doc => "Perform printf-style formatting of text.
+            :arity => -2,
+            :doc => "Perform printf-style formatting of text.
 
   The first parameter is format string describing how the rest of the parameters should be formatted.
   See the documentation for the [`Kernel::sprintf` function](https://ruby-doc.org/core/Kernel.html)
   in Ruby for details.
-  
+
   To use [named format](https://idiosyncratic-ruby.com/49-what-the-format.html) arguments, provide a
   hash containing the target string values as the argument to be formatted. For example:
 
@@ -41,10 +43,9 @@ Puppet::Parser::Functions::newfunction(
   ```
 
   This statement produces a notice of `value is : 42`."
-
 ) do |args|
   fmt = args[0]
-  args = args[1..-1]
+  args = args[1..]
   begin
     return sprintf(fmt, *args)
   rescue KeyError => e
@@ -53,7 +54,7 @@ Puppet::Parser::Functions::newfunction(
       # as that allows named arguments to be used in the format string.
       #
       result = {}
-      args[0].each_pair { |k,v| result[k.is_a?(String) ? k.to_sym : k] = v }
+      args[0].each_pair { |k, v| result[k.is_a?(String) ? k.to_sym : k] = v }
       return sprintf(fmt, result)
     end
     raise e

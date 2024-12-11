@@ -69,7 +69,7 @@ shared_examples "RHEL package provider" do |provider_class, provider_name|
         allow(Puppet::Util).to receive(:which).with("rpm").and_return("/bin/rpm")
         allow(provider).to receive(:which).with("rpm").and_return("/bin/rpm")
         expect(Puppet::Util::Execution).to receive(:execute).with(["/bin/rpm", "--version"], {:combine => true, :custom_environment => {}, :failonfail => true}).and_return(Puppet::Util::Execution::ProcessOutput.new("4.10.1\n", 0)).at_most(:once)
-        allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return('6')
+        allow(Facter).to receive(:value).with('os.release.major').and_return('6')
       end
 
       it "should call #{provider_name} install for :installed" do
@@ -81,7 +81,7 @@ shared_examples "RHEL package provider" do |provider_class, provider_name|
       if provider_name == 'yum'
         context 'on el-5' do
           before(:each) do
-            allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return('5')
+            allow(Facter).to receive(:value).with('os.release.major').and_return('5')
           end
 
           it "should catch #{provider_name} install failures when status code is wrong" do
@@ -171,6 +171,20 @@ shared_examples "RHEL package provider" do |provider_class, provider_name|
         expect(Puppet::Util::Execution).to receive(:execute).with(["/usr/bin/#{provider_name}", '-d', '0', '-e', error_level, '-y', :install, "#{name}-#{version}.#{arch}"])
         allow(arch_provider).to receive(:query).and_return(:ensure => version)
         arch_provider.install
+      end
+
+      it "does not move '-noarch' to the end of version" do
+        version = '1.2.3'
+        resource = Puppet::Type.type(:package).new(
+          :name => "#{name}-noarch",
+          :ensure => version,
+          :provider =>provider_name
+        )
+        expect(Puppet::Util::Execution).to receive(:execute).with(["/usr/bin/#{provider_name}", '-d', '0', '-e', error_level, '-y', :install, "#{name}-noarch-#{version}"])
+        provider = provider_class.new
+        provider.resource = resource
+        allow(provider).to receive(:query).and_return(:ensure => version)
+        provider.install
       end
     end
 

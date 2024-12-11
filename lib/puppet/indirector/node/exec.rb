@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/node'
 require_relative '../../../puppet/indirector/exec'
 
@@ -9,6 +11,7 @@ class Puppet::Node::Exec < Puppet::Indirector::Exec
   def command
     command = Puppet[:external_nodes]
     raise ArgumentError, _("You must set the 'external_nodes' parameter to use the external node terminus") unless command != _("none")
+
     command.split
   end
 
@@ -32,7 +35,7 @@ class Puppet::Node::Exec < Puppet::Indirector::Exec
 
   # Proxy the execution, so it's easier to test.
   def execute(command, arguments)
-    Puppet::Util::Execution.execute(command,arguments)
+    Puppet::Util::Execution.execute(command, arguments)
   end
 
   # Turn our outputted objects into a Puppet::Node instance.
@@ -51,7 +54,7 @@ class Puppet::Node::Exec < Puppet::Indirector::Exec
 
   # Translate the yaml string into Ruby objects.
   def translate(name, output)
-    Puppet::Util::Yaml.safe_load(output, [Symbol]).inject({}) do |hash, data|
+    Puppet::Util::Yaml.safe_load(output, [Symbol]).each_with_object({}) do |data, hash|
       case data[0]
       when String
         hash[data[0].intern] = data[1]
@@ -60,11 +63,8 @@ class Puppet::Node::Exec < Puppet::Indirector::Exec
       else
         raise Puppet::Error, _("key is a %{klass}, not a string or symbol") % { klass: data[0].class }
       end
-
-      hash
     end
-
   rescue => detail
-      raise Puppet::Error, _("Could not load external node results for %{name}: %{detail}") % { name: name, detail: detail }, detail.backtrace
+    raise Puppet::Error, _("Could not load external node results for %{name}: %{detail}") % { name: name, detail: detail }, detail.backtrace
   end
 end

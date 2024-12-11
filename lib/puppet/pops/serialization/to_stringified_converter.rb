@@ -1,15 +1,16 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Serialization
-
   # Class that can process an arbitrary object into a value that is assignable to `Data`
   # and where contents is converted from rich data to one of:
   # * Numeric (Integer, Float)
-  # * Boolean 
+  # * Boolean
   # * Undef (nil)
   # * String
   # * Array
   # * Hash
-  # 
+  #
   # The conversion is lossy - the result cannot be deserialized to produce the original data types.
   # All rich values are transformed to strings..
   # Hashes with rich keys are transformed to use string representation of such keys.
@@ -57,7 +58,7 @@ module Serialization
 
     def path_to_s
       s = @message_prefix || ''
-      s << JsonPath.to_json_path(@path)[1..-1]
+      s << JsonPath.to_json_path(@path)[1..]
       s
     end
 
@@ -200,7 +201,7 @@ module Serialization
         elsif !key.is_a?(String)
           key = unknown_key_to_string(key)
         end
-        if key == "__ptype" || key =="__pvalue"
+        if key == "__ptype" || key == "__pvalue"
           key = "reserved key: #{key}"
         end
         with(key) { result[key] = to_data(value) }
@@ -216,10 +217,10 @@ module Serialization
           semantic = Puppet::Pops::SemanticError.new(issue, nil, EMPTY_HASH)
         else
           file, line = stacktrace
-          semantic = Puppet::Pops::SemanticError.new(issue, nil, {:file => file, :line => line})
+          semantic = Puppet::Pops::SemanticError.new(issue, nil, { :file => file, :line => line })
         end
       end
-      optionally_fail(issue,  semantic, options)
+      optionally_fail(issue, semantic, options)
     end
   end
 end

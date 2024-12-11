@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/feature'
 
 # Add the simple features, all in one file.
@@ -16,13 +18,13 @@ end
 # We can use Microsoft Windows functions
 Puppet.features.add(:microsoft_windows) { Puppet::Util::Platform.windows? }
 
-raise Puppet::Error,_("Cannot determine basic system flavour") unless Puppet.features.posix? or Puppet.features.microsoft_windows?
+raise Puppet::Error, _("Cannot determine basic system flavour") unless Puppet.features.posix? or Puppet.features.microsoft_windows?
 
 # We've got LDAP available.
 Puppet.features.add(:ldap, :libs => ["ldap"])
 
 # We have the Rdoc::Usage library.
-Puppet.features.add(:usage, :libs => %w{rdoc/ri/ri_paths rdoc/usage})
+Puppet.features.add(:usage, :libs => %w[rdoc/ri/ri_paths rdoc/usage])
 
 # We have libshadow, useful for managing passwords.
 Puppet.features.add(:libshadow, :libs => ["shadow"])
@@ -34,7 +36,7 @@ Puppet.features.add(:root) do
 end
 
 # We have lcs diff
-Puppet.features.add :diff, :libs => %w{diff/lcs diff/lcs/hunk}
+Puppet.features.add :diff, :libs => %w[diff/lcs diff/lcs/hunk]
 
 # We have OpenSSL
 Puppet.features.add(:openssl, :libs => ["openssl"])
@@ -49,23 +51,21 @@ Puppet.features.add(:minitar, :libs => ["archive/tar/minitar"])
 
 # We can manage symlinks
 Puppet.features.add(:manages_symlinks) do
-  if ! Puppet::Util::Platform.windows?
+  if !Puppet::Util::Platform.windows?
     true
   else
     module WindowsSymlink
       require 'ffi'
       extend FFI::Library
 
-      def self.is_implemented
-        begin
-          ffi_lib :kernel32
-          attach_function :CreateSymbolicLinkW, [:lpwstr, :lpwstr, :dword], :boolean
+      def self.is_implemented # rubocop:disable Naming/PredicateName
+        ffi_lib :kernel32
+        attach_function :CreateSymbolicLinkW, [:lpwstr, :lpwstr, :dword], :boolean
 
-          true
-        rescue LoadError
-          Puppet.debug { "CreateSymbolicLink is not available" }
-          false
-        end
+        true
+      rescue LoadError
+        Puppet.debug { "CreateSymbolicLink is not available" }
+        false
       end
     end
 

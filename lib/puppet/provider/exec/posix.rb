@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/exec'
 
 Puppet::Type.type(:exec).provide :posix, :parent => Puppet::Provider::Exec do
@@ -36,6 +38,7 @@ Puppet::Type.type(:exec).provide :posix, :parent => Puppet::Provider::Exec do
       elsif !File.executable?(exe)
         raise ArgumentError, _("'%{exe}' is not executable") % { exe: exe }
       end
+
       return
     end
 
@@ -52,7 +55,7 @@ Puppet::Type.type(:exec).provide :posix, :parent => Puppet::Provider::Exec do
 
   def run(command, check = false)
     if resource[:umask]
-      Puppet::Util::withumask(resource[:umask]) { super(command, check) }
+      Puppet::Util.withumask(resource[:umask]) { super(command, check) }
     else
       super(command, check)
     end

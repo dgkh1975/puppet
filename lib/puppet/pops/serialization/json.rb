@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/json'
 
 module Puppet::Pops
 module Serialization
-
 require_relative 'time_factory'
 require_relative 'abstract_reader'
 require_relative 'abstract_writer'
@@ -109,7 +110,7 @@ module JSON
         obj.each { |x| write(x) }
       when Hash
         write_map_header(obj.size)
-        obj.each_pair {|k, v| write(k); write(v) }
+        obj.each_pair { |k, v| write(k); write(v) }
       when nil
         write_nil
       else
@@ -123,7 +124,7 @@ module JSON
         @io << '[]'
       else
         @io << '['
-        @nested <<  [false, n]
+        @nested << [false, n]
       end
     end
 
@@ -132,7 +133,7 @@ module JSON
         @io << '{}'
       else
         @io << '{'
-        @nested <<  [true, n * 2]
+        @nested << [true, n * 2]
       end
     end
 
@@ -181,7 +182,7 @@ module JSON
         @nested.pop
         write_delim
       when Integer
-        if (cnt % 2) == 0 || !nesting[0]
+        if cnt.even? || !nesting[0]
           @io << ','
         else
           @io << ':'
@@ -249,6 +250,7 @@ module JSON
     def re_initialize(io)
       parsed = parse_io(io)
       raise SerializationError, _("JSON stream is not an array. It is a %{klass}") % { klass: io.class.name } unless parsed.is_a?(Array)
+
       @etor_stack = [parsed.each]
     end
 
@@ -256,6 +258,7 @@ module JSON
       obj = nil
       loop do
         raise SerializationError, _('Unexpected end of input') if @etor_stack.empty?
+
         etor = @etor_stack.last
         begin
           obj = etor.next
@@ -270,6 +273,7 @@ module JSON
         ext_no = ext_etor.next
         ext_block = @type_registry[ext_no]
         raise SerializationError, _("Invalid input. %{ext_no} is not a valid extension number") % { ext_no: ext_no } if ext_block.nil?
+
         obj = ext_block.call(nil)
       end
       obj

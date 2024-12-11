@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/provider'
 
 class Puppet::Provider::Package < Puppet::Provider
@@ -23,7 +25,7 @@ class Puppet::Provider::Package < Puppet::Provider
       # Purged is the "most uninstalled" a package can be, so a purged package will be in-sync with
       # either `ensure => absent` or `ensure => purged`; an absent package will be out of sync with `ensure => purged`.
       default_status = self.class.feature?(:purgeable) ? :purged : :absent
-      @property_hash = query || { :ensure => ( default_status )}
+      @property_hash = query || { :ensure => default_status }
       @property_hash[:ensure] = default_status if @property_hash.empty?
     end
     @property_hash.dup
@@ -47,12 +49,12 @@ class Puppet::Provider::Package < Puppet::Provider
 
     options.collect do |val|
       case val
-        when Hash
-          val.keys.sort.collect do |k|
-            "#{k}=#{val[k]}"
-          end
-        else
-          val
+      when Hash
+        val.keys.sort.collect do |k|
+          "#{k}=#{val[k]}"
+        end
+      else
+        val
       end
     end.flatten
   end

@@ -142,10 +142,9 @@ describe "validating 4x" do
   end
 
   context 'with the default settings for --strict' do
-    it 'produces a warning for duplicate keys in a literal hash' do
+    it 'produces an error for duplicate keys in a literal hash' do
       acceptor = validate(parse('{ a => 1, a => 2 }'))
-      expect(acceptor.warning_count).to eql(1)
-      expect(acceptor.error_count).to eql(0)
+      expect(acceptor.error_count).to eql(1)
       expect(acceptor).to have_issue(Puppet::Pops::Issues::DUPLICATE_KEY)
     end
 
@@ -323,6 +322,14 @@ describe "validating 4x" do
       expect(acceptor.error_count).to eql(1)
       expect(acceptor).to have_issue(Puppet::Pops::Issues::CLASS_NOT_VIRTUALIZABLE)
     end
+
+    it 'produces a deprecation warning for non-literal class parameters' do
+      acceptor = validate(parse('class test(Integer[2-1] $port) {}'))
+      expect(deprecation_count(acceptor)).to eql(1)
+      expect(acceptor.warning_count).to eql(1)
+      expect(acceptor.error_count).to eql(0)
+      expect(acceptor).to have_issue(Puppet::Pops::Issues::ILLEGAL_NONLITERAL_PARAMETER_TYPE)
+    end
   end
 
   context 'with --tasks set' do
@@ -411,6 +418,11 @@ describe "validating 4x" do
 
       it 'allows apply() with multiple expressions' do
         acceptor = validate(parse('apply("foo.example.com") { $message = "hello!"; notify { $message: } }'))
+        expect(acceptor.error_count).to eql(0)
+      end
+
+      it 'allows apply to be used as a resource attribute name' do
+        acceptor = validate(parse('apply("foo.example.com") { sometype { "resourcetitle": apply => "applyvalue" } }'))
         expect(acceptor.error_count).to eql(0)
       end
 

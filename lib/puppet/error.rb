@@ -1,8 +1,11 @@
+# frozen_string_literal: true
+
 module Puppet
   # The base class for all Puppet errors. It can wrap another exception
   class Error < RuntimeError
     attr_accessor :original
-    def initialize(message, original=nil)
+
+    def initialize(message, original = nil)
       super(message.scrub)
       @original = original
     end
@@ -17,15 +20,15 @@ module Puppet
     # May be called with 3 arguments for message, file, line, and exception, or
     # 4 args including the position on the line.
     #
-    def initialize(message, file=nil, line=nil, pos=nil, original=nil)
-      if pos.kind_of? Exception
+    def initialize(message, file = nil, line = nil, pos = nil, original = nil)
+      if pos.is_a? Exception
         original = pos
         pos = nil
       end
 
       super(message, original)
 
-      @file = file unless (file.is_a?(String) && file.empty?)
+      @file = file unless file.is_a?(String) && file.empty?
       @line = line
       @pos = pos
 
@@ -38,7 +41,7 @@ module Puppet
 
     def to_s
       msg = super
-      @file = nil if (@file.is_a?(String) && @file.empty?)
+      @file = nil if @file.is_a?(String) && @file.empty?
       msg += Puppet::Util::Errors.error_location_with_space(@file, @line, @pos)
       msg
     end
@@ -65,7 +68,7 @@ module Puppet
     # @param issue_code [Symbol] The issue code
     # @param arguments [Hash{Symbol=>Object}] Issue arguments
     #
-    def initialize(message, file=nil, line=nil, pos=nil, original=nil, issue_code= nil, arguments = nil)
+    def initialize(message, file = nil, line = nil, pos = nil, original = nil, issue_code = nil, arguments = nil)
       super(message, file, line, pos, original)
       @issue_code = issue_code
       @basic_message = message
@@ -95,14 +98,15 @@ module Puppet
     def self.from_issue_and_stack(issue, args = {})
       filename, line = Puppet::Pops::PuppetStack.top_of_stack
 
-      self.new(
-            issue.format(args),
-            filename,
-            line,
-            nil,
-            nil,
-            issue.issue_code,
-            args)
+      new(
+        issue.format(args),
+        filename,
+        line,
+        nil,
+        nil,
+        issue.issue_code,
+        args
+      )
     end
   end
 
@@ -130,7 +134,7 @@ module Puppet
     include ExternalFileError
     attr_reader :error_data
 
-    def initialize(error_data, message, file: nil, line: nil, pos: nil, original:nil)
+    def initialize(error_data, message, file: nil, line: nil, pos: nil, original: nil)
       super(message, file, line, pos, original)
       @error_data = error_data
     end

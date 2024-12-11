@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Jeff McCune <mccune.jeff@gmail.com>
 # Changed to app.dmg by: Udo Waechter <root@zoide.net>
 # Mac OS X Package Installer which handles application (.app)
@@ -17,8 +19,8 @@ require_relative '../../../puppet/util/plist' if Puppet.features.cfpropertylist?
 Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Package) do
   desc "Package management which copies application bundles to a target."
 
-  confine :operatingsystem => :darwin
-  confine :feature         => :cfpropertylist
+  confine 'os.name' => :darwin
+  confine :feature => :cfpropertylist
 
   commands :hdiutil => "/usr/bin/hdiutil"
   commands :curl => "/usr/bin/curl"
@@ -55,7 +57,7 @@ Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Packag
     cached_source = source
     tmpdir = Dir.mktmpdir
     begin
-      if %r{\A[A-Za-z][A-Za-z0-9+\-\.]*://} =~ cached_source
+      if %r{\A[A-Za-z][A-Za-z0-9+\-.]*://} =~ cached_source
         cached_source = File.join(tmpdir, name)
         begin
           curl "-o", cached_source, "-C", "-", "-L", "-s", "--url", source
@@ -66,27 +68,27 @@ Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Packag
         end
       end
 
-      open(cached_source) do |dmg|
+      File.open(cached_source) do |dmg|
         xml_str = hdiutil "mount", "-plist", "-nobrowse", "-readonly", "-mountrandom", "/tmp", dmg.path
-          ptable = Puppet::Util::Plist::parse_plist(xml_str)
-          # JJM Filter out all mount-paths into a single array, discard the rest.
-          mounts = ptable['system-entities'].collect { |entity|
-            entity['mount-point']
-          }.select { |mountloc|; mountloc }
-          begin
-            found_app = false
-            mounts.each do |fspath|
-              Dir.entries(fspath).select { |f|
-                f =~ /\.app$/i
-              }.each do |pkg|
-                found_app = true
-                installapp("#{fspath}/#{pkg}", name, source)
-              end
+        ptable = Puppet::Util::Plist.parse_plist(xml_str)
+        # JJM Filter out all mount-paths into a single array, discard the rest.
+        mounts = ptable['system-entities'].collect { |entity|
+          entity['mount-point']
+        }.select { |mountloc|; mountloc }
+        begin
+          found_app = false
+          mounts.each do |fspath|
+            Dir.entries(fspath).select { |f|
+              f =~ /\.app$/i
+            }.each do |pkg|
+              found_app = true
+              installapp("#{fspath}/#{pkg}", name, source)
             end
-            Puppet.debug "Unable to find .app in .appdmg. #{name} will not be installed." if !found_app
-          ensure
-            hdiutil "eject", mounts[0]
           end
+          Puppet.debug "Unable to find .app in .appdmg. #{name} will not be installed." unless found_app
+        ensure
+          hdiutil "eject", mounts[0]
+        end
       end
     ensure
       FileUtils.remove_entry_secure(tmpdir, true)
@@ -94,7 +96,7 @@ Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Packag
   end
 
   def query
-    Puppet::FileSystem.exist?("/var/db/.puppet_appdmg_installed_#{@resource[:name]}") ? {:name => @resource[:name], :ensure => :present} : nil
+    Puppet::FileSystem.exist?("/var/db/.puppet_appdmg_installed_#{@resource[:name]}") ? { :name => @resource[:name], :ensure => :present } : nil
   end
 
   def install
@@ -106,6 +108,6 @@ Puppet::Type.type(:package).provide(:appdmg, :parent => Puppet::Provider::Packag
     unless name
       self.fail _("Mac OS X PKG DMGs must specify a package name.")
     end
-    self.class.installpkgdmg(source,name)
+    self.class.installpkgdmg(source, name)
   end
 end

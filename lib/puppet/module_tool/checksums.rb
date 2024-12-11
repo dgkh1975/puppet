@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require 'digest/md5'
 require_relative '../../puppet/network/format_support'
 
 module Puppet::ModuleTool
-
   # = Checksums
   #
   # This class provides methods for generating checksums for data and adding
@@ -18,7 +19,7 @@ module Puppet::ModuleTool
 
     # Return checksum for the +Pathname+.
     def checksum(pathname)
-      return Digest::MD5.hexdigest(Puppet::FileSystem.binread(pathname))
+      Digest::MD5.hexdigest(Puppet::FileSystem.binread(pathname))
     end
 
     # Return checksums for object's +Pathname+, generate if it's needed.
@@ -35,7 +36,7 @@ module Puppet::ModuleTool
           end
         end
       end
-      return @data
+      @data
     end
 
     alias :to_data_hash :data

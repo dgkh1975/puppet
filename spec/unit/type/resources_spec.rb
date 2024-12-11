@@ -124,8 +124,8 @@ describe resources do
       context "on #{os}" do
         before :each do
           allow(Facter).to receive(:value).with(:kernel).and_return(os)
-          allow(Facter).to receive(:value).with(:operatingsystem).and_return(os)
-          allow(Facter).to receive(:value).with(:osfamily).and_return(os)
+          allow(Facter).to receive(:value).with('os.name').and_return(os)
+          allow(Facter).to receive(:value).with('os.family').and_return(os)
           allow(Puppet::FileSystem).to receive(:exist?).with('/etc/login.defs').and_return(false)
           @res = Puppet::Type.type(:resources).new :name => :user, :purge => true, :unless_system_user => true
           @res.catalog = Puppet::Resource::Catalog.new
@@ -268,6 +268,20 @@ describe resources do
     before do
       @purgee = Puppet::Type.type(:purgeable_test).new(:name => 'localhost')
       @catalog = Puppet::Resource::Catalog.new
+    end
+
+    context "when the catalog contains a purging resource with an alias" do
+      before do
+        @resource = Puppet::Type.type(:resources).new(:name => "purgeable_test", :purge => true)
+        @catalog.add_resource @resource
+        @catalog.alias(@resource, "purgeable_test_alias")
+      end
+
+      it "should not copy the alias metaparameter" do
+        allow(Puppet::Type.type(:purgeable_test)).to receive(:instances).and_return([@purgee])
+        generated = @resource.generate.first
+        expect(generated[:alias]).to be_nil
+      end
     end
 
     context "when dealing with non-purging resources" do

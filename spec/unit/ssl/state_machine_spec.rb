@@ -27,8 +27,12 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
   let(:refused_message) { %r{Connection refused|No connection could be made because the target machine actively refused it} }
 
   before(:each) do
+    Puppet[:daemonize] = false
     Puppet[:ssl_lockfile] = tmpfile('ssllock')
     allow(Kernel).to receive(:sleep)
+    future = Time.now + (5 * 60)
+    allow_any_instance_of(Puppet::X509::CertProvider).to receive(:crl_last_update).and_return(future)
+    allow_any_instance_of(Puppet::X509::CertProvider).to receive(:ca_last_update).and_return(future)
   end
 
   def expected_digest(name, content)
@@ -394,6 +398,16 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
       expect(File).to_not exist(Puppet[:localcacert])
     end
 
+    it 'skips CA refresh if it has not expired' do
+      Puppet[:ca_refresh_interval] = '1y'
+      Puppet::FileSystem.touch(Puppet[:localcacert], mtime: Time.now)
+
+      allow_any_instance_of(Puppet::X509::CertProvider).to receive(:load_cacerts).and_return(cacerts)
+
+      # we're expecting a net/http request to never be made
+      state.next_state
+    end
+
     context 'when verifying CA cert bundle' do
       before :each do
         allow(cert_provider).to receive(:load_cacerts).and_return(nil)
@@ -432,6 +446,69 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
         st = state.next_state
         expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::Error)
         expect(st.message).to eq("CA bundle with digest (SHA256) #{fingerprint} did not match expected digest WR:ON:G!")
+      end
+    end
+
+    context 'when refreshing a CA bundle' do
+      before :each do
+        Puppet[:ca_refresh_interval] = '1s'
+        allow_any_instance_of(Puppet::X509::CertProvider).to receive(:load_cacerts).and_return(cacerts)
+
+        yesterday = Time.now - (24 * 60 * 60)
+        allow_any_instance_of(Puppet::X509::CertProvider).to receive(:ca_last_update).and_return(yesterday)
+      end
+
+      let(:new_ca_bundle) do
+        # add 'unknown' cert to the bundle
+        [cacert, cert_fixture('intermediate.pem'), cert_fixture('unknown-ca.pem')].map(&:to_pem)
+      end
+
+      it 'uses the local CA if it has not been modified' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_return(status: 304)
+
+        expect(state.next_state.ssl_context.cacerts).to eq(cacerts)
+      end
+
+      it 'uses the local CA if refreshing fails in HTTP layer' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_return(status: 503)
+
+        expect(state.next_state.ssl_context.cacerts).to eq(cacerts)
+      end
+
+      it 'uses the local CA if refreshing fails in TCP layer' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_raise(Errno::ECONNREFUSED)
+
+        expect(state.next_state.ssl_context.cacerts).to eq(cacerts)
+      end
+
+      it 'uses the updated crl for the future requests' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_return(status: 200, body: new_ca_bundle.join)
+
+        expect(state.next_state.ssl_context.cacerts.map(&:to_pem)).to eq(new_ca_bundle)
+      end
+
+      it 'updates the `last_update` time on successful CA refresh' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_return(status: 200, body: new_ca_bundle.join)
+
+        expect_any_instance_of(Puppet::X509::CertProvider).to receive(:ca_last_update=).with(be_within(60).of(Time.now))
+
+        state.next_state
+      end
+
+      it "does not update the `last_update` time when CA refresh fails" do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_raise(Errno::ECONNREFUSED)
+
+        expect_any_instance_of(Puppet::X509::CertProvider).to receive(:ca_last_update=).never
+
+        state.next_state
+      end
+
+      it 'forces the NeedCRLs to refresh' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/ca}).to_return(status: 200, body: new_ca_bundle.join)
+
+        st = state.next_state
+        expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::NeedCRLs)
+        expect(st.force_crl_refresh).to eq(true)
       end
     end
   end
@@ -525,18 +602,13 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
       expect(File).to_not exist(Puppet[:hostcrl])
     end
 
-    it 'skips CRL refresh by default' do
-      allow_any_instance_of(Puppet::X509::CertProvider).to receive(:load_crls).and_return(crls)
-
-      state.next_state
-    end
-
     it 'skips CRL refresh if it has not expired' do
       Puppet[:crl_refresh_interval] = '1y'
       Puppet::FileSystem.touch(Puppet[:hostcrl], mtime: Time.now)
 
       allow_any_instance_of(Puppet::X509::CertProvider).to receive(:load_crls).and_return(crls)
 
+      # we're expecting a net/http request to never be made
       state.next_state
     end
 
@@ -673,6 +745,26 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
           state.next_state
         }.to raise_error(OpenSSL::PKey::RSAError)
       end
+
+      it "transitions to Done if current time plus renewal interval is less than cert's \"NotAfter\" time" do
+        allow(cert_provider).to receive(:load_private_key).and_return(private_key)
+        allow(cert_provider).to receive(:load_client_cert).and_return(client_cert)
+
+        st = state.next_state
+        expect(st).to be_instance_of(Puppet::SSL::StateMachine::Done)
+      end
+
+      it "returns NeedRenewedCert if current time plus renewal interval is greater than cert's \"NotAfter\" time" do
+        client_cert.not_after=(Time.now + 300)
+        allow(cert_provider).to receive(:load_private_key).and_return(private_key)
+        allow(cert_provider).to receive(:load_client_cert).and_return(client_cert)
+
+        ssl_context = Puppet::SSL::SSLContext.new(cacerts: [cacert], client_cert: client_cert, crls: [crl])
+        state = Puppet::SSL::StateMachine::NeedKey.new(machine, ssl_context)
+
+        st = state.next_state
+        expect(st).to be_instance_of(Puppet::SSL::StateMachine::NeedRenewedCert)
+      end
     end
 
     context 'in state NeedSubmitCSR' do
@@ -714,7 +806,7 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
         state.next_state
       end
 
-      it 'includes CSR attributes' do
+      it 'includes CSR attributes', :unless => RUBY_PLATFORM == 'java' do
         Puppet[:csr_attributes] = write_csr_attributes(
           'custom_attributes' => {
               '1.3.6.1.4.1.34380.1.2.1' => 'CSR specific info',
@@ -728,7 +820,8 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
             csr.custom_attributes
           ).to contain_exactly(
                  {'oid' => '1.3.6.1.4.1.34380.1.2.1', 'value' => 'CSR specific info'},
-                 {'oid' => '1.3.6.1.4.1.34380.1.2.2', 'value' => 'more CSR specific info'}
+                 {'oid' => '1.3.6.1.4.1.34380.1.2.2', 'value' => 'more CSR specific info'},
+                 {'oid' => 'pp_auth_auto_renew', 'value' => 'true'}
                )
         end.to_return(status: 200)
 
@@ -833,6 +926,14 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
 
         allow($stdout).to receive(:puts).with(/Couldn't fetch certificate from CA server; you might still need to sign this agent's certificate/)
         expect(state.next_state).to be_an_instance_of(Puppet::SSL::StateMachine::Wait)
+      end
+
+      it 'transitions to Error if the server returns 500' do
+        stub_request(:get, %r{puppet-ca/v1/certificate/#{Puppet[:certname]}}).to_return(status: 500)
+
+        st = state.next_state
+        expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::Error)
+        expect(st.message).to match(/Failed to retrieve certificate/)
       end
 
       it "verifies the server's certificate when getting the client cert" do
@@ -975,6 +1076,49 @@ describe Puppet::SSL::StateMachine, unless: Puppet::Util::Platform.jruby? do
       it 'transitions to LockFailure if it fails to acquire the lock' do
         expect(lockfile).to receive(:lock).and_return(false)
         expect(state.next_state).to be_an_instance_of(Puppet::SSL::StateMachine::LockFailure)
+      end
+    end
+
+    context 'in state NeedRenewedCert' do
+      before :each do
+        client_cert.not_after=(Time.now + 300)
+      end
+
+      let(:ssl_context) { Puppet::SSL::SSLContext.new(cacerts: cacerts, client_cert: client_cert, crls: crls,)}
+      let(:state) { Puppet::SSL::StateMachine::NeedRenewedCert.new(machine, ssl_context, private_key) }
+      let(:renewed_cert) { cert_fixture('renewed.pem') }
+
+      it 'returns Done with renewed cert when successful' do
+        allow(cert_provider).to receive(:save_client_cert)
+        stub_request(:post, %r{puppet-ca/v1/certificate_renewal}).to_return(status: 200, body: renewed_cert.to_pem)
+
+        st = state.next_state
+        expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::Done)
+        expect(st.ssl_context[:client_cert]).to eq(renewed_cert)
+      end
+
+      it 'logs a warning message when failing with a non-404 status' do
+        stub_request(:post, %r{puppet-ca/v1/certificate_renewal}).to_return(status: 400, body: 'Failed to automatically renew certificate: 400 Bad request')
+
+        expect(Puppet).to receive(:warning).with(/Failed to automatically renew certificate/)
+        st = state.next_state
+        expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::Done)
+      end
+
+      it 'logs an info message when failing with 404' do
+        stub_request(:post, %r{puppet-ca/v1/certificate_renewal}).to_return(status: 404, body: 'Certificate autorenewal has not been enabled on the server.')
+
+        expect(Puppet).to receive(:info).with('Certificate autorenewal has not been enabled on the server.')
+        st = state.next_state
+        expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::Done)
+      end
+
+      it 'logs a warning message when failing with no HTTP status' do
+        stub_request(:post, %r{puppet-ca/v1/certificate_renewal}).to_raise(Errno::ECONNREFUSED)
+
+        expect(Puppet).to receive(:warning).with(/Unable to automatically renew certificate:/)
+        st = state.next_state
+        expect(st).to be_an_instance_of(Puppet::SSL::StateMachine::Done)
       end
     end
   end

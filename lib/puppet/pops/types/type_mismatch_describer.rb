@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
   # @api private
@@ -88,7 +90,7 @@ module Types
   # @api private
   class SignaturePathElement < VariantPathElement
     def to_s
-      "#{key+1}."
+      "#{key + 1}."
     end
   end
 
@@ -126,9 +128,10 @@ module Types
 
     def chop_path(element_index)
       return self if element_index >= @path.size
+
       chopped_path = @path.clone
       chopped_path.delete_at(element_index)
-      copy = self.clone
+      copy = clone
       copy.instance_variable_set(:@path, chopped_path)
       copy
     end
@@ -284,7 +287,7 @@ module Types
       if e.is_a?(Array)
         if report_detailed?(e, a)
           a = detailed_actual_to_s(e, a)
-          e = e.map { |t| t.to_alias_expanded_s }
+          e = e.map(&:to_alias_expanded_s)
         else
           e = e.map { |t| short_name(t) }.uniq
           a = short_name(a)
@@ -297,7 +300,7 @@ module Types
           e = "#{e[0]} or #{e[1]}"
           multi = true
         else
-          e = "#{e[0..e.size-2].join(', ')}, or #{e[e.size-1]}"
+          e = "#{e[0..e.size - 2].join(', ')}, or #{e[e.size - 1]}"
           multi = true
         end
       else
@@ -329,7 +332,7 @@ module Types
     def short_name(t)
       # Ensure that Optional, NotUndef, Sensitive, and Type are reported with included
       # type parameter.
-      if t.is_a?(PTypeWithContainedType) && !(t.type.nil? || t.type.class == PAnyType)
+      if t.is_a?(PTypeWithContainedType) && !(t.type.nil? || t.type.instance_of?(PAnyType))
         "#{t.name}[#{t.type.name}]"
       else
         t.name.nil? ? t.simple_name : t.name
@@ -364,7 +367,7 @@ module Types
       if e.is_a?(Array)
         e.any? { |t| always_fully_detailed?(t, a) }
       else
-        e.class == a.class || e.is_a?(PTypeAliasType) || a.is_a?(PTypeAliasType) || specialization(e, a)
+        e.instance_of?(a.class) || e.is_a?(PTypeAliasType) || a.is_a?(PTypeAliasType) || specialization(e, a)
       end
     end
 
@@ -481,10 +484,6 @@ module Types
 
   # @api private
   class CountMismatch < SizeMismatch
-    def initialize(path, expected, actual)
-      super(path, expected, actual)
-    end
-
     def message(variant, position)
       min = expected.from || 0
       max = expected.to || Float::INFINITY
@@ -512,7 +511,7 @@ module Types
     end
 
     def tense_deprecated
-      #TRANSLATORS TypeMismatchDescriber is a class name and 'tense' is a method name and should not be translated
+      # TRANSLATORS TypeMismatchDescriber is a class name and 'tense' is a method name and should not be translated
       message = _("Passing a 'tense' argument to the TypeMismatchDescriber is deprecated and ignored.")
       message += ' ' + _("Everything is now reported using present tense")
       Puppet.warn_once('deprecations', 'typemismatch#tense', message)
@@ -532,11 +531,12 @@ module Types
       errors = describe_struct_signature(params_struct, given_hash, missing_ok).flatten
       case errors.size
       when 0
+        # do nothing
       when 1
-        raise Puppet::ParseError.new("#{subject}:#{errors[0].format}")
+        raise Puppet::ParseError, "#{subject}:#{errors[0].format}"
       else
-        errors_str = errors.map { |error| error.format }.join("\n ")
-        raise Puppet::ParseError.new("#{subject}:\n #{errors_str}")
+        errors_str = errors.map(&:format).join("\n ")
+        raise Puppet::ParseError, "#{subject}:\n #{errors_str}"
       end
     end
 
@@ -556,7 +556,7 @@ module Types
       when 1
         errors[0].format.strip
       else
-        errors.map { |error| error.format }.join("\n ")
+        errors.map(&:format).join("\n ")
       end
     end
 
@@ -572,14 +572,25 @@ module Types
         errors = describe(param_type, TypeCalculator.singleton.infer_set(value).generalize, [ParameterPathElement.new(param_name)])
         case errors.size
         when 0
+          # do nothing
         when 1
-          raise Puppet::ParseError.new("#{subject}:#{errors[0].format}")
+          raise Puppet::ParseError, "#{subject}:#{errors[0].format}"
         else
-          errors_str = errors.map { |error| error.format }.join("\n ")
-          raise Puppet::ParseError.new("#{subject}:\n #{errors_str}")
+          errors_str = errors.map(&:format).join("\n ")
+          raise Puppet::ParseError, "#{subject}:\n #{errors_str}"
         end
       end
     end
+
+    def get_deferred_function_return_type(value)
+      func = Puppet.lookup(:loaders).private_environment_loader
+                   .load(:function, value.name)
+      dispatcher = func.class.dispatcher.find_matching_dispatcher(value.arguments)
+      raise ArgumentError, "No matching arity found for #{func.class.name} with arguments #{value.arguments}" unless dispatcher
+
+      dispatcher.type.return_type
+    end
+    private :get_deferred_function_return_type
 
     # Validates that all entries in the _param_hash_ exists in the given param_struct, that their type conforms
     # with the corresponding param_struct element and that all required values are provided.
@@ -591,14 +602,26 @@ module Types
     # @return [Array<Mismatch>] An array of found errors. An empty array indicates no errors.
     def describe_struct_signature(params_struct, param_hash, missing_ok = false)
       param_type_hash = params_struct.hashed_elements
-      result =  param_hash.each_key.reject { |name| param_type_hash.include?(name) }.map { |name| InvalidParameter.new(nil, name) }
+      result = param_hash.each_key.reject { |name| param_type_hash.include?(name) }.map { |name| InvalidParameter.new(nil, name) }
 
       params_struct.elements.each do |elem|
         name = elem.name
         value = param_hash[name]
         value_type = elem.value_type
         if param_hash.include?(name)
-          result << describe(value_type, TypeCalculator.singleton.infer_set(value), [ParameterPathElement.new(name)]) unless value_type.instance?(value)
+          if Puppet::Pops::Types::TypeFactory.deferred.implementation_class == value.class
+            if (df_return_type = get_deferred_function_return_type(value))
+              result << describe(value_type, df_return_type, [ParameterPathElement.new(name)]) unless value_type.generalize.assignable?(df_return_type.generalize)
+            else
+              warning_text = _("Deferred function %{function_name} has no return_type, unable to guarantee value type during compilation.") %
+                             { function_name: value.name }
+              Puppet.warn_once('deprecations',
+                               "#{value.name}_deferred_warning",
+                               warning_text)
+            end
+          else
+            result << describe(value_type, TypeCalculator.singleton.infer_set(value), [ParameterPathElement.new(name)]) unless value_type.instance?(value)
+          end
         else
           result << MissingParameter.new(nil, name) unless missing_ok || elem.key_type.is_a?(POptionalType)
         end
@@ -654,9 +677,10 @@ module Types
       params_tuple = signature.type.param_types
       params_size_t = params_tuple.size_type || TypeFactory.range(*params_tuple.size_range)
 
-      if args_tuple.is_a?(PTupleType)
+      case args_tuple
+      when PTupleType
         arg_types = args_tuple.types
-      elsif args_tuple.is_a?(PArrayType)
+      when PArrayType
         arg_types = Array.new(params_tuple.types.size, args_tuple.element_type || PUndefType::DEFAULT)
       else
         return [TypeMismatch.new(path, params_tuple, args_tuple)]
@@ -683,13 +707,11 @@ module Types
           # Check that the block is of the right type
           describe(param_block_t, arg_block_t, path + [BlockPathElement.new])
         end
-      else
+      elsif param_block_t.nil? || param_block_t.assignable?(PUndefType::DEFAULT)
         # Check that the block is optional
-        if param_block_t.nil? || param_block_t.assignable?(PUndefType::DEFAULT)
-          EMPTY_ARRAY
-        else
-          [MissingRequiredBlock.new(path)]
-        end
+        EMPTY_ARRAY
+      else
+        [MissingRequiredBlock.new(path)]
       end
     end
 
@@ -719,6 +741,7 @@ module Types
       types.each_with_index do |vt, index|
         d = describe(vt, actual, path + [VariantPathElement.new(index)])
         return EMPTY_ARRAY if d.empty?
+
         variant_descriptions << d
       end
       descriptions = merge_descriptions(path.length, SizeMismatch, variant_descriptions)
@@ -735,18 +758,19 @@ module Types
       descriptions = variant_descriptions.flatten
       [size_mismatch_class, MissingRequiredBlock, UnexpectedBlock, TypeMismatch].each do |mismatch_class|
         mismatches = descriptions.select { |desc| desc.is_a?(mismatch_class) }
-        if mismatches.size == variant_descriptions.size
-          # If they all have the same canonical path, then we can compact this into one
-          generic_mismatch = mismatches.inject do |prev, curr|
-            break nil unless prev.canonical_path == curr.canonical_path
-            prev.merge(prev.path, curr)
-          end
-          unless generic_mismatch.nil?
-            # Report the generic mismatch and skip the rest
-            descriptions = [generic_mismatch]
-            break
-          end
+        next unless mismatches.size == variant_descriptions.size
+
+        # If they all have the same canonical path, then we can compact this into one
+        generic_mismatch = mismatches.inject do |prev, curr|
+          break nil unless prev.canonical_path == curr.canonical_path
+
+          prev.merge(prev.path, curr)
         end
+        next if generic_mismatch.nil?
+
+        # Report the generic mismatch and skip the rest
+        descriptions = [generic_mismatch]
+        break
       end
       descriptions = descriptions.uniq
       descriptions.size == 1 ? [descriptions[0].chop_path(varying_path_position)] : descriptions
@@ -754,6 +778,7 @@ module Types
 
     def describe_POptionalType(expected, original, actual, path)
       return EMPTY_ARRAY if actual.is_a?(PUndefType) || expected.optional_type.nil?
+
       internal_describe(expected.optional_type, original.is_a?(PTypeAliasType) ? original : expected, actual, path)
     end
 
@@ -772,7 +797,8 @@ module Types
     def describe_PArrayType(expected, original, actual, path)
       descriptions = []
       element_type = expected.element_type || PAnyType::DEFAULT
-      if actual.is_a?(PTupleType)
+      case actual
+      when PTupleType
         types = actual.types
         expected_size = expected.size_type || PCollectionType::DEFAULT_SIZE
         actual_size = actual.size_type || PIntegerType.new(types.size, types.size)
@@ -783,7 +809,7 @@ module Types
         else
           descriptions << SizeMismatch.new(path, expected_size, actual_size)
         end
-      elsif actual.is_a?(PArrayType)
+      when PArrayType
         expected_size = expected.size_type
         actual_size = actual.size_type || PCollectionType::DEFAULT_SIZE
         if expected_size.nil? || expected_size.assignable?(actual_size)
@@ -801,7 +827,8 @@ module Types
       descriptions = []
       key_type = expected.key_type || PAnyType::DEFAULT
       value_type = expected.value_type || PAnyType::DEFAULT
-      if actual.is_a?(PStructType)
+      case actual
+      when PStructType
         elements = actual.elements
         expected_size = expected.size_type || PCollectionType::DEFAULT_SIZE
         actual_size = PIntegerType.new(elements.count { |a| !a.key_type.assignable?(PUndefType::DEFAULT) }, elements.size)
@@ -813,7 +840,7 @@ module Types
         else
           descriptions << SizeMismatch.new(path, expected_size, actual_size)
         end
-      elsif actual.is_a?(PHashType)
+      when PHashType
         expected_size = expected.size_type
         actual_size = actual.size_type || PCollectionType::DEFAULT_SIZE
         if expected_size.nil? || expected_size.assignable?(actual_size)
@@ -830,7 +857,8 @@ module Types
     def describe_PStructType(expected, original, actual, path)
       elements = expected.elements
       descriptions = []
-      if actual.is_a?(PStructType)
+      case actual
+      when PStructType
         h2 = actual.hashed_elements.clone
         elements.each do |e1|
           key = e1.name
@@ -843,7 +871,7 @@ module Types
           end
         end
         h2.each_key { |key| descriptions << ExtraneousKey.new(path, key) }
-      elsif actual.is_a?(PHashType)
+      when PHashType
         actual_size = actual.size_type || PCollectionType::DEFAULT_SIZE
         expected_size = PIntegerType.new(elements.count { |e| !e.key_type.assignable?(PUndefType::DEFAULT) }, elements.size)
         if expected_size.assignable?(actual_size)
@@ -866,10 +894,12 @@ module Types
     end
 
     def describe_tuple(expected, original, actual, path, size_mismatch_class)
-      return EMPTY_ARRAY if expected == actual || expected.types.empty? && (actual.is_a?(PArrayType))
+      return EMPTY_ARRAY if expected == actual || expected.types.empty? && actual.is_a?(PArrayType)
+
       expected_size = expected.size_type || TypeFactory.range(*expected.size_range)
 
-      if actual.is_a?(PTupleType)
+      case actual
+      when PTupleType
         actual_size = actual.size_type || TypeFactory.range(*actual.size_range)
 
         # not assignable if the number of types in actual is outside number of types in expected
@@ -886,7 +916,7 @@ module Types
         else
           [size_mismatch_class.new(path, expected_size, actual_size)]
         end
-      elsif actual.is_a?(PArrayType)
+      when PArrayType
         t2_entry = actual.element_type
 
         if t2_entry.nil?
@@ -924,9 +954,7 @@ module Types
           if param_errors.empty?
             this_return_t = expected.return_type || PAnyType::DEFAULT
             that_return_t = actual.return_type || PAnyType::DEFAULT
-            unless this_return_t.assignable?(that_return_t)
-              [TypeMismatch.new(path + [ReturnTypeElement.new], this_return_t, that_return_t)]
-            else
+            if this_return_t.assignable?(that_return_t)
               # names are ignored, they are just information
               # Blocks must be compatible
               this_block_t = expected.block_type || PUndefType::DEFAULT
@@ -936,6 +964,8 @@ module Types
               else
                 [TypeMismatch.new(path + [BlockPathElement.new], this_block_t, that_block_t)]
               end
+            else
+              [TypeMismatch.new(path + [ReturnTypeElement.new], this_return_t, that_return_t)]
             end
           else
             param_errors

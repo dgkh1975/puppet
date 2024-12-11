@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet'
 require_relative '../puppet/util/tagging'
 require_relative '../puppet/util/skip_tags'
@@ -53,9 +55,9 @@ class Puppet::Transaction
 
     @resource_harness = Puppet::Transaction::ResourceHarness.new(self)
 
-    @prefetched_providers = Hash.new { |h,k| h[k] = {} }
+    @prefetched_providers = Hash.new { |h, k| h[k] = {} }
 
-    @prefetch_failed_providers = Hash.new { |h,k| h[k] = {} }
+    @prefetch_failed_providers = Hash.new { |h, k| h[k] = {} }
 
     # With merge_dependency_warnings, notify and warn about class dependency failures ... just once per class. TJK 2019-09-09
     @merge_dependency_warnings = Puppet[:merge_dependency_warnings]
@@ -76,11 +78,9 @@ class Puppet::Transaction
     prerun_errors = {}
 
     @catalog.vertices.each do |res|
-      begin
-        res.pre_run_check
-      rescue Puppet::Error => detail
-        prerun_errors[res] = detail
-      end
+      res.pre_run_check
+    rescue Puppet::Error => detail
+      prerun_errors[res] = detail
     end
 
     unless prerun_errors.empty?
@@ -105,7 +105,7 @@ class Puppet::Transaction
 
     Puppet.info _("Applying configuration version '%{version}'") % { version: catalog.version } if catalog.version
 
-    continue_while = lambda { !stop_processing? }
+    continue_while = -> { !stop_processing? }
 
     post_evalable_providers = Set.new
     pre_process = lambda do |resource|
@@ -125,6 +125,7 @@ class Puppet::Transaction
       # We don't automatically assign unsuitable providers, so if there
       # is one, it must have been selected by the user.
       return if missing_tags?(resource)
+
       if resource.provider
         resource.err _("Provider %{name} is not functional on this host") % { name: resource.provider.class.name }
       else
@@ -146,11 +147,9 @@ class Puppet::Transaction
       end
 
       post_evalable_providers.each do |provider|
-        begin
-          provider.post_resource_eval
-        rescue => detail
-          Puppet.log_exception(detail, _("post_resource_eval failed for provider %{provider}") % { provider: provider })
-        end
+        provider.post_resource_eval
+      rescue => detail
+        Puppet.log_exception(detail, _("post_resource_eval failed for provider %{provider}") % { provider: provider })
       end
 
       persistence.save if persistence.enabled?(catalog)
@@ -219,7 +218,7 @@ class Puppet::Transaction
 
   # Find all of the changed resources.
   def changed?
-    report.resource_statuses.values.find_all { |status| status.changed }.collect { |status| catalog.resource(status.resource) }
+    report.resource_statuses.values.find_all(&:changed).collect { |status| catalog.resource(status.resource) }
   end
 
   def relationship_graph
@@ -244,8 +243,8 @@ class Puppet::Transaction
   def prefetch_if_necessary(resource)
     provider_class = resource.provider.class
     if !provider_class.respond_to?(:prefetch) or
-        prefetched_providers[resource.type][provider_class.name] or
-        prefetch_failed_providers[resource.type][provider_class.name]
+       prefetched_providers[resource.type][provider_class.name] or
+       prefetch_failed_providers[resource.type][provider_class.name]
       return
     end
 
@@ -253,7 +252,7 @@ class Puppet::Transaction
 
     if provider_class == resource.class.defaultprovider
       providerless_resources = resources_by_provider(resource.type, nil)
-      providerless_resources.values.each {|res| res.provider = provider_class.name}
+      providerless_resources.values.each { |res| res.provider = provider_class.name }
       resources.merge! providerless_resources
     end
 
@@ -267,7 +266,7 @@ class Puppet::Transaction
     status = resource_harness.evaluate(resource)
     add_resource_status(status)
     ancestor ||= resource
-    if !(status.failed? || status.failed_to_restart?)
+    unless status.failed? || status.failed_to_restart?
       event_manager.queue_events(ancestor, status.events)
     end
   rescue => detail
@@ -276,6 +275,7 @@ class Puppet::Transaction
 
   # Evaluate a single resource.
   def eval_resource(resource, ancestor = nil)
+    resolve_resource(resource)
     propagate_failure(resource)
     if skip?(resource)
       resource_status(resource).skipped = true
@@ -295,14 +295,16 @@ class Puppet::Transaction
     # explosion of edges, we also ended up reporting failures for containers
     # like class and stage.  This is undesirable; while just skipping the
     # output isn't perfect, it is RC-safe. --daniel 2011-06-07
-    is_puppet_class = resource.class == Puppet::Type.type(:whit)
+    is_puppet_class = resource.instance_of?(Puppet::Type.type(:whit))
     # With merge_dependency_warnings, notify about class dependency failures ... just once per class. TJK 2019-09-09
     s = resource_status(resource)
     if s && s.dependency_failed?
       if @merge_dependency_warnings && is_puppet_class
-       	# Notes: Puppet::Resource::Status.failed_dependencies() is an Array of Puppet::Resource(s) and
-        #        Puppet::Resource.ref() calls Puppet::Resource.to_s() which is: "#{type}[#{title}]" and
-       	#        Puppet::Resource.resource_status(resource) calls Puppet::Resource.to_s()
+        # Notes: Puppet::Resource::Status.failed_dependencies() is an Array of
+        # Puppet::Resource(s) and Puppet::Resource.ref() calls
+        # Puppet::Resource.to_s() which is: "#{type}[#{title}]" and
+        # Puppet::Resource.resource_status(resource) calls
+        # Puppet::Resource.to_s()
         class_dependencies_to_be_notified = (s.failed_dependencies.map(&:ref) - @failed_class_dependencies_already_notified.to_a)
         class_dependencies_to_be_notified.each do |dep_ref|
           resource.notice _("Class dependency %{dep} has failures: %{status}") % { dep: dep_ref, status: resource_status(dep_ref).failed }
@@ -310,7 +312,7 @@ class Puppet::Transaction
         @failed_class_dependencies_already_notified.merge(class_dependencies_to_be_notified)
       else
         unless @merge_dependency_warnings || is_puppet_class
-          s.failed_dependencies.find_all { |d| !(@failed_dependencies_already_notified.include?(d.ref)) }.each do |dep|
+          s.failed_dependencies.find_all { |d| !@failed_dependencies_already_notified.include?(d.ref) }.each do |dep|
             resource.notice _("Dependency %{dep} has failures: %{status}") % { dep: dep, status: resource_status(dep).failed }
             @failed_dependencies_already_notified.add(dep.ref)
           end
@@ -329,7 +331,6 @@ class Puppet::Transaction
   # up-front at failure time because the graph may be mutated as we
   # walk it.
   def propagate_failure(resource)
-
     provider_class = resource.provider.class
     s = resource_status(resource)
     if prefetch_failed_providers[resource.type][provider_class.name] && !s.nil?
@@ -341,6 +342,7 @@ class Puppet::Transaction
     relationship_graph.direct_dependencies_of(resource).each do |dep|
       s = resource_status(dep)
       next if s.nil?
+
       failed.merge(s.failed_dependencies) if s.dependency_failed?
       failed.add(dep) if s.failed? || s.failed_to_restart?
     end
@@ -349,7 +351,7 @@ class Puppet::Transaction
 
   # Should we ignore tags?
   def ignore_tags?
-    ! @catalog.host_config?
+    !@catalog.host_config?
   end
 
   def resources_by_provider(type_name, provider_name)
@@ -372,12 +374,13 @@ class Puppet::Transaction
   def prefetch(provider_class, resources)
     type_name = provider_class.resource_type.name
     return if @prefetched_providers[type_name][provider_class.name] ||
-      @prefetch_failed_providers[type_name][provider_class.name]
+              @prefetch_failed_providers[type_name][provider_class.name]
+
     Puppet.debug { "Prefetching #{provider_class.name} resources for #{type_name}" }
     begin
       provider_class.prefetch(resources)
     rescue LoadError, StandardError => detail
-      #TRANSLATORS `prefetch` is a function name and should not be translated
+      # TRANSLATORS `prefetch` is a function name and should not be translated
       message = _("Could not prefetch %{type_name} provider '%{name}': %{detail}") % { type_name: type_name, name: provider_class.name, detail: detail }
       Puppet.log_exception(detail, message)
       @prefetch_failed_providers[type_name][provider_class.name] = true
@@ -391,16 +394,16 @@ class Puppet::Transaction
 
   # Is the resource currently scheduled?
   def scheduled?(resource)
-    self.ignoreschedules || resource_harness.scheduled?(resource)
+    ignoreschedules || resource_harness.scheduled?(resource)
   end
 
   # Should this resource be skipped?
   def skip?(resource)
     if skip_tags?(resource)
-      resource.debug "Skipping with skip tags #{skip_tags.join(", ")}"
+      resource.debug "Skipping with skip tags #{skip_tags.join(', ')}"
     elsif missing_tags?(resource)
-      resource.debug "Not tagged with #{tags.join(", ")}"
-    elsif ! scheduled?(resource)
+      resource.debug "Not tagged with #{tags.join(', ')}"
+    elsif !scheduled?(resource)
       resource.debug "Not scheduled"
     elsif failed_dependencies?(resource)
       # When we introduced the :whit into the graph, to reduce the combinatorial
@@ -408,10 +411,10 @@ class Puppet::Transaction
       # like class and stage.  This is undesirable; while just skipping the
       # output isn't perfect, it is RC-safe. --daniel 2011-06-07
       # With merge_dependency_warnings, warn about class dependency failures ... just once per class. TJK 2019-09-09
-      unless resource.class == Puppet::Type.type(:whit)
+      unless resource.instance_of?(Puppet::Type.type(:whit))
         if @merge_dependency_warnings && resource.parent && failed_dependencies?(resource.parent)
           ps = resource_status(resource.parent)
-          ps.failed_dependencies.find_all { |d| !(@failed_class_dependencies_already_warned.include?(d.ref)) }.each do |dep|
+          ps.failed_dependencies.find_all { |d| !@failed_class_dependencies_already_warned.include?(d.ref) }.each do |dep|
             resource.parent.warning _("Skipping resources in class because of failed class dependencies")
             @failed_class_dependencies_already_warned.add(dep.ref)
           end
@@ -420,7 +423,7 @@ class Puppet::Transaction
         end
       end
     elsif resource_status(resource).failed? && @prefetch_failed_providers[resource.type][resource.provider.class.name]
-      #Do not try to evaluate a resource with a known failed provider
+      # Do not try to evaluate a resource with a known failed provider
       resource.warning _("Skipping because provider prefetch failed")
     elsif resource.virtual?
       resource.debug "Skipping because virtual"
@@ -443,7 +446,7 @@ class Puppet::Transaction
     return false if ignore_tags?
     return false if tags.empty?
 
-    not resource.tagged?(*tags)
+    !resource.tagged?(*tags)
   end
 
   def skip_tags?(resource)
@@ -464,6 +467,27 @@ class Puppet::Transaction
   public :skip?
   public :missing_tags?
 
+  def resolve_resource(resource)
+    return unless catalog.host_config?
+
+    deferred_validate = false
+
+    resource.eachparameter do |param|
+      if param.value.instance_of?(Puppet::Pops::Evaluator::DeferredValue)
+        # Puppet::Parameter#value= triggers validation and munging. Puppet::Property#value=
+        # overrides the method, but also triggers validation and munging, since we're
+        # setting the desired/should value.
+        resolved = param.value.resolve
+        # resource.notice("Resolved deferred value to #{resolved}")
+        param.value = resolved
+        deferred_validate = true
+      end
+    end
+
+    if deferred_validate
+      resource.validate_resource
+    end
+  end
 end
 
 require_relative 'transaction/report'

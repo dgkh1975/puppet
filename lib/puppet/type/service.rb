@@ -1,12 +1,12 @@
+# frozen_string_literal: true
+
 # This is our main way of managing processes right now.
 #
 # a service is distinct from a process in that services
 # can only be managed through the interface of an init script
 # which is why they have a search path for initscripts and such
 
-
 module Puppet
-
   Type.newtype(:service) do
     @doc = "Manage running services.  Service support unfortunately varies
       widely by platform --- some platforms have very little if any concept of a
@@ -33,23 +33,23 @@ module Puppet
       * If you do neither, the service's stop and start commands will be used."
 
     feature :refreshable, "The provider can restart the service.",
-      :methods => [:restart]
+            :methods => [:restart]
 
     feature :enableable, "The provider can enable and disable the service.",
-      :methods => [:disable, :enable, :enabled?]
+            :methods => [:disable, :enable, :enabled?]
 
     feature :delayed_startable, "The provider can set service to delayed start",
-      :methods => [:delayed_start]
+            :methods => [:delayed_start]
 
     feature :manual_startable, "The provider can set service to manual start",
-      :methods => [:manual_start]
+            :methods => [:manual_start]
 
     feature :controllable, "The provider uses a control variable."
 
     feature :flaggable, "The provider can pass flags to the service."
 
     feature :maskable, "The provider can 'mask' the service.",
-      :methods => [:mask]
+            :methods => [:mask]
 
     feature :configurable_timeout, "The provider can specify a minumum timeout for syncing service properties"
 
@@ -60,9 +60,9 @@ module Puppet
         This property behaves differently depending on the platform;
         wherever possible, it relies on local tools to enable or disable
         a given service. Default values depend on the platform.
-        
+
         If you don't specify a value for the `enable` attribute, Puppet leaves
-        that aspect of the service alone and your operating system determines 
+        that aspect of the service alone and your operating system determines
         the behavior."
 
       newvalue(:true, :event => :service_enabled) do
@@ -93,6 +93,7 @@ module Puppet
 
       def insync?(current)
         return provider.enabled_insync?(current) if provider.respond_to?(:enabled_insync?)
+
         super(current)
       end
     end
@@ -140,6 +141,7 @@ module Puppet
 
       def insync?(current)
         return provider.logonaccount_insync?(current) if provider.respond_to?(:logonaccount_insync?)
+
         super(current)
       end
     end
@@ -256,7 +258,7 @@ module Puppet
       desc "The control variable used to manage services (originally for HP-UX).
         Defaults to the upcased service name plus `START` replacing dots with
         underscores, for those providers that support the `controllable` feature."
-      defaultto { resource.name.tr(".","_").upcase + "_START" if resource.provider.controllable? }
+      defaultto { resource.name.tr(".", "_").upcase + "_START" if resource.provider.controllable? }
     end
 
     newparam :hasrestart do
@@ -275,13 +277,12 @@ module Puppet
       defaultto { provider.respond_to?(:default_timeout) ? provider.default_timeout : 10 }
 
       munge do |value|
-        begin
-          value = value.to_i
-          raise if value < 1
-          value
-        rescue
-          raise Puppet::Error.new(_("\"%{value}\" is not a positive integer: the timeout parameter must be specified as a positive integer") % { value: value })
-        end
+        value = value.to_i
+        raise if value < 1
+
+        value
+      rescue
+        raise Puppet::Error, _("\"%{value}\" is not a positive integer: the timeout parameter must be specified as a positive integer") % { value: value }
       end
     end
 
@@ -302,7 +303,7 @@ module Puppet
 
     validate do
       if @parameters[:logonpassword] && @parameters[:logonaccount].nil?
-        raise Puppet::Error.new(_"The 'logonaccount' parameter is mandatory when setting 'logonpassword'.")
+        raise Puppet::Error, _("The 'logonaccount' parameter is mandatory when setting 'logonpassword'.")
       end
     end
   end

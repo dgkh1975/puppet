@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 # A module with base functionality for validation of a model.
 #
@@ -8,7 +10,6 @@ module Puppet::Pops
 # * **DiagnosticFormatter** - produces human readable output for a Diagnostic
 #
 module Validation
-
   # This class is an abstract base implementation of a _model validation factory_ that creates a validator instance
   # and associates it with a fully configured DiagnosticProducer.
   #
@@ -25,7 +26,6 @@ module Validation
   # @api public
   #
   class Factory
-
     # Produces a validator with the given acceptor as the recipient of produced diagnostics.
     # The acceptor is where detected issues are received (and typically collected).
     #
@@ -126,14 +126,15 @@ module Validation
     #
     def []=(issue, level)
       unless issue.is_a? Issues::Issue
-        raise Puppet::DevError.new(_("Attempt to set validation severity for something that is not an Issue. (Got %{issue})") % { issue: issue.class })
+        raise Puppet::DevError, _("Attempt to set validation severity for something that is not an Issue. (Got %{issue})") % { issue: issue.class }
       end
       unless SEVERITIES[level]
-        raise Puppet::DevError.new(_("Illegal severity level: %{level} for '%{issue_code}'") % { issue_code: issue.issue_code, level: level })
+        raise Puppet::DevError, _("Illegal severity level: %{level} for '%{issue_code}'") % { issue_code: issue.issue_code, level: level }
       end
       unless issue.demotable? || level == :error
-        raise Puppet::DevError.new(_("Attempt to demote the hard issue '%{issue_code}' to %{level}") % { issue_code: issue.issue_code, level: level })
+        raise Puppet::DevError, _("Attempt to demote the hard issue '%{issue_code}' to %{level}") % { issue_code: issue.issue_code, level: level }
       end
+
       @severities[issue] = level
     end
 
@@ -152,7 +153,7 @@ module Validation
     #
     def assert_issue issue
       unless issue.is_a? Issues::Issue
-        raise Puppet::DevError.new(_("Attempt to get validation severity for something that is not an Issue. (Got %{issue})") % { issue: issue.class })
+        raise Puppet::DevError, _("Attempt to get validation severity for something that is not an Issue. (Got %{issue})") % { issue: issue.class }
       end
     end
   end
@@ -168,7 +169,6 @@ module Validation
   # sets keys in the given argument hash that may be used in the formatting of the issue message.
   #
   class DiagnosticProducer
-
     # A producer of severity for a given issue
     # @return [SeverityProducer]
     #
@@ -178,6 +178,7 @@ module Validation
     # @return [LabelProvider]
     #
     attr_reader :label_provider
+
     # Initializes this producer.
     #
     # @param acceptor [Acceptor] a sink/collector of diagnostic results
@@ -190,7 +191,7 @@ module Validation
       @label_provider     = label_provider
     end
 
-    def accept(issue, semantic, arguments={}, except=nil)
+    def accept(issue, semantic, arguments = {}, except = nil)
       return unless will_accept? issue
 
       # Set label provider unless caller provided a special label provider
@@ -205,7 +206,7 @@ module Validation
       if semantic.is_a?(StandardError)
         unless semantic.respond_to?(:file) && semantic.respond_to?(:line) && semantic.respond_to?(:pos)
           raise Puppet::DevError, _("Issue %{issue_code}: Cannot pass a %{class_name} as a semantic object when it does not support #pos(), #file() and #line()") %
-              { issue_code: issue.issue_code, class_name: semantic.class }
+                                  { issue_code: issue.issue_code, class_name: semantic.class }
         end
       end
 
@@ -228,7 +229,8 @@ module Validation
     attr_reader :exception
     attr_reader :file
     attr_reader :source_pos
-    def initialize severity, issue, file, source_pos, arguments={}, exception=nil
+
+    def initialize severity, issue, file, source_pos, arguments = {}, exception = nil
       @severity = severity
       @issue = issue
       @file = file
@@ -241,7 +243,7 @@ module Validation
 
     # Two diagnostics are considered equal if the have the same issue, location and severity
     # (arguments and exception are ignored)
-    #
+    # rubocop:disable Layout
     def ==(o)
       self.class            == o.class             &&
         same_position?(o)                          &&
@@ -250,16 +252,17 @@ module Validation
         severity            == o.severity
     end
     alias eql? ==
+    # rubocop:enable Layout
+
+    def hash
+      @hash ||= [file, source_pos.offset, issue.issue_code, severity].hash
+    end
 
     # Position is equal if the diagnostic is not located or if referring to the same offset
     def same_position?(o)
       source_pos.nil? && o.source_pos.nil? || source_pos.offset == o.source_pos.offset
     end
     private :same_position?
-
-    def hash
-      @hash ||= [file, source_pos.offset, issue.issue_code, severity].hash
-    end
   end
 
   # Formats a diagnostic for output.
@@ -352,7 +355,6 @@ module Validation
   # answer questions about what was diagnosed.
   #
   class Acceptor
-
     # All diagnostic in the order they were issued
     attr_reader :diagnostics
 
@@ -361,13 +363,14 @@ module Validation
 
     # The number of :error severity issues
     attr_reader :error_count
+
     # Initializes this diagnostics acceptor.
     # By default, the acceptor is configured with a default severity producer.
     # @param severity_producer [SeverityProducer] the severity producer to use to determine severity of an issue
     #
     # TODO add semantic_label_provider
     #
-    def initialize()
+    def initialize
       @diagnostics = []
       @error_count = 0
       @warning_count = 0
@@ -390,29 +393,29 @@ module Validation
 
     # Returns the diagnosed errors in the order they were reported.
     def errors
-      @diagnostics.select {|d| d.severity == :error }
+      @diagnostics.select { |d| d.severity == :error }
     end
 
     # Returns the diagnosed warnings in the order they were reported.
     # (This includes :warning and :deprecation severity)
     def warnings
-      @diagnostics.select {|d| d.severity == :warning || d.severity == :deprecation }
+      @diagnostics.select { |d| d.severity == :warning || d.severity == :deprecation }
     end
 
     def errors_and_warnings
-      @diagnostics.select {|d| d.severity != :ignore }
+      @diagnostics.select { |d| d.severity != :ignore }
     end
 
     # Returns the ignored diagnostics in the order they were reported (if reported at all)
     def ignored
-      @diagnostics.select {|d| d.severity == :ignore }
+      @diagnostics.select { |d| d.severity == :ignore }
     end
 
     # Add a diagnostic, or all diagnostics from another acceptor to the set of diagnostics
     # @param diagnostic [Diagnostic, Acceptor] diagnostic(s) that should be accepted
     def accept(diagnostic)
       if diagnostic.is_a?(Acceptor)
-        diagnostic.diagnostics.each {|d| _accept(d)}
+        diagnostic.diagnostics.each { |d| _accept(d) }
       else
         _accept(diagnostic)
       end
@@ -437,7 +440,7 @@ module Validation
           @error_count -= 1
         when :warning
           @warning_count -= 1
-        # there is not ignore_count
+          # there is not ignore_count
         end
       end
       removed.empty? ? nil : removed

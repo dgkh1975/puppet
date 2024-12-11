@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 require 'time'
 require_relative '../../puppet/network/format_support'
 require_relative '../../puppet/util/psych_support'
 
 module Puppet
   class Resource
-
     # This class represents the result of evaluating a given resource. It
     # contains file and line information about the source, events generated
     # while evaluating the resource, timing information, and the status of the
@@ -101,7 +102,7 @@ module Puppet
       end
 
       def self.from_data_hash(data)
-        obj = self.allocate
+        obj = allocate
         obj.initialize_from_hash(data)
         obj
       end
@@ -109,7 +110,7 @@ module Puppet
       # Provide a boolean method for each of the states.
       STATES.each do |attr|
         define_method("#{attr}?") do
-          !! send(attr)
+          !!send(attr)
         end
       end
 
@@ -120,9 +121,10 @@ module Puppet
 
       def add_event(event)
         @events << event
-        if event.status == 'failure'
+        case event.status
+        when 'failure'
           self.failed = true
-        elsif event.status == 'success'
+        when 'success'
           @change_count += 1
           @changed = true
         end
@@ -214,13 +216,13 @@ module Puppet
           'tags' => @tags.to_a,
           'time' => @time.iso8601(9),
           'failed' => @failed,
-          'failed_to_restart' => self.failed_to_restart?,
+          'failed_to_restart' => failed_to_restart?,
           'changed' => @changed,
           'out_of_sync' => @out_of_sync,
           'skipped' => @skipped,
           'change_count' => @change_count,
           'out_of_sync_count' => @out_of_sync_count,
-          'events' => @events.map { |event| event.to_data_hash },
+          'events' => @events.map(&:to_data_hash),
           'corrective_change' => @corrective_change,
         }
       end

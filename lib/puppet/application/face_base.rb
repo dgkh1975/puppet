@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/application'
 require_relative '../../puppet/face'
 require 'optparse'
-require 'pp'
 
 class Puppet::Application::FaceBase < Puppet::Application
-  option("--debug", "-d") do |arg|
+  option("--debug", "-d") do |_arg|
     set_log_level(:debug => true)
   end
 
@@ -16,7 +17,7 @@ class Puppet::Application::FaceBase < Puppet::Application
     self.render_as = format.to_sym
   end
 
-  option("--help", "-h") do |arg|
+  option("--help", "-h") do |_arg|
     if action && !@is_default_action
       # Only invoke help on the action if it was specified, not if
       # it was the default action.
@@ -27,7 +28,8 @@ class Puppet::Application::FaceBase < Puppet::Application
     exit(0)
   end
 
-  attr_accessor :face, :action, :type, :arguments, :render_as
+  attr_reader :render_as
+  attr_accessor :face, :action, :type, :arguments
 
   def render_as=(format)
     @render_as = Puppet::Network::FormatHandler.format(format)
@@ -72,7 +74,7 @@ class Puppet::Application::FaceBase < Puppet::Application
     # non-option word to use as the action.
     action_name = nil
     index       = -1
-    until action_name or (index += 1) >= command_line.args.length do
+    until action_name or (index += 1) >= command_line.args.length
       item = command_line.args[index]
       if item =~ /^-/
         option = @face.options.find do |name|
@@ -86,7 +88,7 @@ class Puppet::Application::FaceBase < Puppet::Application
           # when we get there. --daniel 2011-04-04
           if option.takes_argument? and !item.index('=')
             index += 1 unless
-              (option.optional_argument? and command_line.args[index + 1] =~ /^-/)
+              option.optional_argument? and command_line.args[index + 1] =~ /^-/
           end
         else
           option = find_global_settings_argument(item)
@@ -98,12 +100,12 @@ class Puppet::Application::FaceBase < Puppet::Application
               # employed in the long form of the option. --jeffmccune 2012-09-18
               index += 1 unless item =~ /^--#{option.name}=/
             end
-          else 
+          else
             option = find_application_argument(item)
             if option
-              index += 1 if (option[:argument] and not option[:optional])
+              index += 1 if option[:argument] and !(option[:optional])
             else
-              raise OptionParser::InvalidOption.new(item.sub(/=.*$/, ''))
+              raise OptionParser::InvalidOption, item.sub(/=.*$/, '')
             end
           end
         end
@@ -153,30 +155,33 @@ class Puppet::Application::FaceBase < Puppet::Application
   end
 
   def find_global_settings_argument(item)
-    Puppet.settings.each do |name, object|
+    Puppet.settings.each do |_name, object|
       object.optparse_args.each do |arg|
         next unless arg =~ /^-/
+
         # sadly, we have to emulate some of optparse here...
         pattern = /^#{arg.sub('[no-]', '').sub(/[ =].*$/, '')}(?:[ =].*)?$/
         pattern.match item and return object
       end
     end
-    return nil                  # nothing found.
+    nil                  # nothing found.
   end
 
   def find_application_argument(item)
-    self.class.option_parser_commands.each do |options, function|
+    self.class.option_parser_commands.each do |options, _function|
       options.each do |option|
         next unless option =~ /^-/
+
         pattern = /^#{option.sub('[no-]', '').sub(/[ =].*$/, '')}(?:[ =].*)?$/
         next unless pattern.match(item)
+
         return {
           :argument => option =~ /[ =]/,
           :optional => option =~ /[ =]\[/
         }
       end
     end
-    return nil                  # not found
+    nil                  # not found
   end
 
   def setup
@@ -200,9 +205,8 @@ class Puppet::Application::FaceBase < Puppet::Application
     @arguments << options
 
     # If we don't have a rendering format, set one early.
-    self.render_as ||= (@action.render_as || :console)
+    self.render_as ||= @action.render_as || :console
   end
-
 
   def main
     status = false
@@ -243,7 +247,7 @@ class Puppet::Application::FaceBase < Puppet::Application
     # --daniel 2011-04-27
     if (arity = @action.positional_arg_count) > 0
       unless (count = arguments.length) == arity then
-        raise ArgumentError, n_("puppet %{face} %{action} takes %{arg_count} argument, but you gave %{given_count}", "puppet %{face} %{action} takes %{arg_count} arguments, but you gave %{given_count}", arity - 1) % { face: @face.name, action: @action.name, arg_count: arity-1, given_count: count-1 }
+        raise ArgumentError, n_("puppet %{face} %{action} takes %{arg_count} argument, but you gave %{given_count}", "puppet %{face} %{action} takes %{arg_count} arguments, but you gave %{given_count}", arity - 1) % { face: @face.name, action: @action.name, arg_count: arity - 1, given_count: count - 1 }
       end
     end
 
@@ -264,11 +268,9 @@ class Puppet::Application::FaceBase < Puppet::Application
   # --kelsey 2012-02-14
   rescue SystemExit => detail
     status = detail.status
-
   rescue => detail
     Puppet.log_exception(detail)
     Puppet.err _("Try 'puppet help %{face} %{action}' for usage") % { face: @face.name, action: @action.name }
-
   ensure
     exit status
   end

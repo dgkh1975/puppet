@@ -29,7 +29,6 @@ module Process
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX)
 
   class << self
-
     private :SetHandleInformation, :SetErrorMode, :CreateProcessW, :OpenProcess,
             :SetPriorityClass, :CreateProcessWithLogonW, :get_osfhandle, :get_errno
 
@@ -185,7 +184,7 @@ module Process
       raise TypeError unless int_priority.is_a?(Integer)
 
       int = Process.pid if int == 0
-      handle = OpenProcess(PROCESS_SET_INFORMATION, 0 , int)
+      handle = OpenProcess(PROCESS_SET_INFORMATION, 0, int)
 
       if handle == 0
         raise SystemCallError, FFI.errno, "OpenProcess"
@@ -198,7 +197,7 @@ module Process
         FFI::WIN32.CloseHandle(handle)
       end
 
-      return 0
+      0
     end
 
     private

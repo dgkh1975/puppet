@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:service).provide :service do
   desc "The simplest form of service support."
 
@@ -11,8 +13,8 @@ Puppet::Type.type(:service).provide :service do
       service_command(:restart)
       nil
     else
-      self.stop
-      self.start
+      stop
+      start
     end
   end
 
@@ -45,11 +47,9 @@ Puppet::Type.type(:service).provide :service do
   #
   # @return [Puppet::Util::Execution::ProcessOutput]
   def service_execute(type, command, fof = true, squelch = false, combine = true)
-    begin
-      execute(command, :failonfail => fof, :override_locale => false, :squelch => squelch, :combine => combine)
-    rescue Puppet::ExecutionFailure => detail
-      @resource.fail Puppet::Error, "Could not #{type} #{@resource.ref}: #{detail}", detail
-    end
+    execute(command, :failonfail => fof, :override_locale => false, :squelch => squelch, :combine => combine)
+  rescue Puppet::ExecutionFailure => detail
+    @resource.fail Puppet::Error, "Could not #{type} #{@resource.ref}: #{detail}", detail
   end
 
   # Use either a specified command or the default for our provider.
@@ -65,4 +65,3 @@ Puppet::Type.type(:service).provide :service do
     service_execute(type, cmd, fof)
   end
 end
-

@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 # Packaging using Blastwave's pkg-get program.
 Puppet::Type.type(:package).provide :blastwave, :parent => :sun, :source => :sun do
   desc "Package management using Blastwave.org's `pkg-get` command on Solaris."
   pkgget = "pkg-get"
   pkgget = "/opt/csw/bin/pkg-get" if FileTest.executable?("/opt/csw/bin/pkg-get")
 
-  confine :osfamily => :solaris
+  confine 'os.family' => :solaris
 
   commands :pkgget => pkgget
 
@@ -15,7 +17,7 @@ Puppet::Type.type(:package).provide :blastwave, :parent => :sun, :source => :sun
   def self.extended(mod)
     unless command(:pkgget) != "pkg-get"
       raise Puppet::Error,
-        _("The pkg-get command is missing; blastwave packaging unavailable")
+            _("The pkg-get command is missing; blastwave packaging unavailable")
     end
 
     unless Puppet::FileSystem.exist?("/var/pkg-get/admin")
@@ -39,46 +41,45 @@ Puppet::Type.type(:package).provide :blastwave, :parent => :sun, :source => :sun
 
     output = Puppet::Util.withenv(:PAGER => "/usr/bin/cat") { pkgget command }
 
-    list = output.split("\n").collect do |line|
+    list = output.split("\n").filter_map do |line|
       next if line =~ /^#/
       next if line =~ /^WARNING/
       next if line =~ /localrev\s+remoterev/
 
       blastsplit(line)
-    end.reject { |h| h.nil? }
+    end
 
     if hash[:justme]
-      return list[0]
+      list[0]
     else
       list.reject! { |h|
         h[:ensure] == :absent
       }
-      return list
+      list
     end
-
   end
 
   # Split the different lines into hashes.
   def self.blastsplit(line)
     if line =~ /\s*(\S+)\s+((\[Not installed\])|(\S+))\s+(\S+)/
       hash = {}
-      hash[:name] = $1
-      hash[:ensure] = if $2 == "[Not installed]"
-        :absent
-      else
-        $2
-      end
-      hash[:avail] = $5
+      hash[:name] = Regexp.last_match(1)
+      hash[:ensure] = if Regexp.last_match(2) == "[Not installed]"
+                        :absent
+                      else
+                        Regexp.last_match(2)
+                      end
+      hash[:avail] = Regexp.last_match(5)
 
       hash[:avail] = hash[:ensure] if hash[:avail] == "SAME"
 
       # Use the name method, so it works with subclasses.
-      hash[:provider] = self.name
+      hash[:provider] = name
 
-      return hash
+      hash
     else
       Puppet.warning _("Cannot match %{line}") % { line: line }
-      return nil
+      nil
     end
   end
 
@@ -94,11 +95,7 @@ Puppet::Type.type(:package).provide :blastwave, :parent => :sun, :source => :sun
 
   def query
     hash = self.class.blastlist(:justme => @resource[:name])
-    if hash
-      hash
-    else
-      {:ensure => :absent}
-    end
+    hash || { :ensure => :absent }
   end
 
   # Remove the old package, and install the new one

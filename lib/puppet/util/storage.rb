@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'yaml'
 require 'singleton'
 require_relative '../../puppet/util/yaml'
@@ -38,14 +40,14 @@ class Puppet::Util::Storage
     @@state = {}
   end
 
-  self.init
+  init
 
   def self.load
     Puppet.settings.use(:main) unless FileTest.directory?(Puppet[:statedir])
     filename = Puppet[:statefile]
 
     unless Puppet::FileSystem.exist?(filename)
-      self.init if @@state.nil?
+      init if @@state.nil?
       return
     end
     unless File.file?(filename)
@@ -53,22 +55,20 @@ class Puppet::Util::Storage
       return
     end
     Puppet::Util.benchmark(:debug, "Loaded state in %{seconds} seconds") do
-      begin
-        @@state = Puppet::Util::Yaml.safe_load_file(filename, [Symbol, Time])
-      rescue Puppet::Util::Yaml::YamlLoadError => detail
-        Puppet.err _("Checksumfile %{filename} is corrupt (%{detail}); replacing") % { filename: filename, detail: detail }
+      @@state = Puppet::Util::Yaml.safe_load_file(filename, [Symbol, Time])
+    rescue Puppet::Util::Yaml::YamlLoadError => detail
+      Puppet.err _("Checksumfile %{filename} is corrupt (%{detail}); replacing") % { filename: filename, detail: detail }
 
-        begin
-          File.rename(filename, filename + ".bad")
-        rescue
-          raise Puppet::Error, _("Could not rename corrupt %{filename}; remove manually") % { filename: filename }, detail.backtrace
-        end
+      begin
+        File.rename(filename, filename + ".bad")
+      rescue
+        raise Puppet::Error, _("Could not rename corrupt %{filename}; remove manually") % { filename: filename }, detail.backtrace
       end
     end
 
     unless @@state.is_a?(Hash)
       Puppet.err _("State got corrupted")
-      self.init
+      init
     end
   end
 
@@ -87,7 +87,7 @@ class Puppet::Util::Storage
       Puppet::Util.benchmark(:debug, "Pruned old state cache entries in %{seconds} seconds") do
         ttl_cutoff = Time.now - Puppet[:statettl]
 
-        @@state.reject! do |k,v|
+        @@state.reject! do |k, _v|
           @@state[k][:checked] && @@state[k][:checked] < ttl_cutoff
         end
       end

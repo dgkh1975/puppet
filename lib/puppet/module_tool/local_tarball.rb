@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pathname'
 require 'tmpdir'
 
@@ -18,9 +20,9 @@ module Puppet::ModuleTool
 
     def fetch(name)
       if @release.name == name
-        [ @release ]
+        [@release]
       else
-        [ ]
+        []
       end
     end
 
@@ -54,7 +56,7 @@ module Puppet::ModuleTool
           dependencies = mod.dependencies.map do |dep|
             Puppet::ModuleTool.parse_module_dependency(release, dep)[0..1]
           end
-          dependencies = Hash[dependencies]
+          dependencies = dependencies.to_h
         end
 
         super(source, name, version, dependencies || {})
@@ -75,16 +77,16 @@ module Puppet::ModuleTool
     # Obtain a suitable temporary path for unpacking tarballs
     #
     # @return [String] path to temporary unpacking location
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     def tmpdir
       @dir ||= Dir.mktmpdir('local-tarball', Puppet::Forge::Cache.base_path)
     end
+    # rubocop:enable Naming/MemoizedInstanceVariableName
 
     def unpack(file, destination)
-      begin
-        Puppet::ModuleTool::Applications::Unpacker.unpack(file, destination)
-      rescue Puppet::ExecutionFailure => e
-        raise RuntimeError, _("Could not extract contents of module archive: %{message}") % { message: e.message }
-      end
+      Puppet::ModuleTool::Applications::Unpacker.unpack(file, destination)
+    rescue Puppet::ExecutionFailure => e
+      raise RuntimeError, _("Could not extract contents of module archive: %{message}") % { message: e.message }
     end
   end
 end

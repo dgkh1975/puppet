@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Model
 # A provider of labels for model object, producing a human name for the model object.
@@ -8,7 +10,7 @@ class ModelLabelProvider
   include LabelProvider
 
   def initialize
-    @@label_visitor ||= Visitor.new(self,"label",0,0)
+    @@label_visitor ||= Visitor.new(self, "label", 0, 0)
   end
 
   # Produces a label for the given objects type/operator without article.
@@ -18,6 +20,7 @@ class ModelLabelProvider
     @@label_visitor.visit_this_0(self, o)
   end
 
+  # rubocop:disable Layout/SpaceBeforeSemicolon
   def label_Factory o                     ; label(o.model)                      end
   def label_Array o                       ; "Array"                             end
   def label_LiteralInteger o              ; "Literal Integer"                   end
@@ -103,6 +106,7 @@ class ModelLabelProvider
   def label_Timespan o                    ; "Timespan"                          end
   def label_Version o                     ; "Semver"                            end
   def label_VersionRange o                ; "SemverRange"                       end
+  # rubocop:enable Layout/SpaceBeforeSemicolon
 
   def label_PResourceType o
     if o.title
@@ -115,7 +119,6 @@ class ModelLabelProvider
   def label_Resource o
     'Resource Statement'
   end
-
 
   def label_Class o
     if o <= Types::PAnyType

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/face'
 
 Puppet::Indirector::Face.define(:report, '0.0.1') do
@@ -38,14 +40,12 @@ Puppet::Indirector::Face.define(:report, '0.0.1') do
           Puppet::Face[:report, '0.0.1'].submit(report)
           return report
     EOT
-    when_invoked do |report, options|
-      begin
-        Puppet::Transaction::Report.indirection.terminus_class = :rest
-        Puppet::Face[:report, "0.0.1"].save(report)
-        Puppet.notice _("Uploaded report for %{name}") % { name: report.name }
-      rescue => detail
-        Puppet.log_exception(detail, _("Could not send report: %{detail}") % { detail: detail })
-      end
+    when_invoked do |report, _options|
+      Puppet::Transaction::Report.indirection.terminus_class = :rest
+      Puppet::Face[:report, "0.0.1"].save(report)
+      Puppet.notice _("Uploaded report for %{name}") % { name: report.name }
+    rescue => detail
+      Puppet.log_exception(detail, _("Could not send report: %{detail}") % { detail: detail })
     end
   end
   deactivate_action(:find)

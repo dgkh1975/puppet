@@ -1,18 +1,20 @@
-module Puppet::ModuleTool::Shared
+# frozen_string_literal: true
 
+module Puppet::ModuleTool::Shared
   include Puppet::ModuleTool::Errors
 
   def get_local_constraints
-    @local      = Hash.new { |h,k| h[k] = { } }
-    @conditions = Hash.new { |h,k| h[k] = [] }
-    @installed  = Hash.new { |h,k| h[k] = [] }
+    @local      = Hash.new { |h, k| h[k] = {} }
+    @conditions = Hash.new { |h, k| h[k] = [] }
+    @installed  = Hash.new { |h, k| h[k] = [] }
 
     @environment.modules_by_path.values.flatten.each do |mod|
       mod_name = (mod.forge_name || mod.name).tr('/', '-')
       @installed[mod_name] << mod
       d = @local["#{mod_name}@#{mod.version}"]
       (mod.dependencies || []).each do |hash|
-        name, conditions = hash['name'], hash['version_requirement']
+        name = hash['name']
+        conditions = hash['version_requirement']
         name = name.tr('/', '-')
         d[name] = conditions
         @conditions[name] << {
@@ -25,9 +27,9 @@ module Puppet::ModuleTool::Shared
   end
 
   def get_remote_constraints(forge)
-    @remote   = Hash.new { |h,k| h[k] = { } }
+    @remote   = Hash.new { |h, k| h[k] = {} }
     @urls     = {}
-    @versions = Hash.new { |h,k| h[k] = [] }
+    @versions = Hash.new { |h, k| h[k] = [] }
 
     Puppet.notice _("Downloading from %{uri} ...") % { uri: forge.uri }
     author, modname = Puppet::ModuleTool.username_and_modname_from(@module_name)
@@ -36,9 +38,13 @@ module Puppet::ModuleTool::Shared
       mod_name, releases = pair
       mod_name = mod_name.tr('/', '-')
       releases.each do |rel|
-        semver = SemanticPuppet::Version.parse(rel['version']) rescue SemanticPuppet::Version::MIN
+        semver = begin
+          SemanticPuppet::Version.parse(rel['version'])
+        rescue
+          SemanticPuppet::Version::MIN
+        end
         @versions[mod_name] << { :vstring => rel['version'], :semver => semver }
-        @versions[mod_name].sort! { |a, b| a[:semver] <=> b[:semver] }
+        @versions[mod_name].sort_by! { |a| a[:semver] }
         @urls["#{mod_name}@#{rel['version']}"] = rel['file']
         d = @remote["#{mod_name}@#{rel['version']}"]
         (rel['dependencies'] || []).each do |name, conditions|
@@ -53,33 +59,40 @@ module Puppet::ModuleTool::Shared
     if @conditions[mod].all? { |c| c[:queued] || c[:module] == :you }
       return :latest
     end
-    return :best
+
+    :best
   end
 
   def annotated_version(mod, versions)
     if versions.empty?
-      return implicit_version(mod)
+      implicit_version(mod)
     else
-      return "#{implicit_version(mod)}: #{versions.last}"
+      "#{implicit_version(mod)}: #{versions.last}"
     end
   end
 
-  def resolve_constraints(dependencies, source = [{:name => :you}], seen = {}, action = @action)
-    dependencies = dependencies.map do |mod, range|
+  def resolve_constraints(dependencies, source = [{ :name => :you }], seen = {}, action = @action)
+    dependencies = dependencies.filter_map do |mod, range|
       source.last[:dependency] = range
 
       @conditions[mod] << {
-        :module     => source.last[:name],
-        :version    => source.last[:version],
+        :module => source.last[:name],
+        :version => source.last[:version],
         :dependency => range,
-        :queued     => true
+        :queued => true
       }
 
       if forced?
-        range = Puppet::Module.parse_range(@version) rescue Puppet::Module.parse_range('>= 0.0.0')
+        range = begin
+          Puppet::Module.parse_range(@version)
+        rescue
+          Puppet::Module.parse_range('>= 0.0.0')
+        end
       else
         range = (@conditions[mod]).map do |r|
-          Puppet::Module.parse_range(r[:dependency]) rescue Puppet::Module.parse_range('>= 0.0.0')
+          Puppet::Module.parse_range(r[:dependency])
+        rescue
+          Puppet::Module.parse_range('>= 0.0.0')
         end.inject(&:&)
       end
 
@@ -87,17 +100,18 @@ module Puppet::ModuleTool::Shared
         next if range === seen[mod][:semver]
 
         req_module   = @module_name
-        req_versions = @versions["#{@module_name}"].map { |v| v[:semver] }
+        req_versions = @versions[@module_name.to_s].map { |v| v[:semver] }
         raise InvalidDependencyCycleError,
-          :module_name       => mod,
-          :source            => (source + [{ :name => mod, :version => source.last[:dependency] }]),
-          :requested_module  => req_module,
-          :requested_version => @version || annotated_version(req_module, req_versions),
-          :conditions        => @conditions
+              :module_name => mod,
+              :source => (source + [{ :name => mod, :version => source.last[:dependency] }]),
+              :requested_module => req_module,
+              :requested_version => @version || annotated_version(req_module, req_versions),
+              :conditions => @conditions
       end
 
       if !(forced? || @installed[mod].empty? || source.last[:name] == :you)
         next if range === SemanticPuppet::Version.parse(@installed[mod].first.version)
+
         action = :upgrade
       elsif @installed[mod].empty?
         action = :install
@@ -107,40 +121,44 @@ module Puppet::ModuleTool::Shared
         @conditions.each { |_, conds| conds.delete_if { |c| c[:module] == mod } }
       end
 
-      versions = @versions["#{mod}"].select { |h| range === h[:semver] }
+      versions = @versions[mod.to_s].select { |h| range === h[:semver] }
       valid_versions = versions.select { |x| x[:semver].special == '' }
       valid_versions = versions if valid_versions.empty?
 
       version = valid_versions.last
       unless version
         req_module   = @module_name
-        req_versions = @versions["#{@module_name}"].map { |v| v[:semver] }
+        req_versions = @versions[@module_name.to_s].map { |v| v[:semver] }
         raise NoVersionsSatisfyError,
-          :requested_name    => req_module,
-          :requested_version => @version || annotated_version(req_module, req_versions),
-          :installed_version => @installed[@module_name].empty? ? nil : @installed[@module_name].first.version,
-          :dependency_name   => mod,
-          :conditions        => @conditions[mod],
-          :action            => @action
+              :requested_name => req_module,
+              :requested_version => @version || annotated_version(req_module, req_versions),
+              :installed_version => @installed[@module_name].empty? ? nil : @installed[@module_name].first.version,
+              :dependency_name => mod,
+              :conditions => @conditions[mod],
+              :action => @action
       end
 
       seen[mod] = version
 
       {
-        :module           => mod,
-        :version          => version,
-        :action           => action,
+        :module => mod,
+        :version => version,
+        :action => action,
         :previous_version => @installed[mod].empty? ? nil : @installed[mod].first.version,
-        :file             => @urls["#{mod}@#{version[:vstring]}"],
-        :path             => action == :install ? @options[:target_dir] : (@installed[mod].empty? ? @options[:target_dir] : @installed[mod].first.modulepath),
-        :dependencies     => []
+        :file => @urls["#{mod}@#{version[:vstring]}"],
+        :path => if action == :install
+                   @options[:target_dir]
+                 else
+                   @installed[mod].empty? ? @options[:target_dir] : @installed[mod].first.modulepath
+                 end,
+        :dependencies => []
       }
-    end.compact
+    end
     dependencies.each do |mod|
       deps = @remote["#{mod[:module]}@#{mod[:version][:vstring]}"].sort_by(&:first)
       mod[:dependencies] = resolve_constraints(deps, source + [{ :name => mod[:module], :version => mod[:version][:vstring] }], seen, :install)
     end unless @ignore_dependencies
-    return dependencies
+    dependencies
   end
 
   def download_tarballs(graph, default_path, forge)
@@ -156,7 +174,7 @@ module Puppet::ModuleTool::Shared
       end
 
       [
-        { (release[:path] ||= default_path) => cache_path},
+        { (release[:path] ||= default_path) => cache_path },
         *download_tarballs(release[:dependencies], default_path, forge)
       ]
     end.flatten
@@ -172,7 +190,7 @@ module Puppet::ModuleTool::Shared
     # problems at install time, we should reject any solution that
     # depends on multiple nodes with the same "module name".
     graph.add_graph_constraint('PMT') do |nodes|
-      names = nodes.map { |x| x.dependency_names + [ x.name ] }.flatten
+      names = nodes.map { |x| x.dependency_names + [x.name] }.flatten
       names = names.map { |x| x.tr('/', '-') }.uniq
       names = names.map { |x| x[/-(.*)/, 1] }
       names.length == names.uniq.length

@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 require_relative 'function_provider'
 
 module Puppet::Pops
 module Lookup
 # @api private
 class DataDigFunctionProvider < FunctionProvider
-  TAG = 'data_dig'.freeze
+  TAG = 'data_dig'
 
   # Performs a lookup with the assumption that a recursive check has been made.
   #
@@ -63,7 +65,7 @@ end
 
 # @api private
 class V3BackendFunctionProvider < DataDigFunctionProvider
-  TAG = 'hiera3_backend'.freeze
+  TAG = 'hiera3_backend'
 
   def data_dig(key, lookup_invocation, location, merge)
     @backend ||= instantiate_backend(lookup_invocation)
@@ -71,7 +73,7 @@ class V3BackendFunctionProvider < DataDigFunctionProvider
     # A merge_behavior retrieved from hiera.yaml must not be converted here. Instead, passing the symbol :hash
     # tells the V3 backend to pick it up from the config.
     resolution_type = lookup_invocation.hiera_v3_merge_behavior? ? :hash : convert_merge(merge)
-    @backend.lookup(key.to_s, lookup_invocation.scope, lookup_invocation.hiera_v3_location_overrides, resolution_type, {:recurse_guard => nil})
+    @backend.lookup(key.to_s, lookup_invocation.scope, lookup_invocation.hiera_v3_location_overrides, resolution_type, { :recurse_guard => nil })
   end
 
   def full_name
@@ -90,7 +92,7 @@ class V3BackendFunctionProvider < DataDigFunctionProvider
       require 'hiera/backend'
       require "hiera/backend/#{backend_name.downcase}_backend"
       backend = Hiera::Backend.const_get("#{backend_name.capitalize}_backend").new
-      return backend.method(:lookup).arity == 4 ? Hiera::Backend::Backend1xWrapper.new(backend) : backend
+      backend.method(:lookup).arity == 4 ? Hiera::Backend::Backend1xWrapper.new(backend) : backend
     rescue LoadError => e
       lookup_invocation.report_text { "Unable to load backend '#{backend_name}': #{e.message}" }
       throw :no_such_key
@@ -106,8 +108,7 @@ class V3BackendFunctionProvider < DataDigFunctionProvider
   # @return [Symbol,Hash,nil] The Hiera 'resolution_type'
   def convert_merge(merge)
     case merge
-    when nil
-    when 'first', 'default'
+    when nil, 'first', 'default'
       # Nil is OK. Defaults to Hiera :priority
       nil
     when Puppet::Pops::MergeStrategy
@@ -131,7 +132,7 @@ class V3BackendFunctionProvider < DataDigFunctionProvider
       when 'deep', 'unconstrained_deep', 'reverse_deep'
         result = { :behavior => strategy == 'reverse_deep' ? :deep : :deeper }
         # Remaining entries must have symbolic keys
-        merge.each_pair { |k,v| result[k.to_sym] = v unless k == 'strategy' }
+        merge.each_pair { |k, v| result[k.to_sym] = v unless k == 'strategy' }
         result
       else
         convert_merge(strategy)

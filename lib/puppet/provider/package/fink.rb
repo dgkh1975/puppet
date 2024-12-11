@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:package).provide :fink, :parent => :dpkg, :source => :dpkg do
   # Provide sorting functionality
   include Puppet::Util::Package
@@ -22,7 +24,7 @@ Puppet::Type.type(:package).provide :fink, :parent => :dpkg, :source => :dpkg do
   # Install a package using 'apt-get'.  This function needs to support
   # installing a specific version.
   def install
-    self.run_preseed if @resource[:responsefile]
+    run_preseed if @resource[:responsefile]
     should = @resource.should(:ensure)
 
     str = @resource[:name]
@@ -33,27 +35,27 @@ Puppet::Type.type(:package).provide :fink, :parent => :dpkg, :source => :dpkg do
       # Add the package version
       str += "=#{should}"
     end
-    cmd = %w{-b -q -y}
+    cmd = %w[-b -q -y]
 
     cmd << :install << str
 
-    self.unhold if self.properties[:mark] == :hold
+    unhold if properties[:mark] == :hold
     begin
       finkcmd(cmd)
     ensure
-      self.hold if @resource[:mark] == :hold
+      hold if @resource[:mark] == :hold
     end
   end
 
   # What's the latest package version available?
   def latest
-    output = aptcache :policy,  @resource[:name]
+    output = aptcache :policy, @resource[:name]
 
     if output =~ /Candidate:\s+(\S+)\s/
-      return $1
+      Regexp.last_match(1)
     else
-      self.err _("Could not find latest version")
-      return nil
+      err _("Could not find latest version")
+      nil
     end
   end
 
@@ -63,34 +65,34 @@ Puppet::Type.type(:package).provide :fink, :parent => :dpkg, :source => :dpkg do
   def run_preseed
     response = @resource[:responsefile]
     if response && Puppet::FileSystem.exist?(response)
-      self.info(_("Preseeding %{response} to debconf-set-selections") % { response: response })
+      info(_("Preseeding %{response} to debconf-set-selections") % { response: response })
 
       preseed response
     else
-      self.info _("No responsefile specified or non existent, not preseeding anything")
+      info _("No responsefile specified or non existent, not preseeding anything")
     end
   end
 
   def update
-    self.install
+    install
   end
 
   def uninstall
-    self.unhold if self.properties[:mark] == :hold
+    unhold if properties[:mark] == :hold
     begin
       finkcmd "-y", "-q", :remove, @model[:name]
     rescue StandardError, LoadError => e
-      self.hold if self.properties[:mark] == :hold
+      hold if properties[:mark] == :hold
       raise e
     end
   end
 
   def purge
-    self.unhold if self.properties[:mark] == :hold
+    unhold if properties[:mark] == :hold
     begin
       aptget '-y', '-q', 'remove', '--purge', @resource[:name]
     rescue StandardError, LoadError => e
-      self.hold if self.properties[:mark] == :hold
+      hold if properties[:mark] == :hold
       raise e
     end
   end

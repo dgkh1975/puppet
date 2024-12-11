@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'data_adapter'
 require_relative 'lookup_key'
 
@@ -9,15 +11,14 @@ module Lookup
 #
 # @api private
 class LookupAdapter < DataAdapter
-
   LOOKUP_OPTIONS_PREFIX = LOOKUP_OPTIONS + '.'
   LOOKUP_OPTIONS_PREFIX.freeze
-  LOOKUP_OPTIONS_PATTERN_START = '^'.freeze
+  LOOKUP_OPTIONS_PATTERN_START = '^'
 
-  HASH = 'hash'.freeze
-  MERGE = 'merge'.freeze
-  CONVERT_TO = 'convert_to'.freeze
-  NEW = 'new'.freeze
+  HASH = 'hash'
+  MERGE = 'merge'
+  CONVERT_TO = 'convert_to'
+  NEW = 'new'
 
   def self.create_adapter(compiler)
     new(compiler)
@@ -105,19 +106,19 @@ class LookupAdapter < DataAdapter
         convert_to[0] = Puppet::Pops::Types::TypeParser.singleton.parse(convert_to[0])
       rescue StandardError => e
         raise Puppet::DataBinding::LookupError,
-          _("Invalid data type in lookup_options for key '%{key}' could not parse '%{source}', error: '%{msg}") %
-            { key: key, source: convert_to[0], msg: e.message}
+              _("Invalid data type in lookup_options for key '%{key}' could not parse '%{source}', error: '%{msg}") %
+              { key: key, source: convert_to[0], msg: e.message }
       end
     end
     begin
-      result = lookup_invocation.scope.call_function(NEW, [convert_to[0], result, *convert_to[1..-1]])
+      result = lookup_invocation.scope.call_function(NEW, [convert_to[0], result, *convert_to[1..]])
       # TRANSLATORS 'lookup_options', 'convert_to' and args_string variable should not be translated,
       args_string = Puppet::Pops::Types::StringConverter.singleton.convert(convert_to)
       lookup_invocation.report_text { _("Applying convert_to lookup_option with arguments %{args}") % { args: args_string } }
     rescue StandardError => e
       raise Puppet::DataBinding::LookupError,
-        _("The convert_to lookup_option for key '%{key}' raised error: %{msg}") %
-          { key: key, msg: e.message}
+            _("The convert_to lookup_option for key '%{key}' raised error: %{msg}") %
+            { key: key, msg: e.message }
     end
     result
   end
@@ -138,7 +139,7 @@ class LookupAdapter < DataAdapter
       lookup_invocation.with(:global, terminus) do
         catch(:no_such_key) do
           return lookup_invocation.report_found(key, Puppet::DataBinding.indirection.find(key.root_key,
-            {:environment => environment, :variables => lookup_invocation.scope, :merge => merge_strategy}))
+                                                                                          { :environment => environment, :variables => lookup_invocation.scope, :merge => merge_strategy }))
         end
         lookup_invocation.report_not_found(key)
         throw :no_such_key
@@ -146,6 +147,7 @@ class LookupAdapter < DataAdapter
     end
   rescue Puppet::DataBinding::LookupError => detail
     raise detail unless detail.issue_code.nil?
+
     error = Puppet::Error.new(_("Lookup of key '%{key}' failed: %{detail}") % { key: lookup_invocation.top_key, detail: detail.message })
     error.set_backtrace(detail.backtrace)
     raise error
@@ -194,9 +196,11 @@ class LookupAdapter < DataAdapter
             opts = nil
             lookup_invocation.with(:scope, "Searching for \"#{LookupKey::LOOKUP_OPTIONS}\"") do
               catch(:no_such_key) do
-              opts = compile_patterns(
-                validate_lookup_options(
-                  provider.key_lookup_in_default(LookupKey::LOOKUP_OPTIONS, meta_invocation, MergeStrategy.strategy(HASH)), k))
+                opts = compile_patterns(
+                  validate_lookup_options(
+                    provider.key_lookup_in_default(LookupKey::LOOKUP_OPTIONS, meta_invocation, MergeStrategy.strategy(HASH)), k
+                  )
+                )
               end
             end
             @module_default_lookup_options[k] = opts
@@ -293,18 +297,18 @@ class LookupAdapter < DataAdapter
 
   def validate_lookup_options(options, module_name)
     return nil if options.nil?
-    raise Puppet::DataBinding::LookupError.new(_("value of %{opts} must be a hash") % { opts: LOOKUP_OPTIONS }) unless options.is_a?(Hash)
+    raise Puppet::DataBinding::LookupError, _("value of %{opts} must be a hash") % { opts: LOOKUP_OPTIONS } unless options.is_a?(Hash)
     return options if module_name.nil?
 
     pfx = "#{module_name}::"
-    options.each_pair do |key, value|
+    options.each_pair do |key, _value|
       if key.start_with?(LOOKUP_OPTIONS_PATTERN_START)
         unless key[1..pfx.length] == pfx
-          raise Puppet::DataBinding::LookupError.new(_("all %{opts} patterns must match a key starting with module name '%{module_name}'") % { opts: LOOKUP_OPTIONS, module_name: module_name })
+          raise Puppet::DataBinding::LookupError, _("all %{opts} patterns must match a key starting with module name '%{module_name}'") % { opts: LOOKUP_OPTIONS, module_name: module_name }
         end
       else
         unless key.start_with?(pfx)
-          raise Puppet::DataBinding::LookupError.new(_("all %{opts} keys must start with module name '%{module_name}'") % { opts: LOOKUP_OPTIONS, module_name: module_name })
+          raise Puppet::DataBinding::LookupError, _("all %{opts} keys must start with module name '%{module_name}'") % { opts: LOOKUP_OPTIONS, module_name: module_name }
         end
       end
     end
@@ -312,6 +316,7 @@ class LookupAdapter < DataAdapter
 
   def compile_patterns(options)
     return nil if options.nil?
+
     key_options = {}
     pattern_options = {}
     options.each_pair do |key, value|
@@ -330,11 +335,11 @@ class LookupAdapter < DataAdapter
     else
       merge_strategy = Puppet::Pops::MergeStrategy.strategy(merge)
       key.dig(lookup_invocation,
-        merge_strategy.lookup(PROVIDER_STACK, lookup_invocation) { |m| send(m, key, lookup_invocation, merge_strategy) })
+              merge_strategy.lookup(PROVIDER_STACK, lookup_invocation) { |m| send(m, key, lookup_invocation, merge_strategy) })
     end
   end
 
-  GLOBAL_ENV_MERGE = 'Global and Environment'.freeze
+  GLOBAL_ENV_MERGE = 'Global and Environment'
 
   # Retrieve lookup options that applies when using a specific module (i.e. a merge of the pre-cached
   # `env_lookup_options` and the module specific data)
@@ -352,12 +357,12 @@ class LookupAdapter < DataAdapter
             catch(:no_such_key) do
               module_opts = validate_lookup_options(lookup_in_module(LookupKey::LOOKUP_OPTIONS, meta_invocation, merge_strategy), module_name)
               opts = if opts.nil?
-                module_opts
-              elsif module_opts
-                merge_strategy.lookup([GLOBAL_ENV_MERGE, "Module #{lookup_invocation.module_name}"], meta_invocation) do |n|
-                  meta_invocation.with(:scope, n) { meta_invocation.report_found(LOOKUP_OPTIONS,  n == GLOBAL_ENV_MERGE ? opts : module_opts) }
-                end
-              end
+                       module_opts
+                     elsif module_opts
+                       merge_strategy.lookup([GLOBAL_ENV_MERGE, "Module #{lookup_invocation.module_name}"], meta_invocation) do |n|
+                         meta_invocation.with(:scope, n) { meta_invocation.report_found(LOOKUP_OPTIONS, n == GLOBAL_ENV_MERGE ? opts : module_opts) }
+                       end
+                     end
             end
           end
           compile_patterns(opts)
@@ -368,7 +373,7 @@ class LookupAdapter < DataAdapter
 
   # Retrieve and cache the global lookup options
   def global_lookup_options(lookup_invocation, merge_strategy)
-    if !instance_variable_defined?(:@global_lookup_options)
+    unless instance_variable_defined?(:@global_lookup_options)
       @global_lookup_options = nil
       catch(:no_such_key) { @global_lookup_options = validate_lookup_options(lookup_global(LookupKey::LOOKUP_OPTIONS, lookup_invocation, merge_strategy), nil) }
     end
@@ -378,7 +383,7 @@ class LookupAdapter < DataAdapter
   # Retrieve and cache lookup options specific to the environment of the compiler that this adapter is attached to (i.e. a merge
   # of global and environment lookup options).
   def env_lookup_options(lookup_invocation, merge_strategy)
-    if !instance_variable_defined?(:@env_lookup_options)
+    unless instance_variable_defined?(:@env_lookup_options)
       global_options = global_lookup_options(lookup_invocation, merge_strategy)
       @env_only_lookup_options = nil
       catch(:no_such_key) { @env_only_lookup_options = validate_lookup_options(lookup_in_environment(LookupKey::LOOKUP_OPTIONS, lookup_invocation, merge_strategy), nil) }
@@ -406,7 +411,7 @@ class LookupAdapter < DataAdapter
   def module_provider(lookup_invocation, module_name)
     # Test if the key is present for the given module_name. It might be there even if the
     # value is nil (which indicates that no module provider is configured for the given name)
-    unless self.include?(module_name)
+    unless include?(module_name)
       self[module_name] = initialize_module_provider(lookup_invocation, module_name)
     end
     self[module_name]
@@ -429,7 +434,7 @@ class LookupAdapter < DataAdapter
       elsif mp_config.version >= 5
         unless provider_name.nil? || Puppet[:strict] == :off
           Puppet.warn_once('deprecations', "metadata.json#data_provider-#{module_name}",
-            _("Defining \"data_provider\": \"%{name}\" in metadata.json is deprecated. It is ignored since a '%{config}' with version >= 5 is present") % { name: provider_name, config: HieraConfig::CONFIG_FILE_NAME }, mod.metadata_file)
+                           _("Defining \"data_provider\": \"%{name}\" in metadata.json is deprecated. It is ignored since a '%{config}' with version >= 5 is present") % { name: provider_name, config: HieraConfig::CONFIG_FILE_NAME }, mod.metadata_file)
         end
         provider_name = nil
       end
@@ -478,11 +483,11 @@ class LookupAdapter < DataAdapter
       elsif ep_config.version >= 5
         unless provider_name.nil? || Puppet[:strict] == :off
           Puppet.warn_once('deprecations', 'environment.conf#data_provider',
-            _("Defining environment_data_provider='%{provider_name}' in environment.conf is deprecated") % { provider_name: provider_name }, env_path + 'environment.conf')
+                           _("Defining environment_data_provider='%{provider_name}' in environment.conf is deprecated") % { provider_name: provider_name }, env_path + 'environment.conf')
 
           unless provider_name == 'hiera'
             Puppet.warn_once('deprecations', 'environment.conf#data_provider_overridden',
-              _("The environment_data_provider='%{provider_name}' setting is ignored since '%{config_path}' version >= 5") % { provider_name: provider_name, config_path: config_path }, env_path + 'environment.conf')
+                             _("The environment_data_provider='%{provider_name}' setting is ignored since '%{config_path}' version >= 5") % { provider_name: provider_name, config_path: config_path }, env_path + 'environment.conf')
           end
         end
         provider_name = nil
@@ -509,7 +514,7 @@ class LookupAdapter < DataAdapter
         ep.config = HieraConfigV5.v4_function_config(env_path, 'environment::data', ep)
         ep
       else
-        raise Puppet::Error.new(_("Environment '%{env}', cannot find environment_data_provider '%{provider}'") % { env: environment.name, provider: provider_name })
+        raise Puppet::Error, _("Environment '%{env}', cannot find environment_data_provider '%{provider}'") % { env: environment.name, provider: provider_name }
       end
     end
   end

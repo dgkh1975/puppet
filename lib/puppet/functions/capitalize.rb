@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 # Capitalizes the first character of a String, or the first character of every String in an Iterable value (such as an Array).
 #
 # This function is compatible with the stdlib function with the same name.
 #
 # The function does the following:
-# * For a `String`, a string with its first character in upper case version is returned. 
+# * For a `String`, a string is returned in which the first character is uppercase.
 #   This is done using Ruby system locale which handles some, but not all
 #   special international up-casing rules (for example German double-s ß is capitalized to "Ss").
 # * For an `Iterable[Variant[String, Numeric]]` (for example an `Array`) each value is capitalized and the conversion is not recursive.
@@ -16,7 +18,7 @@
 # @example Capitalizing a String
 # ```puppet
 # 'hello'.capitalize()
-# upcase('hello')
+# capitalize('hello')
 # ```
 # Would both result in `"Hello"`
 #
@@ -28,7 +30,6 @@
 # Would both result in `['Abc', 'Bcd']`
 #
 Puppet::Functions.create_function(:capitalize) do
-
   dispatch :on_numeric do
     param 'Numeric', :arg
   end
@@ -51,7 +52,7 @@ Puppet::Functions.create_function(:capitalize) do
   end
 
   def on_iterable(a)
-    a.map {|x| do_capitalize(x) }
+    a.map { |x| do_capitalize(x) }
   end
 
   def do_capitalize(x)

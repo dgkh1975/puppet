@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require 'fileutils'
 
@@ -20,51 +22,51 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
     end
   end
 
-  confine :osfamily => :gentoo
+  confine 'os.family' => :gentoo
 
-  defaultfor :osfamily => :gentoo
+  defaultfor 'os.family' => :gentoo
 
   def self.instances
-    result_format = self.eix_result_format
-    result_fields = self.eix_result_fields
+    result_format = eix_result_format
+    result_fields = eix_result_fields
 
-    limit = self.eix_limit
-    version_format = self.eix_version_format
-    slot_versions_format = self.eix_slot_versions_format
-    installed_versions_format = self.eix_installed_versions_format
-    installable_versions_format = self.eix_install_versions_format
+    limit = eix_limit
+    version_format = eix_version_format
+    slot_versions_format = eix_slot_versions_format
+    installed_versions_format = eix_installed_versions_format
+    installable_versions_format = eix_install_versions_format
     begin
       eix_file = File.directory?('/var/cache/eix') ? '/var/cache/eix/portage.eix' : '/var/cache/eix'
-      update_eix if !FileUtils.uptodate?(eix_file, %w{/usr/bin/eix /usr/portage/metadata/timestamp})
+      update_eix unless FileUtils.uptodate?(eix_file, %w[/usr/bin/eix /usr/portage/metadata/timestamp])
 
       search_output = nil
       Puppet::Util.withenv :EIX_LIMIT => limit, :LASTVERSION => version_format, :LASTSLOTVERSIONS => slot_versions_format, :INSTALLEDVERSIONS => installed_versions_format, :STABLEVERSIONS => installable_versions_format do
-        search_output = eix(*(self.eix_search_arguments + ['--installed']))
+        search_output = eix(*(eix_search_arguments + ['--installed']))
       end
 
       packages = []
       search_output.each_line do |search_result|
         match = result_format.match(search_result)
 
-        if match
-          package = {}
-          result_fields.zip(match.captures) do |field, value|
-            package[field] = value unless !value or value.empty?
-          end
-          package[:provider] = :portage
-          packages << new(package)
+        next unless match
+
+        package = {}
+        result_fields.zip(match.captures) do |field, value|
+          package[field] = value unless !value or value.empty?
         end
+        package[:provider] = :portage
+        packages << new(package)
       end
 
-      return packages
+      packages
     rescue Puppet::ExecutionFailure => detail
-      raise Puppet::Error.new(detail)
+      raise Puppet::Error, detail
     end
   end
 
   def install
     should = @resource.should(:ensure)
-    cmd = %w{}
+    cmd = %w[]
     name = qatom[:category] ? "#{qatom[:category]}/#{qatom[:pn]}" : qatom[:pn]
     name = qatom[:pfx] + name if qatom[:pfx]
     name = name + '-' + qatom[:pv] if qatom[:pv]
@@ -78,7 +80,7 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
 
   def uninstall
     should = @resource.should(:ensure)
-    cmd = %w{--rage-clean}
+    cmd = %w[--rage-clean]
     name = qatom[:category] ? "#{qatom[:category]}/#{qatom[:pn]}" : qatom[:pn]
     name = qatom[:pfx] + name if qatom[:pfx]
     name = name + '-' + qatom[:pv] if qatom[:pv]
@@ -96,17 +98,17 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
   end
 
   def reinstall
-    self.install
+    install
   end
 
   def update
-    self.install
+    install
   end
 
   def qatom
-    output_format = self.qatom_output_format
-    result_format = self.qatom_result_format
-    result_fields = self.qatom_result_fields
+    output_format = qatom_output_format
+    result_format = qatom_result_format
+    result_fields = qatom_result_fields
     @atom ||= begin
       package_info = {}
       # do the search
@@ -117,9 +119,9 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
       when true, false, Symbol
         search = @resource[:name]
       else
-        search = '=' + @resource[:name] + '-' + "#{should}"
+        search = '=' + @resource[:name] + '-' + should.to_s
       end
-      search_output = qatom_bin(*([search, '--format', output_format]))
+      search_output = qatom_bin(*[search, '--format', output_format])
       # verify if the search found anything
       match = result_format.match(search_output)
       if match
@@ -136,7 +138,7 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
       end
       @atom = package_info
     rescue Puppet::ExecutionFailure => detail
-      raise Puppet::Error.new(detail)
+      raise Puppet::Error, detail
     end
   end
 
@@ -145,7 +147,7 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
   end
 
   def qatom_result_format
-    /^\"\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\](.*)\"$/
+    /^"\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\]\s+\[(\S*)\](.*)"$/
   end
 
   def qatom_result_fields
@@ -153,9 +155,7 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
   end
 
   def self.get_sets
-    @sets ||= begin
-      @sets = emerge(*(['--list-sets']))
-    end
+    @sets ||= @sets = emerge(*['--list-sets'])
   end
 
   def query
@@ -178,69 +178,71 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
       end
 
       if @resource[:name] =~ /^@/
-        if package_sets.include?(@resource[:name][1..-1].to_s)
-          return({:name => "#{@resource[:name]}", :ensure => '9999', :version_available => nil, :installed_versions => nil, :installable_versions => "9999,"})
+        if package_sets.include?(@resource[:name][1..].to_s)
+          return({ :name => (@resource[:name]).to_s, :ensure => '9999', :version_available => nil, :installed_versions => nil, :installable_versions => "9999," })
         end
       end
 
       eix_file = File.directory?('/var/cache/eix') ? '/var/cache/eix/portage.eix' : '/var/cache/eix'
-      update_eix if !FileUtils.uptodate?(eix_file, %w{/usr/bin/eix /usr/portage/metadata/timestamp})
+      update_eix unless FileUtils.uptodate?(eix_file, %w[/usr/bin/eix /usr/portage/metadata/timestamp])
 
       search_output = nil
       Puppet::Util.withenv :EIX_LIMIT => limit, :LASTVERSION => version_format, :LASTSLOTVERSIONS => slot_versions_format, :INSTALLEDVERSIONS => installed_versions_format, :STABLEVERSIONS => installable_versions_format do
-        search_output = eix(*(self.class.eix_search_arguments + ['--exact',search_field,search_value]))
+        search_output = eix(*(self.class.eix_search_arguments + ['--exact', search_field, search_value]))
       end
 
       packages = []
       search_output.each_line do |search_result|
         match = result_format.match(search_result)
 
-        if match
-          package = {}
-          result_fields.zip(match.captures) do |field, value|
-            package[field] = value unless !value or value.empty?
-          end
-          # dev-lang python [3.4.5] [3.5.2] [2.7.12:2.7,3.4.5:3.4] [2.7.12:2.7,3.4.5:3.4,3.5.2:3.5] https://www.python.org/ An interpreted, interactive, object-oriented programming language
-          # version_available is what we CAN install / update to
-          # ensure is what is currently installed
-          # This DOES NOT choose to install/upgrade or not, just provides current info
-          # prefer checking versions to slots as versions are finer grained
-          search = qatom[:pv]
-          search = search + '-' + qatom[:pr] if qatom[:pr]
-          if search
-            package[:version_available] = eix_get_version_for_versions(package[:installable_versions], search)
-            package[:ensure] = eix_get_version_for_versions(package[:installed_versions], search)
-          elsif qatom[:slot]
-            package[:version_available] = eix_get_version_for_slot(package[:slot_versions_available], qatom[:slot])
-            package[:ensure] = eix_get_version_for_slot(package[:installed_slots], qatom[:slot])
-          end
+        next unless match
 
-          package[:ensure] = package[:ensure] ? package[:ensure] : :absent
-          packages << package
+        package = {}
+        result_fields.zip(match.captures) do |field, value|
+          package[field] = value unless !value or value.empty?
         end
+        # dev-lang python [3.4.5] [3.5.2] [2.7.12:2.7,3.4.5:3.4] [2.7.12:2.7,3.4.5:3.4,3.5.2:3.5] https://www.python.org/ An interpreted, interactive, object-oriented programming language
+        # version_available is what we CAN install / update to
+        # ensure is what is currently installed
+        # This DOES NOT choose to install/upgrade or not, just provides current info
+        # prefer checking versions to slots as versions are finer grained
+        search = qatom[:pv]
+        search = search + '-' + qatom[:pr] if qatom[:pr]
+        if search
+          package[:version_available] = eix_get_version_for_versions(package[:installable_versions], search)
+          package[:ensure] = eix_get_version_for_versions(package[:installed_versions], search)
+        elsif qatom[:slot]
+          package[:version_available] = eix_get_version_for_slot(package[:slot_versions_available], qatom[:slot])
+          package[:ensure] = eix_get_version_for_slot(package[:installed_slots], qatom[:slot])
+        end
+
+        package[:ensure] = package[:ensure] || :absent
+        packages << package
       end
 
       case packages.size
-        when 0
-          raise Puppet::Error.new(_("No package found with the specified name [%{name}]") % { name: @resource[:name] })
-        when 1
-          @eix_result = packages[0]
-        else
-          raise Puppet::Error.new(_("More than one package with the specified name [%{search_value}], please use the category parameter to disambiguate") % { search_value: search_value })
+      when 0
+        raise Puppet::Error, _("No package found with the specified name [%{name}]") % { name: @resource[:name] }
+      when 1
+        @eix_result = packages[0]
+      else
+        raise Puppet::Error, _("More than one package with the specified name [%{search_value}], please use the category parameter to disambiguate") % { search_value: search_value }
       end
     rescue Puppet::ExecutionFailure => detail
-      raise Puppet::Error.new(detail)
+      raise Puppet::Error, detail
     end
   end
 
   def latest
-    self.query[:version_available]
+    query[:version_available]
   end
 
   private
+
   def eix_get_version_for_versions(versions, target)
     # [2.7.10-r1,2.7.12,3.4.3-r1,3.4.5,3.5.2] 3.5.2
     return nil if versions.nil?
+
     versions = versions.split(',')
     # [2.7.10-r1 2.7.12 3.4.3-r1 3.4.5 3.5.2]
     versions.find { |version| version == target }
@@ -248,9 +250,11 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
   end
 
   private
+
   def eix_get_version_for_slot(versions_and_slots, slot)
     # [2.7.12:2.7 3.4.5:3.4 3.5.2:3.5] 3.5
     return nil if versions_and_slots.nil?
+
     versions_and_slots = versions_and_slots.split(',')
     # [2.7.12:2.7 3.4.5:3.4 3.5.2:3.5]
     versions_and_slots.map! { |version_and_slot| version_and_slot.split(':') }
@@ -297,7 +301,7 @@ Puppet::Type.type(:package).provide :portage, :parent => Puppet::Provider::Packa
   end
 
   def self.eix_search_arguments
-    ['--nocolor', '--pure-packages', '--format', self.eix_search_format]
+    ['--nocolor', '--pure-packages', '--format', eix_search_format]
   end
 
   def install_options

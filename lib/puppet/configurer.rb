@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 # The client for interacting with the puppetmaster config server.
 require 'timeout'
 require_relative '../puppet/util'
 require 'securerandom'
-#require 'puppet/parser/script_compiler'
+# require 'puppet/parser/script_compiler'
 require_relative '../puppet/pops/evaluator/deferred_resolver'
 
 class Puppet::Configurer
@@ -39,7 +41,7 @@ class Puppet::Configurer
 
   # Initialize and load storage
   def init_storage
-      Puppet::Util::Storage.load
+    Puppet::Util::Storage.load
   rescue => detail
     Puppet.log_exception(detail, _("Removing corrupt state file %{file}: %{detail}") % { file: Puppet[:statefile], detail: detail })
     begin
@@ -81,8 +83,8 @@ class Puppet::Configurer
     else
       result = retrieve_new_catalog(facts, query_options)
 
-      if !result
-        if !Puppet[:usecacheonfailure]
+      unless result
+        unless Puppet[:usecacheonfailure]
           Puppet.warning _("Not using cache on failed catalog")
           return nil
         end
@@ -112,7 +114,7 @@ class Puppet::Configurer
     catalog_conversion_time = thinmark do
       # Will mutate the result and replace all Deferred values with resolved values
       if facts
-        Puppet::Pops::Evaluator::DeferredResolver.resolve_and_replace(facts, result, Puppet.lookup(:current_environment))
+        Puppet::Pops::Evaluator::DeferredResolver.resolve_and_replace(facts, result, Puppet.lookup(:current_environment), Puppet[:preprocess_deferred])
       end
 
       catalog = result.to_ral
@@ -130,39 +132,40 @@ class Puppet::Configurer
   end
 
   def warn_number_of_facts(size, max_number)
-    Puppet.warning _("The current total number of facts: %{size} exceeds the number of facts limit: %{max_size}") % { size: size, max_size: max_number }
+    Puppet.warning _("The current total number of fact values: %{size} exceeds the fact values limit: %{max_size}") % { size: size, max_size: max_number }
   end
 
-  def warn_fact_name_length(name, max_length)
-    Puppet.warning _("Fact %{name} with length: '%{length}' exceeds the length limit: %{limit}") % { name: name, length: name.to_s.bytesize, limit: max_length }
+  def warn_fact_name_length(name, max_length, fact_name_length)
+    Puppet.warning _("Fact %{name} with length: %{length} exceeds the fact name length limit: %{limit}") % { name: name, length: fact_name_length, limit: max_length }
   end
 
   def warn_number_of_top_level_facts(size, max_number)
     Puppet.warning _("The current number of top level facts: %{size} exceeds the top facts limit: %{max_size}") % { size: size, max_size: max_number }
   end
 
-  def warn_fact_value_length(value, max_length)
-    Puppet.warning _("Fact value '%{value}' with the value length: '%{length}' exceeds the value length limit: %{max_length}") % { value: value, length:value.to_s.bytesize, max_length: max_length }
+  def warn_fact_value_length(name, value, max_length)
+    Puppet.warning _("Fact %{name} with value %{value} with the value length: %{length} exceeds the value length limit: %{max_length}") % { name: name, value: value, length: value.to_s.bytesize, max_length: max_length }
   end
 
   def warn_fact_payload_size(payload, max_size)
-    Puppet.warning _("Payload with the current size of: '%{payload}' exceeds the payload size limit: %{max_size}") % { payload: payload, max_size: max_size }
+    Puppet.warning _("Payload with the current size of: %{payload} exceeds the payload size limit: %{max_size}") % { payload: payload, max_size: max_size }
   end
 
-  def check_fact_name_length(name, number_of_dots)
+  def check_fact_name_length(fact_path, number_of_dots)
     max_length = Puppet[:fact_name_length_soft_limit]
     return if max_length.zero?
 
-    # rough byte size estimations of fact path as a postgresql btree index 
-    size_as_btree_index = 8 + (number_of_dots * 2) + name.to_s.bytesize
-    warn_fact_name_length(name, max_length) if size_as_btree_index > max_length
+    name_without_dots = fact_path.join()
+    # rough byte size estimations of fact path as a postgresql btree index
+    size_as_btree_index = 8 + (number_of_dots * 2) + name_without_dots.to_s.bytesize
+    warn_fact_name_length(fact_path.join('.'), max_length, size_as_btree_index) if size_as_btree_index > max_length
   end
 
-  def check_fact_values_length(values)
+  def check_fact_values_length(name, values)
     max_length = Puppet[:fact_value_length_soft_limit]
     return if max_length.zero?
 
-    warn_fact_value_length(values, max_length) if values.to_s.bytesize > max_length
+    warn_fact_value_length(name, values, max_length) if values.to_s.bytesize > max_length
   end
 
   def check_top_level_number_limit(size)
@@ -184,7 +187,7 @@ class Puppet::Configurer
     return if max_size.zero?
 
     warn_fact_payload_size(payload, max_size) if payload > max_size
-    Puppet.debug _("The size of the payload is %{payload}") % {payload: payload}
+    Puppet.debug _("The size of the payload is %{payload}") % { payload: payload }
   end
 
   def parse_fact_name_and_value_limits(object, path = [])
@@ -194,7 +197,6 @@ class Puppet::Configurer
         path.push(key)
         parse_fact_name_and_value_limits(value, path)
         path.pop
-        @number_of_facts += 1
       end
     when Array
       object.each_with_index do |e, idx|
@@ -203,8 +205,9 @@ class Puppet::Configurer
         path.pop
       end
     else
-      check_fact_name_length(path.join(), path.size)
-      check_fact_values_length(object)
+      check_fact_name_length(path, path.size)
+      check_fact_values_length(path.join('.'), object)
+      @number_of_facts += 1
     end
   end
 
@@ -214,7 +217,7 @@ class Puppet::Configurer
 
     parse_fact_name_and_value_limits(facts)
     check_total_number_limit(@number_of_facts)
-    Puppet.debug _("The total number of facts registered is %{number_of_facts}") % {number_of_facts: @number_of_facts}
+    Puppet.debug _("The total number of facts registered is %{number_of_facts}") % { number_of_facts: @number_of_facts }
   end
 
   def get_facts(options)
@@ -271,7 +274,7 @@ class Puppet::Configurer
   end
 
   def prepare_and_retrieve_catalog_from_cache(options = {})
-    result = retrieve_catalog_from_cache({:transaction_uuid => @transaction_uuid, :static_catalog => @static_catalog})
+    result = retrieve_catalog_from_cache({ :transaction_uuid => @transaction_uuid, :static_catalog => @static_catalog })
     Puppet.info _("Using cached catalog from environment '%{catalog_env}'") % { catalog_env: result.environment } if result
     result
   end
@@ -328,7 +331,7 @@ class Puppet::Configurer
             raise Puppet::Error, detail
           end
         else
-          #TRANSLATORS 'server_list' is the name of a setting and should not be translated
+          # TRANSLATORS 'server_list' is the name of a setting and should not be translated
           Puppet.debug _("Selected puppet server from the `server_list` setting: %{server}:%{port}") % { server: server, port: port }
           report.server_used = "#{server}:#{port}"
         end
@@ -388,11 +391,18 @@ class Puppet::Configurer
       configured_environment = Puppet[:environment] if Puppet.settings.set_by_config?(:environment)
 
       # We only need to find out the environment to run in if we don't already have a catalog
-      unless (cached_catalog || options[:catalog] || Puppet.settings.set_by_cli?(:environment) || Puppet[:strict_environment_mode])
+      unless cached_catalog || options[:catalog] || Puppet.settings.set_by_cli?(:environment) || Puppet[:strict_environment_mode]
         Puppet.debug(_("Environment not passed via CLI and no catalog was given, attempting to find out the last server-specified environment"))
-        if last_server_specified_environment
-          @environment = last_server_specified_environment
-          report.environment = last_server_specified_environment
+        initial_environment, loaded_last_environment = last_server_specified_environment
+
+        unless Puppet[:use_last_environment] && loaded_last_environment
+          Puppet.debug(_("Requesting environment from the server"))
+          initial_environment = current_server_specified_environment(@environment, configured_environment, options)
+        end
+
+        if initial_environment
+          @environment = initial_environment
+          report.environment = initial_environment
 
           push_current_environment_and_loaders
         else
@@ -411,7 +421,7 @@ class Puppet::Configurer
       temp_value = options[:pluginsync]
 
       # only validate server environment if pluginsync is requested
-      options[:pluginsync] = valid_server_environment? if options[:pluginsync] == true
+      options[:pluginsync] = valid_server_environment? if options[:pluginsync]
 
       query_options, facts = get_facts(options) unless query_options
       options[:pluginsync] = temp_value
@@ -433,10 +443,11 @@ class Puppet::Configurer
       # facts may be used to determine which catalog we get, we need to
       # rerun the process if the environment is changed.
       tries = 0
-      while catalog.environment and not catalog.environment.empty? and catalog.environment != @environment
+      while catalog.environment and !catalog.environment.empty? and catalog.environment != @environment
         if tries > 3
           raise Puppet::Error, _("Catalog environment didn't stabilize after %{tries} fetches, aborting run") % { tries: tries }
         end
+
         Puppet.notice _("Local environment: '%{local_env}' doesn't match server specified environment '%{catalog_env}', restarting agent run with environment '%{catalog_env}'") % { local_env: @environment, catalog_env: catalog.environment }
         @environment = catalog.environment
         report.environment = @environment
@@ -449,6 +460,7 @@ class Puppet::Configurer
         # if we get here, ignore the cached catalog
         catalog = prepare_and_retrieve_catalog(nil, facts, options, query_options)
         return nil unless catalog
+
         tries += 1
       end
 
@@ -494,9 +506,9 @@ class Puppet::Configurer
       true
     rescue => detail
       Puppet.log_exception(detail, _("Failed to apply catalog: %{detail}") % { detail: detail })
-      return nil
+      nil
     ensure
-      execute_postrun_command or return nil
+      execute_postrun_command or return nil # rubocop:disable Lint/EnsureReturn
     end
   ensure
     if Puppet[:resubmit_facts]
@@ -520,11 +532,15 @@ class Puppet::Configurer
     session = Puppet.lookup(:http_session)
     begin
       fs = session.route_to(:fileserver)
-      fs.get_file_metadatas(path: URI(Puppet[:pluginsource]).path, recurse: :false, environment: @environment)
+      fs.get_file_metadatas(path: URI(Puppet[:pluginsource]).path, recurse: :false, environment: @environment) # rubocop:disable Lint/BooleanSymbol
       true
     rescue Puppet::HTTP::ResponseError => detail
       if detail.response.code == 404
-        Puppet.notice(_("Environment '%{environment}' not found on server, skipping initial pluginsync.") % { environment: @environment })
+        if Puppet[:strict_environment_mode]
+          raise Puppet::Error, _("Environment '%{environment}' not found on server, aborting run.") % { environment: @environment }
+        else
+          Puppet.notice(_("Environment '%{environment}' not found on server, skipping initial pluginsync.") % { environment: @environment })
+        end
       else
         Puppet.log_exception(detail, detail.message)
       end
@@ -544,30 +560,74 @@ class Puppet::Configurer
       Puppet.debug(_("Puppet server %{host}:%{port} is unavailable: %{code} %{reason}") %
                    { host: e.response.url.host, port: e.response.url.port, code: e.response.code, reason: e.response.reason })
     rescue => detail
-      #TRANSLATORS 'server_list' is the name of a setting and should not be translated
-      Puppet.debug _("Unable to connect to server from server_list setting: %{detail}") % {detail: detail}
+      # TRANSLATORS 'server_list' is the name of a setting and should not be translated
+      Puppet.debug _("Unable to connect to server from server_list setting: %{detail}") % { detail: detail }
     end
     [nil, nil]
   end
   private :find_functional_server
 
+  #
+  # @api private
+  #
+  # Read the last server-specified environment from the lastrunfile. The
+  # environment is considered to be server-specified if the values of
+  # `initial_environment` and `converged_environment` are different.
+  #
+  # @return [String, Boolean] An array containing a string with the environment
+  #   read from the lastrunfile in case the server is authoritative, and a
+  #   boolean marking whether the last environment was correctly loaded.
   def last_server_specified_environment
-    return @last_server_specified_environment if @last_server_specified_environment
+    return @last_server_specified_environment, @loaded_last_environment if @last_server_specified_environment
+
     if Puppet::FileSystem.exist?(Puppet[:lastrunfile])
       summary = Puppet::Util::Yaml.safe_load_file(Puppet[:lastrunfile])
-      return unless summary.dig('application', 'run_mode') == 'agent'
-      initial_environment = summary.dig('application', 'initial_environment')
-      converged_environment = summary.dig('application', 'converged_environment')
+      return [nil, nil] unless summary['application']['run_mode'] == 'agent'
+
+      initial_environment = summary['application']['initial_environment']
+      converged_environment = summary['application']['converged_environment']
       @last_server_specified_environment = converged_environment if initial_environment != converged_environment
+      Puppet.debug(_("Successfully loaded last environment from the lastrunfile"))
+      @loaded_last_environment = true
     end
 
     Puppet.debug(_("Found last server-specified environment: %{environment}") % { environment: @last_server_specified_environment }) if @last_server_specified_environment
-    @last_server_specified_environment
+    [@last_server_specified_environment, @loaded_last_environment]
   rescue => detail
     Puppet.debug(_("Could not find last server-specified environment: %{detail}") % { detail: detail })
-    nil
+    [nil, nil]
   end
   private :last_server_specified_environment
+
+  def current_server_specified_environment(current_environment, configured_environment, options)
+    return @server_specified_environment if @server_specified_environment
+
+    begin
+      node_retr_time = thinmark do
+        node = Puppet::Node.indirection.find(Puppet[:node_name_value],
+                                             :environment => Puppet::Node::Environment.remote(current_environment),
+                                             :configured_environment => configured_environment,
+                                             :ignore_cache => true,
+                                             :transaction_uuid => @transaction_uuid,
+                                             :fail_on_404 => true)
+
+        @server_specified_environment = node.environment_name.to_s
+
+        if @server_specified_environment != @environment
+          Puppet.notice _("Local environment: '%{local_env}' doesn't match server specified node environment '%{node_env}', switching agent to '%{node_env}'.") % { local_env: @environment, node_env: @server_specified_environment }
+        end
+      end
+
+      options[:report].add_times(:node_retrieval, node_retr_time)
+
+      @server_specified_environment
+    rescue => detail
+      Puppet.warning(_("Unable to fetch my node definition, but the agent run will continue:"))
+      Puppet.warning(detail)
+      nil
+    end
+  end
+  private :current_server_specified_environment
 
   def send_report(report)
     puts report.summary if Puppet[:summarize]
@@ -610,17 +670,18 @@ class Puppet::Configurer
     puppet = session.route_to(:puppet)
 
     Puppet.info(_("Uploading facts for %{node} to %{server}") % {
-                  node: facts.name,
-                  server: puppet.url.hostname})
+      node: facts.name,
+      server: puppet.url.hostname
+    })
 
     puppet.put_facts(facts.name, facts: facts, environment: Puppet.lookup(:current_environment).name.to_s)
 
-    return true
+    true
   rescue => detail
     Puppet.log_exception(detail, _("Failed to submit facts: %{detail}") %
                                  { detail: detail })
 
-    return false
+    false
   end
 
   private
@@ -655,14 +716,14 @@ class Puppet::Configurer
         Puppet[:node_name_value],
         query_options.merge(
           :ignore_terminus => true,
-          :environment     => Puppet::Node::Environment.remote(@environment)
+          :environment => Puppet::Node::Environment.remote(@environment)
         )
       )
     end
     result
   rescue => detail
     Puppet.log_exception(detail, _("Could not retrieve catalog from cache: %{detail}") % { detail: detail })
-    return nil
+    nil
   end
 
   def retrieve_new_catalog(facts, query_options)
@@ -671,12 +732,12 @@ class Puppet::Configurer
       result = Puppet::Resource::Catalog.indirection.find(
         Puppet[:node_name_value],
         query_options.merge(
-          :ignore_cache      => true,
+          :ignore_cache => true,
           # don't update cache until after environment converges
           :ignore_cache_save => true,
-          :environment       => Puppet::Node::Environment.remote(@environment),
+          :environment => Puppet::Node::Environment.remote(@environment),
           :check_environment => true,
-          :fail_on_404       => true,
+          :fail_on_404 => true,
           :facts_for_catalog => facts
         )
       )
@@ -684,18 +745,16 @@ class Puppet::Configurer
     result
   rescue StandardError => detail
     Puppet.log_exception(detail, _("Could not retrieve catalog from remote server: %{detail}") % { detail: detail })
-    return nil
+    nil
   end
 
   def download_plugins(remote_environment_for_plugins)
-    begin
-      @handler.download_plugins(remote_environment_for_plugins)
-    rescue Puppet::Error => detail
-      if !Puppet[:ignore_plugin_errors] && Puppet[:usecacheonfailure]
-        @running_failure = true
-      else
-        raise detail
-      end
+    @handler.download_plugins(remote_environment_for_plugins)
+  rescue Puppet::Error => detail
+    if !Puppet[:ignore_plugin_errors] && Puppet[:usecacheonfailure]
+      @running_failure = true
+    else
+      raise detail
     end
   end
 end

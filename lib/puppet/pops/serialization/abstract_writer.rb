@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require_relative 'extension'
 
 module Puppet::Pops
 module Serialization
-
-MAX_INTEGER =  0x7fffffffffffffff
+MAX_INTEGER = 0x7fffffffffffffff
 MIN_INTEGER = -0x8000000000000000
 
 # Abstract class for protocol specific writers such as MsgPack or JSON
@@ -92,15 +93,16 @@ class AbstractWriter
   def write_tpl_qname(ep, qname)
     names = qname.split('::')
     ep.write(names.size)
-    names.each {|n| write_tpl(ep, n)}
+    names.each { |n| write_tpl(ep, n) }
   end
 
   # Called from extension callbacks only
   #
   # @api private
   def write_tpl(ep, value)
-    #TRANSLATORS 'Integers' is a Ruby class for numbers and should not be translated
+    # TRANSLATORS 'Integers' is a Ruby class for numbers and should not be translated
     raise ArgumentError, _('Internal error. Integers cannot be tabulated in extension payload') if value.is_a?(Integer)
+
     if @tabulate
       index = @written[value]
       if index.nil?
@@ -149,7 +151,7 @@ class AbstractWriter
 
     # 0x20 - 0x2f reserved for special extension objects
 
-    register_type(Extension::DEFAULT, Extension::Default) do |o|
+    register_type(Extension::DEFAULT, Extension::Default) do |_o|
       build_payload { |ep| }
     end
 
@@ -157,7 +159,7 @@ class AbstractWriter
       build_payload { |ep| ep.write(o.comment) }
     end
 
-    register_type(Extension::SENSITIVE_START, Extension::SensitiveStart) do |o|
+    register_type(Extension::SENSITIVE_START, Extension::SensitiveStart) do |_o|
       build_payload { |ep| }
     end
 
@@ -176,11 +178,11 @@ class AbstractWriter
     end
 
     register_type(Extension::TIME, Time::Timestamp) do |o|
-      build_payload { |ep| nsecs = o.nsecs; ep.write(nsecs / 1000000000); ep.write(nsecs % 1000000000) }
+      build_payload { |ep| nsecs = o.nsecs; ep.write(nsecs / 1_000_000_000); ep.write(nsecs % 1_000_000_000) }
     end
 
     register_type(Extension::TIMESPAN, Time::Timespan) do |o|
-      build_payload { |ep| nsecs = o.nsecs; ep.write(nsecs / 1000000000); ep.write(nsecs % 1000000000) }
+      build_payload { |ep| nsecs = o.nsecs; ep.write(nsecs / 1_000_000_000); ep.write(nsecs % 1_000_000_000) }
     end
 
     register_type(Extension::VERSION, SemanticPuppet::Version) do |o|
@@ -211,7 +213,7 @@ class AbstractWriter
   end
 
   def to_s
-    "#{self.class.name}"
+    self.class.name.to_s
   end
 
   def inspect

@@ -7,6 +7,7 @@ describe 'lookup' do
   include PuppetSpec::Files
 
   context 'with an environment' do
+    let(:fqdn) { Puppet[:certname] }
     let(:env_name) { 'spec' }
     let(:env_dir) { tmpdir('environments') }
     let(:environment_files) do
@@ -42,94 +43,172 @@ describe 'lookup' do
     end
 
     let(:app) { Puppet::Application[:lookup] }
-    let(:env) { Puppet::Node::Environment.create(env_name.to_sym, [File.join(populated_env_dir, env_name, 'modules')]) }
-    let(:environments) { Puppet::Environments::Directories.new(populated_env_dir, []) }
+    let(:facts) { Puppet::Node::Facts.new("facts", {'my_fact' => 'my_fact_value'}) }
+    let(:cert) { pem_content('oid.pem') }
 
+    let(:node) { Puppet::Node.new('testnode', :facts => facts) }
     let(:populated_env_dir) do
       dir_contained_in(env_dir, environment_files)
       env_dir
     end
 
-    def lookup(key, options = {}, explain = false)
-      key = [key] unless key.is_a?(Array)
-      allow(app.command_line).to receive(:args).and_return(key)
-      if explain
-        app.options[:explain] = true
-        app.options[:render_as] = :s
-      else
-        app.options[:render_as] = :json
-      end
-      options.each_pair { |k, v| app.options[k] = v }
-      capture = StringIO.new
-      saved_stdout = $stdout
-      begin
-        $stdout = capture
-        expect { app.run_command }.to exit_with(0)
-      ensure
-        $stdout = saved_stdout
-      end
-      out = capture.string.strip
-      if explain
-        out
-      else
-        out.empty? ? nil : JSON.parse("[#{out}]")[0]
-      end
+    before do
+      stub_request(:get, "https://puppet:8140/puppet-ca/v1/certificate/#{fqdn}").to_return(body: cert)
+      allow(Puppet::Node::Facts.indirection).to receive(:find).and_return(facts)
+
+      Puppet[:environment] = env_name
+      Puppet[:environmentpath] = populated_env_dir
+
+      http = Puppet::HTTP::Client.new(ssl_context: Puppet::SSL::SSLProvider.new.create_insecure_context)
+      Puppet.runtime[:http] = http
     end
 
-    def explain(key, options = {})
-      lookup(key, options, true)
-    end
-
-    around(:each) do |example|
-      Puppet.override(:environments => environments, :current_environment => env) do
-        example.run
-      end
+    def expect_lookup_with_output(exitcode, out)
+      expect { app.run }.to exit_with(exitcode).and output(out).to_stdout
     end
 
     it 'finds data in the environment' do
-      expect(lookup('a')).to eql('value a')
+      app.command_line.args << 'a'
+      expect_lookup_with_output(0, /value a/)
+    end
+
+    it "resolves hiera data using a top-level node parameter" do
+      File.write(File.join(env_dir, env_name, 'hiera.yaml'), <<~YAML)
+        ---
+        version: 5
+        hierarchy:
+          - name: "Per Node"
+            data_hash: yaml_data
+            path: "%{my_fact}.yaml"
+      YAML
+
+      File.write(File.join(env_dir, env_name, 'data', "my_fact_value.yaml"), <<~YAML)
+        ---
+        a: value from per node data
+      YAML
+
+      app.command_line.args << 'a'
+      expect_lookup_with_output(0, /--- value from per node data/)
+    end
+
+    it "resolves hiera data using a top-level node parameter from enc" do
+      Puppet.settings[:node_terminus] = 'exec'
+      enc = tmpfile('enc.sh')
+      Puppet.settings[:external_nodes] = enc
+      File.write(File.join(env_dir, env_name, 'hiera.yaml'), <<~YAML)
+      ---
+      version: 5
+      hierarchy:
+        - name: "Node parameters"
+          data_hash: yaml_data
+          path: "%{site}.yaml"
+      YAML
+
+      File.write(File.join(env_dir, env_name, 'data', "pdx.yaml"), <<~YAML)
+      ---
+      key: value
+      YAML
+      allow(Puppet::Util::Execution).to receive(:execute).with([enc, fqdn], anything).and_return(<<~YAML)
+      parameters:
+        site: pdx
+      YAML
+      app.command_line.args << 'key' << '--compile'
+      Puppet.initialize_settings(['-E', env_name])
+      expect_lookup_with_output(0, /--- value/)
+    end
+
+    it "prefers the environment specified on the commandline over the enc environment" do
+      Puppet.settings[:node_terminus] = 'exec'
+      enc = tmpfile('enc.sh')
+      Puppet.settings[:external_nodes] = enc
+      File.write(File.join(env_dir, env_name, 'hiera.yaml'), <<~YAML)
+      ---
+      version: 5
+      hierarchy:
+        - name: "Node parameters"
+          data_hash: yaml_data
+          path: "%{site}.yaml"
+      YAML
+
+      File.write(File.join(env_dir, env_name, 'data', "pdx.yaml"), <<~YAML)
+      ---
+      key: value
+      YAML
+      allow(Puppet::Util::Execution).to receive(:execute).with([enc, fqdn], anything).and_return(<<~YAML)
+      ---
+      # return 'someother' environment because it doesn't have any hiera data
+      environment: someother
+      parameters:
+        site: pdx
+      YAML
+      app.command_line.args << 'key' << '--compile'
+      Puppet.initialize_settings(['-E', env_name])
+      expect_lookup_with_output(0, /--- value/)
+    end
+
+    it 'loads trusted information from the node certificate' do
+      Puppet.settings[:node_terminus] = 'exec'
+      expect_any_instance_of(Puppet::Node::Exec).to receive(:find) do |args|
+        info = Puppet.lookup(:trusted_information)
+        expect(info.certname).to eq(fqdn)
+        expect(info.extensions).to eq({ "1.3.6.1.4.1.34380.1.2.1.1" => "somevalue" })
+      end.and_return(node)
+
+      app.command_line.args << 'a' << '--compile'
+      expect_lookup_with_output(0, /--- value a/)
     end
 
     it 'loads external facts when running without --node' do
       expect(Puppet::Util).not_to receive(:skip_external_facts)
       expect(Facter).not_to receive(:load_external)
-      lookup('a')
+
+      app.command_line.args << 'a'
+      expect_lookup_with_output(0, /--- value a/)
     end
 
-    it 'skip loading of external facts when run with --node' do
-      app.options[:node] = "random_node"
-      expect(Facter).to receive(:load_external).once.with(false)
-      expect(Facter).to receive(:load_external).once.with(true)
-      lookup('a')
+    describe 'when using --node' do
+      let(:fqdn) { 'random_node' }
+
+      it 'skips loading of external facts' do
+        app.command_line.args << 'a' << '--node' << fqdn
+
+        expect(Puppet::Node::Facts.indirection).to receive(:find).and_return(facts)
+        expect(Facter).to receive(:load_external).twice.with(false)
+        expect(Facter).to receive(:load_external).twice.with(true)
+        expect_lookup_with_output(0, /--- value a/)
+      end
     end
 
     context 'uses node_terminus' do
       require 'puppet/indirector/node/exec'
       require 'puppet/indirector/node/plain'
 
-      let(:node) { Puppet::Node.new('testnode', :environment => env) }
+      let(:node) { Puppet::Node.new('testnode', :facts => facts) }
 
       it ':plain without --compile' do
         Puppet.settings[:node_terminus] = 'exec'
         expect_any_instance_of(Puppet::Node::Plain).to receive(:find).and_return(node)
         expect_any_instance_of(Puppet::Node::Exec).not_to receive(:find)
-        expect(lookup('a')).to eql('value a')
+
+        app.command_line.args << 'a'
+        expect_lookup_with_output(0, /--- value a/)
       end
 
       it 'configured in Puppet settings with --compile' do
         Puppet.settings[:node_terminus] = 'exec'
         expect_any_instance_of(Puppet::Node::Plain).not_to receive(:find)
         expect_any_instance_of(Puppet::Node::Exec).to receive(:find).and_return(node)
-        expect(lookup('a', :compile => true)).to eql('value a')
+
+        app.command_line.args << 'a' << '--compile'
+        expect_lookup_with_output(0, /--- value a/)
       end
     end
 
     context 'configured with the wrong environment' do
-      let(:env) { Puppet::Node::Environment.create(env_name.to_sym, [File.join(populated_env_dir, env_name, 'modules')]) }
       it 'does not find data in non-existing environment' do
-        Puppet.override(:environments => environments, :current_environment => 'someother') do
-          expect(lookup('a', {}, true)).to match(/did not find a value for the name 'a'/)
-        end
+        Puppet[:environment] = 'doesntexist'
+        app.command_line.args << 'a'
+        expect { app.run }.to raise_error(Puppet::Environments::EnvironmentNotFound, /Could not find a directory environment named 'doesntexist'/)
       end
     end
 
@@ -174,15 +253,22 @@ describe 'lookup' do
       end
 
       it 'finds data in the module' do
-        expect(lookup('mod_a::b')).to eql('value mod_a::b (from mod_a)')
+        app.command_line.args << 'mod_a::b'
+        expect_lookup_with_output(0, /value mod_a::b \(from mod_a\)/)
       end
 
       it 'finds quoted keys in the module' do
-        expect(lookup('"mod_a::a.quoted.key"')).to eql('value mod_a::a.quoted.key (from mod_a)')
+        app.command_line.args << "'mod_a::a.quoted.key'"
+        expect_lookup_with_output(0, /value mod_a::a.quoted.key \(from mod_a\)/)
       end
 
       it 'merges hashes from environment and module when merge strategy hash is used' do
-        expect(lookup('mod_a::hash_a', :merge => 'hash')).to eql({'a' => 'value mod_a::hash_a.a (from environment)', 'b' => 'value mod_a::hash_a.b (from mod_a)'})
+        app.command_line.args << 'mod_a::hash_a' << '--merge' << 'hash'
+        expect_lookup_with_output(0, <<~END)
+          ---
+          a: value mod_a::hash_a.a (from environment)
+          b: value mod_a::hash_a.b (from mod_a)
+        END
       end
     end
   end

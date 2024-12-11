@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 # Interface for something that is "locatable" (holds offset and length).
 class Puppet::Pops::Parser::Locatable
-
   # The offset in the locator's content
   def offset
   end
@@ -19,5 +20,4 @@ class Puppet::Pops::Parser::Locatable
       @length = length
     end
   end
-
 end

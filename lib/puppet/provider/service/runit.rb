@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Daemontools service management
 #
 # author Brice Figureau <brice-puppet@daysofwonder.com>
@@ -50,7 +52,7 @@ Puppet::Type.type(:service).provide :runit, :parent => :daemontools do
   # find the service dir on this node
   def servicedir
     unless @servicedir
-      ["/service", "/etc/service","/var/service"].each do |path|
+      ["/service", "/etc/service", "/var/service"].each do |path|
         if Puppet::FileSystem.exist?(path)
           @servicedir = path
           break
@@ -63,35 +65,35 @@ Puppet::Type.type(:service).provide :runit, :parent => :daemontools do
 
   def status
     begin
-      output = sv "status", self.daemon
+      output = sv "status", daemon
       return :running if output =~ /^run: /
     rescue Puppet::ExecutionFailure => detail
       unless detail.message =~ /(warning: |runsv not running$)/
-        raise Puppet::Error.new( "Could not get status for service #{resource.ref}: #{detail}", detail )
+        raise Puppet::Error.new("Could not get status for service #{resource.ref}: #{detail}", detail)
       end
     end
     :stopped
   end
 
   def stop
-    sv "stop", self.service
+    sv "stop", service
   end
 
   def start
     if enabled? != :true
-        enable
-        # Work around issue #4480
-        # runsvdir takes up to 5 seconds to recognize
-        # the symlink created by this call to enable
-        #TRANSLATORS 'runsvdir' is a linux service name and should not be translated
-        Puppet.info _("Waiting 5 seconds for runsvdir to discover service %{service}") % { service: self.service }
-        sleep 5
+      enable
+      # Work around issue #4480
+      # runsvdir takes up to 5 seconds to recognize
+      # the symlink created by this call to enable
+      # TRANSLATORS 'runsvdir' is a linux service name and should not be translated
+      Puppet.info _("Waiting 5 seconds for runsvdir to discover service %{service}") % { service: service }
+      sleep 5
     end
-    sv "start", self.service
+    sv "start", service
   end
 
   def restart
-    sv "restart", self.service
+    sv "restart", service
   end
 
   # disable by removing the symlink so that runit
@@ -100,7 +102,6 @@ Puppet::Type.type(:service).provide :runit, :parent => :daemontools do
   # before a disable
   def disable
     # unlink the daemon symlink to disable it
-    Puppet::FileSystem.unlink(self.service) if Puppet::FileSystem.symlink?(self.service)
+    Puppet::FileSystem.unlink(service) if Puppet::FileSystem.symlink?(service)
   end
 end
-

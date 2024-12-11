@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Puppet as a Library "PAL"
 
 # Yes, this requires all of puppet for now because 'settings' and many other things...
@@ -27,7 +29,6 @@ module Puppet
 #
 # @api public
 module Pal
-
   # Defines a context in which multiple operations in an env with a script compiler can be performed in a given block.
   # The calls that takes place to PAL inside of the given block are all with the same instance of the compiler.
   # The parameter `configured_by_env` makes it possible to either use the configuration in the environment, or specify
@@ -56,14 +57,14 @@ module Pal
   # @yieldparam [Puppet::Pal::ScriptCompiler] compiler, a ScriptCompiler to perform operations on.
   #
   def self.with_script_compiler(
-      configured_by_env: false,
-      manifest_file:     nil,
-      code_string:       nil,
-      facts:             {},
-      variables:         {},
-      set_local_facts:   true,
-      &block
-    )
+    configured_by_env: false,
+    manifest_file:     nil,
+    code_string:       nil,
+    facts:             {},
+    variables:         {},
+    set_local_facts:   true,
+    &block
+  )
     # TRANSLATORS: do not translate variable name strings in these assertions
     assert_mutually_exclusive(manifest_file, code_string, 'manifest_file', 'code_string')
     assert_non_empty_string(manifest_file, 'manifest_file', true)
@@ -75,15 +76,14 @@ module Pal
         # TRANSLATORS: do not translate the variable names in this error message
         raise ArgumentError, _("manifest_file or code_string cannot be given when configured_by_env is true")
       end
+
       # Use the manifest setting
       manifest_file = Puppet[:manifest]
-    else
+    elsif manifest_file.nil? && code_string.nil?
       # An "undef" code_string is the only way to override Puppet[:manifest] & Puppet[:code] settings since an
       # empty string is taken as Puppet[:code] not being set.
       #
-      if manifest_file.nil? && code_string.nil?
-        code_string = 'undef'
-      end
+      code_string = 'undef'
     end
 
     previous_tasks_value = Puppet[:tasks]
@@ -95,11 +95,11 @@ module Pal
     # If manifest_file is nil, the #main method will use the env configured manifest
     # to do things in the block while a Script Compiler is in effect
     main(
-      manifest:                manifest_file,
-      facts:                   facts,
-      variables:               variables,
+      manifest: manifest_file,
+      facts: facts,
+      variables: variables,
       internal_compiler_class: :script,
-      set_local_facts:         set_local_facts,
+      set_local_facts: set_local_facts,
       &block
     )
   ensure
@@ -163,12 +163,12 @@ module Pal
   #
   def self.with_catalog_compiler(
     configured_by_env: false,
-      manifest_file:     nil,
-      code_string:       nil,
-      facts:             {},
-      variables:         {},
-      target_variables:  {},
-      &block
+    manifest_file:     nil,
+    code_string:       nil,
+    facts:             {},
+    variables:         {},
+    target_variables:  {},
+    &block
   )
     # TRANSLATORS: do not translate variable name strings in these assertions
     assert_mutually_exclusive(manifest_file, code_string, 'manifest_file', 'code_string')
@@ -181,15 +181,14 @@ module Pal
         # TRANSLATORS: do not translate the variable names in this error message
         raise ArgumentError, _("manifest_file or code_string cannot be given when configured_by_env is true")
       end
+
       # Use the manifest setting
       manifest_file = Puppet[:manifest]
-    else
+    elsif manifest_file.nil? && code_string.nil?
       # An "undef" code_string is the only way to override Puppet[:manifest] & Puppet[:code] settings since an
       # empty string is taken as Puppet[:code] not being set.
       #
-      if manifest_file.nil? && code_string.nil?
-        code_string = 'undef'
-      end
+      code_string = 'undef'
     end
 
     # We need to make sure to set these back when we're done
@@ -203,12 +202,12 @@ module Pal
     # If manifest_file is nil, the #main method will use the env configured manifest
     # to do things in the block while a Script Compiler is in effect
     main(
-      manifest:                manifest_file,
-      facts:                   facts,
-      variables:               variables,
-      target_variables:        target_variables,
+      manifest: manifest_file,
+      facts: facts,
+      variables: variables,
+      target_variables: target_variables,
       internal_compiler_class: :catalog,
-      set_local_facts:         false,
+      set_local_facts: false,
       &block
     )
   ensure
@@ -229,12 +228,11 @@ module Pal
   # @yieldparam [Puppet::Pal] context, a context that responds to Puppet::Pal methods
   #
   def self.in_tmp_environment(env_name,
-      modulepath:    [],
-      settings_hash: {},
-      facts:         nil,
-      variables:     {},
-      &block
-    )
+                              modulepath:    [],
+                              settings_hash: {},
+                              facts:         nil,
+                              variables:     {},
+                              &block)
     assert_non_empty_string(env_name, _("temporary environment name"))
     # TRANSLATORS: do not translate variable name string in these assertions
     assert_optionally_empty_array(modulepath, 'modulepath')
@@ -248,7 +246,7 @@ module Pal
     in_environment_context(
       Puppet::Environments::Static.new(env), # The tmp env is the only known env
       env, facts, variables, &block
-      )
+    )
   end
 
   # Defines the context in which to perform puppet operations (evaluation, etc)
@@ -277,16 +275,15 @@ module Pal
   #
   # @api public
   def self.in_environment(env_name,
-      modulepath:    nil,
-      pre_modulepath: [],
-      post_modulepath: [],
-      settings_hash: {},
-      env_dir:       nil,
-      envpath:       nil,
-      facts:         nil,
-      variables:     {},
-      &block
-    )
+                          modulepath: nil,
+                          pre_modulepath: [],
+                          post_modulepath: [],
+                          settings_hash: {},
+                          env_dir:       nil,
+                          envpath:       nil,
+                          facts:         nil,
+                          variables:     {},
+                          &block)
     # TRANSLATORS terms in the assertions below are names of terms in code
     assert_non_empty_string(env_name, 'env_name')
     assert_optionally_empty_array(modulepath, 'modulepath', true)
@@ -325,6 +322,7 @@ module Pal
       if env.nil?
         raise ArgumentError, _("No directory found for the environment '%{env_name}' on the path '%{envpath}'") % { env_name: env_name, envpath: envpath }
       end
+
       # A given modulepath should override the default
       mid_modulepath = modulepath.nil? ? env.modulepath : modulepath
       env_path = env.configuration.path_to_env
@@ -381,7 +379,7 @@ module Pal
     end
 
     rich_data_t = Puppet::Pops::Types::TypeFactory.rich_data
-    variables.each_pair do |k,v|
+    variables.each_pair do |k, v|
       unless k =~ Puppet::Pops::Patterns::VAR_NAME
         raise ArgumentError, _("Given variable '%{varname}' has illegal name") % { varname: k }
       end
@@ -444,67 +442,63 @@ module Pal
     node.environment = apply_environment
 
     # TRANSLATORS, the string "For puppet PAL" is not user facing
-    Puppet.override({:current_environment => apply_environment}, "For puppet PAL") do
-      begin
-        node.sanitize()
-        compiler = create_internal_compiler(internal_compiler_class, node)
+    Puppet.override({ :current_environment => apply_environment }, "For puppet PAL") do
+      node.sanitize()
+      compiler = create_internal_compiler(internal_compiler_class, node)
 
-        case internal_compiler_class
-        when :script
-          pal_compiler = ScriptCompiler.new(compiler)
-          overrides[:pal_script_compiler] = overrides[:pal_compiler] = pal_compiler
-        when :catalog
-          pal_compiler = CatalogCompiler.new(compiler)
-          overrides[:pal_catalog_compiler] = overrides[:pal_compiler] = pal_compiler
-        end
+      case internal_compiler_class
+      when :script
+        pal_compiler = ScriptCompiler.new(compiler)
+        overrides[:pal_script_compiler] = overrides[:pal_compiler] = pal_compiler
+      when :catalog
+        pal_compiler = CatalogCompiler.new(compiler)
+        overrides[:pal_catalog_compiler] = overrides[:pal_compiler] = pal_compiler
+      end
 
-        # When scripting the trusted data are always local; default is to set them anyway
-        # When compiling for a catalog, the catalog compiler does this
-        if set_local_facts
-          compiler.topscope.set_trusted(node.trusted_data)
+      # When scripting the trusted data are always local; default is to set them anyway
+      # When compiling for a catalog, the catalog compiler does this
+      if set_local_facts
+        compiler.topscope.set_trusted(node.trusted_data)
 
-          # Server facts are always about the local node's version etc.
-          compiler.topscope.set_server_facts(node.server_facts)
+        # Server facts are always about the local node's version etc.
+        compiler.topscope.set_server_facts(node.server_facts)
 
-          # Set $facts for the node running the script
-          facts_hash = node.facts.nil? ? {} : node.facts.values
-          compiler.topscope.set_facts(facts_hash)
+        # Set $facts for the node running the script
+        facts_hash = node.facts.nil? ? {} : node.facts.values
+        compiler.topscope.set_facts(facts_hash)
 
-          # create the $settings:: variables
-          compiler.topscope.merge_settings(node.environment.name, false)
-        end
+        # create the $settings:: variables
+        compiler.topscope.merge_settings(node.environment.name, false)
+      end
 
-        # Make compiler available to Puppet#lookup and injection in functions
-        # TODO: The compiler instances should be available under non PAL use as well!
-        # TRANSLATORS: Do not translate, symbolic name
-        Puppet.override(overrides, "PAL::with_#{internal_compiler_class}_compiler") do
-          compiler.compile do | compiler_yield |
-            # In case the variables passed to the compiler are PCore types defined in modules, they
-            # need to be deserialized and added from within the this scope, so that loaders are
-            # available during deserizlization.
-            pal_variables = Puppet::Pops::Serialization::FromDataConverter.convert(pal_variables)
-            variables     = Puppet::Pops::Serialization::FromDataConverter.convert(variables)
+      # Make compiler available to Puppet#lookup and injection in functions
+      # TODO: The compiler instances should be available under non PAL use as well!
+      # TRANSLATORS: Do not translate, symbolic name
+      Puppet.override(overrides, "PAL::with_#{internal_compiler_class}_compiler") do
+        compiler.compile do |_compiler_yield|
+          # In case the variables passed to the compiler are PCore types defined in modules, they
+          # need to be deserialized and added from within the this scope, so that loaders are
+          # available during deserizlization.
+          pal_variables = Puppet::Pops::Serialization::FromDataConverter.convert(pal_variables)
+          variables     = Puppet::Pops::Serialization::FromDataConverter.convert(variables)
 
-            # Merge together target variables and plan variables. This will also shadow any
-            # collisions with facts and emit a warning.
-            topscope_vars = pal_variables.merge(merge_vars(target_variables, variables, node.facts.values))
+          # Merge together target variables and plan variables. This will also shadow any
+          # collisions with facts and emit a warning.
+          topscope_vars = pal_variables.merge(merge_vars(target_variables, variables, node.facts.values))
 
-            add_variables(compiler.topscope, topscope_vars)
-            # wrap the internal compiler to prevent it from leaking in the PAL API
-            if block_given?
-              yield(pal_compiler)
-            end
+          add_variables(compiler.topscope, topscope_vars)
+          # wrap the internal compiler to prevent it from leaking in the PAL API
+          if block_given?
+            yield(pal_compiler)
           end
         end
-
-      rescue Puppet::Error
-        # already logged and handled by the compiler, including Puppet::ParseErrorWithIssue
-        raise
-
-      rescue => detail
-        Puppet.log_exception(detail)
-        raise
       end
+    rescue Puppet::Error
+      # already logged and handled by the compiler, including Puppet::ParseErrorWithIssue
+      raise
+    rescue => detail
+      Puppet.log_exception(detail)
+      raise
     end
   end
   private_class_method :main
@@ -558,17 +552,18 @@ module Pal
   T_BOOLEAN = Puppet::Pops::Types::PBooleanType::DEFAULT
 
   T_GENERIC_TASK_HASH = Puppet::Pops::Types::TypeFactory.hash_kv(
-    Puppet::Pops::Types::TypeFactory.pattern(/\A[a-z][a-z0-9_]*\z/), Puppet::Pops::Types::TypeFactory.data)
+    Puppet::Pops::Types::TypeFactory.pattern(/\A[a-z][a-z0-9_]*\z/), Puppet::Pops::Types::TypeFactory.data
+  )
 
-  def self.assert_type(type, value, what, allow_nil=false)
-    Puppet::Pops::Types::TypeAsserter.assert_instance_of(nil, type, value, allow_nil) { _('Puppet Pal: %{what}') % {what: what} }
+  def self.assert_type(type, value, what, allow_nil = false)
+    Puppet::Pops::Types::TypeAsserter.assert_instance_of(nil, type, value, allow_nil) { _('Puppet Pal: %{what}') % { what: what } }
   end
 
-  def self.assert_non_empty_string(s, what, allow_nil=false)
+  def self.assert_non_empty_string(s, what, allow_nil = false)
     assert_type(T_STRING, s, what, allow_nil)
   end
 
-  def self.assert_optionally_empty_array(a, what, allow_nil=false)
+  def self.assert_optionally_empty_array(a, what, allow_nil = false)
     assert_type(T_STRING_ARRAY, a, what, allow_nil)
   end
   private_class_method :assert_optionally_empty_array

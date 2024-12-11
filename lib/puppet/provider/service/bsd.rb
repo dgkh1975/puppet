@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:service).provide :bsd, :parent => :init do
   desc <<-EOT
     Generic BSD form of `init`-style service management with `rc.d`.
@@ -5,7 +7,7 @@ Puppet::Type.type(:service).provide :bsd, :parent => :init do
     Uses `rc.conf.d` for service enabling and disabling.
   EOT
 
-  confine :operatingsystem => [:freebsd, :dragonfly]
+  confine 'os.name' => [:freebsd, :dragonfly]
 
   def rcconf_dir
     '/etc/rc.conf.d'
@@ -32,9 +34,9 @@ Puppet::Type.type(:service).provide :bsd, :parent => :init do
   # enable service by creating a service file under rc.conf.d with the
   # proper contents
   def enable
-    Dir.mkdir(rcconf_dir) if not Puppet::FileSystem.exist?(rcconf_dir)
+    Dir.mkdir(rcconf_dir) unless Puppet::FileSystem.exist?(rcconf_dir)
     rcfile = File.join(rcconf_dir, @resource[:name])
-    File.open(rcfile, File::WRONLY | File::APPEND | File::CREAT, 0644) { |f|
+    File.open(rcfile, File::WRONLY | File::APPEND | File::CREAT, 0o644) { |f|
       f << "%s_enable=\"YES\"\n" % @resource[:name]
     }
   end
@@ -42,10 +44,10 @@ Puppet::Type.type(:service).provide :bsd, :parent => :init do
   # Override stop/start commands to use one<cmd>'s and the avoid race condition
   # where provider tries to stop/start the service before it is enabled
   def startcmd
-    [self.initscript, :onestart]
+    [initscript, :onestart]
   end
 
   def stopcmd
-    [self.initscript, :onestop]
+    [initscript, :onestop]
   end
 end

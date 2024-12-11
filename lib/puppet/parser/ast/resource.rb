@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 # Instruction for Resource instantiation.
 # Instantiates resources of both native and user defined types.
 #
 class Puppet::Parser::AST::Resource < Puppet::Parser::AST::Branch
-
   attr_accessor :type, :instances, :exported, :virtual
 
   def initialize(argshash)
@@ -19,13 +20,12 @@ class Puppet::Parser::AST::Resource < Puppet::Parser::AST::Branch
     # because sometimes the :virtual attribute is set *after*
     # :exported, in which case it clobbers :exported if :exported
     # is true.  Argh, this was a very tough one to track down.
-    virt = self.virtual || self.exported
+    virt = virtual || exported
 
     # First level of implicit iteration: build a resource for each
     # instance.  This handles things like:
     # file { '/foo': owner => blah; '/bar': owner => blah }
     @instances.map do |instance|
-
       # Evaluate all of the specified params.
       paramobjects = instance.parameters.map { |param| param.safeevaluate(scope) }
 
@@ -42,11 +42,11 @@ class Puppet::Parser::AST::Resource < Puppet::Parser::AST::Branch
       resource_titles.flatten.map do |resource_title|
         exceptwrap :type => Puppet::ParseError do
           resource = Puppet::Parser::Resource.new(
-          fully_qualified_type, resource_title,
+            fully_qualified_type, resource_title,
             :parameters => paramobjects,
-            :file => self.file,
-            :line => self.line,
-            :exported => self.exported,
+            :file => file,
+            :line => line,
+            :exported => exported,
             :virtual => virt,
             :source => scope.source,
             :scope => scope,
@@ -61,6 +61,6 @@ class Puppet::Parser::AST::Resource < Puppet::Parser::AST::Branch
           resource
         end
       end
-    end.flatten.reject { |resource| resource.nil? }
+    end.flatten.compact
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl'
 
 # SSL Provider creates `SSLContext` objects that can be used to create
@@ -59,17 +61,19 @@ class Puppet::SSL::SSLProvider
   # refers to the cacerts bundle in the puppet-agent package.
   #
   # Connections made from the returned context will authenticate the server,
-  # i.e. `VERIFY_PEER`, but will not use a client certificate and will not
-  # perform revocation checking.
+  # i.e. `VERIFY_PEER`, but will not use a client certificate (unless requested)
+  # and will not perform revocation checking.
   #
   # @param cacerts [Array<OpenSSL::X509::Certificate>] Array of trusted CA certs
   # @param path [String, nil] A file containing additional trusted CA certs.
+  # @param include_client_cert [true, false] If true, the client cert will be added to the context
+  #   allowing mutual TLS authentication. The default is false. If the client cert doesn't exist
+  #   then the option will be ignored.
   # @return [Puppet::SSL::SSLContext] A context to use to create connections
   # @raise (see #create_context)
   # @api private
-  def create_system_context(cacerts:, path: Puppet[:ssl_trust_store])
-    store = create_x509_store(cacerts, [], false)
-    store.set_default_paths
+  def create_system_context(cacerts:, path: Puppet[:ssl_trust_store], include_client_cert: false)
+    store = create_x509_store(cacerts, [], false, include_system_store: true)
 
     if path
       stat = Puppet::FileSystem.stat(path)
@@ -86,6 +90,29 @@ class Puppet::SSL::SSLProvider
         else
           Puppet.warning(_("The 'ssl_trust_store' setting does not refer to a file and will be ignored: '%{path}'" % { path: path }))
         end
+      end
+    end
+
+    if include_client_cert
+      cert_provider = Puppet::X509::CertProvider.new
+      private_key = cert_provider.load_private_key(Puppet[:certname], required: false)
+      unless private_key
+        Puppet.warning("Private key for '#{Puppet[:certname]}' does not exist")
+      end
+
+      client_cert = cert_provider.load_client_cert(Puppet[:certname], required: false)
+      unless client_cert
+        Puppet.warning("Client certificate for '#{Puppet[:certname]}' does not exist")
+      end
+
+      if private_key && client_cert
+        client_chain = resolve_client_chain(store, client_cert, private_key)
+
+        return Puppet::SSL::SSLContext.new(
+          store: store, cacerts: cacerts, crls: [],
+          private_key: private_key, client_cert: client_cert, client_chain: client_chain,
+          revocation: false
+        ).freeze
       end
     end
 
@@ -111,28 +138,21 @@ class Puppet::SSL::SSLProvider
   # @param client_cert [OpenSSL::X509::Certificate] client's cert whose public
   #   key matches the `private_key`
   # @param revocation [:chain, :leaf, false] revocation mode
+  # @param include_system_store [true, false] Also trust system CA
   # @return [Puppet::SSL::SSLContext] A context to use to create connections
   # @raise [Puppet::SSL::CertVerifyError] There was an issue with
   #   one of the certs or CRLs.
   # @raise [Puppet::SSL::SSLError] There was an issue with the
   #   `private_key`.
   # @api private
-  def create_context(cacerts:, crls:, private_key:, client_cert:, revocation: Puppet[:certificate_revocation])
+  def create_context(cacerts:, crls:, private_key:, client_cert:, revocation: Puppet[:certificate_revocation], include_system_store: false)
     raise ArgumentError, _("CA certs are missing") unless cacerts
     raise ArgumentError, _("CRLs are missing") unless crls
     raise ArgumentError, _("Private key is missing") unless private_key
     raise ArgumentError, _("Client cert is missing") unless client_cert
 
-    store = create_x509_store(cacerts, crls, revocation)
-    client_chain = verify_cert_with_store(store, client_cert)
-
-    if !private_key.is_a?(OpenSSL::PKey::RSA) && !private_key.is_a?(OpenSSL::PKey::EC)
-      raise Puppet::SSL::SSLError, _("Unsupported key '%{type}'") % { type: private_key.class.name }
-    end
-
-    unless client_cert.check_private_key(private_key)
-      raise Puppet::SSL::SSLError, _("The certificate for '%{name}' does not match its private key") % { name: subject(client_cert) }
-    end
+    store = create_x509_store(cacerts, crls, revocation, include_system_store: include_system_store)
+    client_chain = resolve_client_chain(store, client_cert, private_key)
 
     Puppet::SSL::SSLContext.new(
       store: store, cacerts: cacerts, crls: crls,
@@ -151,12 +171,13 @@ class Puppet::SSL::SSLProvider
   # @param password [String, nil] If the private key is encrypted, decrypt
   #   it using the password. If the key is encrypted, but a password is
   #   not specified, then the key cannot be loaded.
+  # @param include_system_store [true, false] Also trust system CA
   # @return [Puppet::SSL::SSLContext] A context to use to create connections
   # @raise [Puppet::SSL::CertVerifyError] There was an issue with
   #   one of the certs or CRLs.
   # @raise [Puppet::Error] There was an issue with one of the required components.
   # @api private
-  def load_context(certname: Puppet[:certname], revocation: Puppet[:certificate_revocation], password: nil)
+  def load_context(certname: Puppet[:certname], revocation: Puppet[:certificate_revocation], password: nil, include_system_store: false)
     cert = Puppet::X509::CertProvider.new
     cacerts = cert.load_cacerts(required: true)
     crls = case revocation
@@ -168,7 +189,7 @@ class Puppet::SSL::SSLProvider
     private_key = cert.load_private_key(certname, required: true, password: password)
     client_cert = cert.load_client_cert(certname, required: true)
 
-    create_context(cacerts: cacerts, crls: crls,  private_key: private_key, client_cert: client_cert, revocation: revocation)
+    create_context(cacerts: cacerts, crls: crls,  private_key: private_key, client_cert: client_cert, revocation: revocation, include_system_store: include_system_store)
   rescue OpenSSL::PKey::PKeyError => e
     raise Puppet::SSL::SSLError.new(_("Failed to load private key for host '%{name}': %{message}") % { name: certname, message: e.message }, e)
   end
@@ -190,12 +211,33 @@ class Puppet::SSL::SSLProvider
     csr
   end
 
+  def print(ssl_context, alg = 'SHA256')
+    if Puppet::Util::Log.sendlevel?(:debug)
+      chain = ssl_context.client_chain
+      # print from root to client
+      chain.reverse.each_with_index do |cert, i|
+        digest = Puppet::SSL::Digest.new(alg, cert.to_der)
+        if i == chain.length - 1
+          Puppet.debug(_("Verified client certificate '%{subject}' fingerprint %{digest}") % { subject: cert.subject.to_utf8, digest: digest })
+        else
+          Puppet.debug(_("Verified CA certificate '%{subject}' fingerprint %{digest}") % { subject: cert.subject.to_utf8, digest: digest })
+        end
+      end
+      ssl_context.crls.each do |crl|
+        oid_values = crl.extensions.to_h { |ext| [ext.oid, ext.value] }
+        crlNumber = oid_values['crlNumber'] || 'unknown'
+        authKeyId = (oid_values['authorityKeyIdentifier'] || 'unknown').chomp
+        Puppet.debug("Using CRL '#{crl.issuer.to_utf8}' authorityKeyIdentifier '#{authKeyId}' crlNumber '#{crlNumber}'")
+      end
+    end
+  end
+
   private
 
   def default_flags
     # checking the signature of the self-signed cert doesn't add any security,
     # but it's a sanity check to make sure the cert isn't corrupt. This option
-    # is only available in openssl 1.1+
+    # is not available in JRuby's OpenSSL library.
     if defined?(OpenSSL::X509::V_FLAG_CHECK_SS_SIGNATURE)
       OpenSSL::X509::V_FLAG_CHECK_SS_SIGNATURE
     else
@@ -203,13 +245,15 @@ class Puppet::SSL::SSLProvider
     end
   end
 
-  def create_x509_store(roots, crls, revocation)
+  def create_x509_store(roots, crls, revocation, include_system_store: false)
     store = OpenSSL::X509::Store.new
     store.purpose = OpenSSL::X509::PURPOSE_ANY
     store.flags = default_flags | revocation_mode(revocation)
 
     roots.each { |cert| store.add_cert(cert) }
     crls.each { |crl| store.add_crl(crl) }
+
+    store.set_default_paths if include_system_store
 
     store
   end
@@ -232,6 +276,20 @@ class Puppet::SSL::SSLProvider
       # :chain is the default
       OpenSSL::X509::V_FLAG_CRL_CHECK | OpenSSL::X509::V_FLAG_CRL_CHECK_ALL
     end
+  end
+
+  def resolve_client_chain(store, client_cert, private_key)
+    client_chain = verify_cert_with_store(store, client_cert)
+
+    if !private_key.is_a?(OpenSSL::PKey::RSA) && !private_key.is_a?(OpenSSL::PKey::EC)
+      raise Puppet::SSL::SSLError, _("Unsupported key '%{type}'") % { type: private_key.class.name }
+    end
+
+    unless client_cert.check_private_key(private_key)
+      raise Puppet::SSL::SSLError, _("The certificate for '%{name}' does not match its private key") % { name: subject(client_cert) }
+    end
+
+    client_chain
   end
 
   def verify_cert_with_store(store, cert)
@@ -266,7 +324,7 @@ class Puppet::SSL::SSLProvider
       when OpenSSL::X509::V_ERR_CERT_NOT_YET_VALID
         _("The certificate '%{subject}' is not yet valid, verify time is synchronized") % { subject: subject(current_cert) }
       when OpenSSL::X509::V_ERR_CERT_HAS_EXPIRED
-        _("The certificate '%{subject}' has expired, verify time is synchronized") %  { subject: subject(current_cert) }
+        _("The certificate '%{subject}' has expired, verify time is synchronized") % { subject: subject(current_cert) }
       when OpenSSL::X509::V_ERR_CRL_NOT_YET_VALID
         _("The CRL issued by '%{issuer}' is not yet valid, verify time is synchronized") % { issuer: issuer(current_cert) }
       when OpenSSL::X509::V_ERR_CRL_HAS_EXPIRED
@@ -277,7 +335,8 @@ class Puppet::SSL::SSLProvider
         _("Invalid signature for CRL issued by '%{issuer}'") % { issuer: issuer(current_cert) }
       when OpenSSL::X509::V_ERR_UNABLE_TO_GET_ISSUER_CERT
         _("The issuer '%{issuer}' of certificate '%{subject}' is missing") % {
-          issuer: issuer(current_cert), subject: subject(current_cert) }
+          issuer: issuer(current_cert), subject: subject(current_cert)
+        }
       when OpenSSL::X509::V_ERR_UNABLE_TO_GET_CRL
         _("The CRL issued by '%{issuer}' is missing") % { issuer: issuer(current_cert) }
       when OpenSSL::X509::V_ERR_CERT_REVOKED
@@ -286,7 +345,8 @@ class Puppet::SSL::SSLProvider
         # error_string is labeled ASCII-8BIT, but is encoded based on Encoding.default_external
         err_utf8 = Puppet::Util::CharacterEncoding.convert_to_utf_8(store_context.error_string)
         _("Certificate '%{subject}' failed verification (%{err}): %{err_utf8}") % {
-          subject: subject(current_cert), err: store_context.error, err_utf8: err_utf8 }
+          subject: subject(current_cert), err: store_context.error, err_utf8: err_utf8
+        }
       end
 
     raise Puppet::SSL::CertVerifyError.new(message, store_context.error, current_cert)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Common code for AIX user/group providers.
 class Puppet::Provider::AixObject < Puppet::Provider
   desc "Generic AIX resource provider"
@@ -93,7 +95,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
     # NOTE: 'Impure' lambdas are useful in case we need to generate more specific error
     # messages or pass-in instance-specific command-line arguments.
     def mapping(info = {})
-      identity_fn = lambda { |x| x }
+      identity_fn = ->(x) { x }
       info[:aix_attribute] ||= info[:puppet_property]
       info[:property_to_attribute] ||= identity_fn
       info[:attribute_to_property] ||= identity_fn
@@ -129,7 +131,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
 
       # AIX will do the right validation to ensure numeric attributes
       # can't be set to non-numeric values, so no need for the extra clutter.
-      info[:attribute_to_property] = lambda do |value|
+      info[:attribute_to_property] = lambda do |value| # rubocop:disable Style/SymbolProc
         value.to_i
       end
 
@@ -169,7 +171,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
 
     # This helper splits a list separated by sep into its corresponding
     # items. Note that a key precondition here is that none of the items
-    # in the list contain sep. 
+    # in the list contain sep.
     #
     # Let A be the return value. Then one of our postconditions is:
     #   A.join(sep) == list
@@ -256,11 +258,11 @@ class Puppet::Provider::AixObject < Puppet::Provider
 
         values = parse_colon_separated_list(values_line.chomp)
 
-        attributes_hash = Hash[attributes.zip(values)]
+        attributes_hash = attributes.zip(values).to_h
 
         object_name = attributes_hash.delete(:name)
 
-        Hash[[[:name, object_name.to_s], [:attributes, attributes_hash]]]
+        [[:name, object_name.to_s], [:attributes, attributes_hash]].to_h
       end
 
       objects
@@ -299,7 +301,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
   # that need our provider instance.
   def mappings
     return @mappings if @mappings
-    
+
     @mappings = {}
     self.class.mappings.each do |type, mapped_objects|
       @mappings[type] = {}
@@ -333,6 +335,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
     raise ArgumentError, _("Cannot have both 'forcelocal' and 'ia_load_module' at the same time!") if @resource[:ia_load_module] && @resource[:forcelocal]
     return ["-R", @resource[:ia_load_module].to_s] if @resource[:ia_load_module]
     return ["-R", "files"] if @resource[:forcelocal]
+
     []
   end
 
@@ -357,12 +360,13 @@ class Puppet::Provider::AixObject < Puppet::Provider
   # Modifies the AIX object by setting its new attributes.
   def modify_object(new_attributes)
     execute(modifycmd(new_attributes))
-    object_info(true) 
+    object_info(true)
   end
 
   # Gets a Puppet property's value from object_info
   def get(property)
     return :absent unless exists?
+
     object_info[property] || :absent
   end
 
@@ -398,7 +402,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
     properties, attributes = conflicts.keys.map do |key|
       conflicts[key].map! { |name| "'#{name}'" }.join(', ')
     end
-      
+
     detail = _("attributes is setting the %{properties} properties via. the %{attributes} attributes, respectively! Please specify these property values in the resource declaration instead.") % { properties: properties, attributes: attributes }
 
     raise Puppet::Error, _("Could not set attributes on %{resource}[%{name}]: %{detail}") % { resource: @resource.class.name, name: @resource.name, detail: detail }
@@ -416,7 +420,8 @@ class Puppet::Provider::AixObject < Puppet::Provider
   # Collects the current property values of all mapped properties +
   # the attributes property.
   def object_info(refresh = false)
-    return @object_info if @object_info && ! refresh
+    return @object_info if @object_info && !refresh
+
     @object_info = nil
 
     begin
@@ -452,7 +457,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
 
   # Check that the AIX object exists
   def exists?
-    ! object_info.nil?
+    !object_info.nil?
   end
 
   # Creates a new instance of the resource
@@ -463,6 +468,7 @@ class Puppet::Provider::AixObject < Puppet::Provider
     mappings[:aix_attribute].each do |property, aix_attribute|
       property_should = @resource.should(property)
       next if property_should.nil?
+
       attributes[aix_attribute.name] = aix_attribute.convert_property_value(property_should)
     end
 

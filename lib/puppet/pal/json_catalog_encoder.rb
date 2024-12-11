@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The JsonCatalogEncoder is a wrapper around a catalog produced by the Pal::CatalogCompiler.with_json_encoding
 # method.
 # It allows encoding the entire catalog or an individual resource as Rich Data Json.
@@ -52,8 +54,10 @@ class JsonCatalogEncoder
     #
     # TRANSLATORS 'type' and 'title' are internal parameter names - do not translate
     raise ArgumentError, _("Both type and title must be given") if type.nil? or title.nil?
+
     r = possibly_filtered_catalog.resource(type, title)
     return nil if r.nil?
+
     r.to_data_hash.to_json(:pretty => pretty)
   end
 
@@ -61,11 +65,12 @@ class JsonCatalogEncoder
   # or the catalog itself if filtering was not needed.
   # The result is cached.
   # @api private
-  #
+  # rubocop:disable Naming/MemoizedInstanceVariableName
   def possibly_filtered_catalog
-    @filtered ||= (exclude_virtual ? catalog.filter { |r| r.virtual? } : catalog)
+    @filtered ||= (exclude_virtual ? catalog.filter(&:virtual?) : catalog)
   end
   private :possibly_filtered_catalog
+  # rubocop:enable Naming/MemoizedInstanceVariableName
 end
 end
 end

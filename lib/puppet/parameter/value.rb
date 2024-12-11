@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/parameter/value_collection'
 
 # Describes an acceptable value for a parameter or property.
@@ -55,9 +57,9 @@ class Puppet::Parameter::Value
   #
   def match?(value)
     if regex?
-      return true if name =~ value.to_s
+      true if name =~ value.to_s
     else
-      return(name == convert(value) ? true : @aliases.include?(convert(value)))
+      (name == convert(value) ? true : @aliases.include?(convert(value)))
     end
   end
 
@@ -76,7 +78,7 @@ class Puppet::Parameter::Value
   #
   def convert(value)
     case value
-    when Symbol, ''             # can't intern an empty string
+    when Symbol, '' # can't intern an empty string
       value
     when String
       value.intern

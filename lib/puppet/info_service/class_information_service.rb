@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/pops'
 require_relative '../../puppet/pops/evaluator/json_strict_literal_evaluator'
 
 class Puppet::InfoService::ClassInformationService
-
   def initialize
     @file_to_result = {}
     @parser = Puppet::Pops::Parser::EvaluatingParser.new()
@@ -44,7 +45,7 @@ class Puppet::InfoService::ClassInformationService
   end
 
   def result_of(f)
-    entry =  @file_to_result[f]
+    entry = @file_to_result[f]
     if entry.nil?
       @file_to_result[f] = entry = parse_file(f)
     end
@@ -52,48 +53,45 @@ class Puppet::InfoService::ClassInformationService
   end
 
   def parse_file(f)
-    return {:error => _("The file %{f} does not exist") % { f: f }} unless Puppet::FileSystem.exist?(f)
+    return { :error => _("The file %{f} does not exist") % { f: f } } unless Puppet::FileSystem.exist?(f)
 
     begin
       parse_result = @parser.parse_file(f)
-      {:classes =>
-        parse_result.definitions.select {|d| d.is_a?(Puppet::Pops::Model::HostClassDefinition)}.map do |d|
-          {:name   => d.name,
-           :params => d.parameters.map {|p| extract_param(p) }
-          }
-        end
-      }
+      { :classes =>
+        parse_result.definitions.select { |d| d.is_a?(Puppet::Pops::Model::HostClassDefinition) }.map do |d|
+          { :name => d.name,
+            :params => d.parameters.map { |p| extract_param(p) } }
+        end }
     rescue StandardError => e
-      {:error => e.message }
+      { :error => e.message }
     end
   end
 
   def extract_param(p)
-    extract_default(extract_type({:name => p.name}, p), p)
+    extract_default(extract_type({ :name => p.name }, p), p)
   end
 
   def extract_type(structure, p)
     return structure if p.type_expr.nil?
-    structure[:type] = typeexpr_to_string(p.type_expr)
+
+    structure[:type] = typeexpr_to_string(p.name, p.type_expr)
     structure
   end
 
   def extract_default(structure, p)
     value_expr = p.value
     return structure if value_expr.nil?
+
     default_value = value_as_literal(value_expr)
     structure[:default_literal] = default_value unless default_value.nil?
     structure[:default_source] = extract_value_source(value_expr)
     structure
   end
 
-  def typeexpr_to_string(type_expr)
-    begin
-      type_parser.interpret_any(type_expr, nil).to_s
-    rescue Puppet::ParseError
-      # type is to complex - contains expressions that are not literal
-      nil
-    end
+  def typeexpr_to_string(name, type_expr)
+    type_parser.interpret_any(type_expr, nil).to_s
+  rescue Puppet::ParseError => e
+    raise Puppet::Error, "The parameter '$#{name}' is invalid: #{e.message}", e.backtrace
   end
 
   def value_as_literal(value_expr)

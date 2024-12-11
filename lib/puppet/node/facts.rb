@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require 'time'
 
 require_relative '../../puppet/node'
 require_relative '../../puppet/indirector'
 require_relative '../../puppet/util/psych_support'
-
 
 # Manage a given node's facts.  This either accepts facts and stores them, or
 # returns facts for a given node.
@@ -16,7 +17,7 @@ class Puppet::Node::Facts
 
   # We want to expire any cached nodes if the facts are saved.
   module NodeExpirer
-    def save(instance, key = nil, options={})
+    def save(instance, key = nil, options = {})
       Puppet::Node.indirection.expire(instance.name, options)
       super
     end
@@ -77,7 +78,8 @@ class Puppet::Node::Facts
   end
 
   def ==(other)
-    return false unless self.name == other.name
+    return false unless name == other.name
+
     values == other.values
   end
 
@@ -136,16 +138,14 @@ class Puppet::Node::Facts
   end
 
   def sanitize_fact(fact)
-    if fact.is_a? Hash then
+    case fact
+    when Hash
       ret = {}
-      fact.each_pair { |k,v| ret[sanitize_fact k]=sanitize_fact v }
+      fact.each_pair { |k, v| ret[sanitize_fact k] = sanitize_fact v }
       ret
-    elsif fact.is_a? Array then
+    when Array
       fact.collect { |i| sanitize_fact i }
-    elsif fact.is_a? Numeric \
-      or fact.is_a? TrueClass \
-      or fact.is_a? FalseClass \
-      or fact.is_a? String
+    when Numeric, TrueClass, FalseClass, String
       fact
     else
       result = fact.to_s

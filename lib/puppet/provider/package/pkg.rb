@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 
 Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package do
   desc "OpenSolaris image packaging system. See pkg(5) for more information.
 
     This provider supports the `install_options` attribute, which allows
-    command-line flags to be passed to pkg. These options should be specified as an 
+    command-line flags to be passed to pkg. These options should be specified as an
     array where each element is either a string or a hash."
 
   # https://docs.oracle.com/cd/E19963-01/html/820-6572/managepkgs.html
@@ -28,12 +30,12 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
 
   commands :pkg => "/usr/bin/pkg"
 
-  confine :osfamily => :solaris
+  confine 'os.family' => :solaris
 
-  defaultfor :osfamily => :solaris, :kernelrelease => ['5.11', '5.12']
+  defaultfor 'os.family' => :solaris, :kernelrelease => ['5.11', '5.12']
 
   def self.instances
-    pkg(:list, '-Hv').split("\n").map{|l| new(parse_line(l))}
+    pkg(:list, '-Hv').split("\n").map { |l| new(parse_line(l)) }
   end
 
   # The IFO flag field is just what it names, the first field can have either
@@ -46,22 +48,22 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
     (
       case flags[0..0]
       when 'i'
-        {:status => 'installed'}
+        { :status => 'installed' }
       when '-'
-        {:status => 'known'}
+        { :status => 'known' }
       else
         raise ArgumentError, _('Unknown format %{resource_name}: %{full_flags}[%{bad_flag}]') %
-            { resource_name: self.name, full_flags: flags, bad_flag: flags[0..0] }
+            { resource_name: name, full_flags: flags, bad_flag: flags[0..0] }
       end
     ).merge(
       case flags[1..1]
       when 'f'
-        {:mark => :hold}
+        { :mark => :hold }
       when '-'
         {}
       else
         raise ArgumentError, _('Unknown format %{resource_name}: %{full_flags}[%{bad_flag}]') %
-            { resource_name: self.name, full_flags: flags, bad_flag: flags[1..1] }
+            { resource_name: name, full_flags: flags, bad_flag: flags[1..1] }
       end
     )
   end
@@ -87,11 +89,11 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
   def self.pkg_state(state)
     case state
     when /installed/
-      {:status => 'installed'}
+      { :status => 'installed' }
     when /known/
-      {:status => 'known'}
+      { :status => 'known' }
     else
-      raise ArgumentError, _('Unknown format %{resource_name}: %{state}') % { resource_name: self.name, state: state }
+      raise ArgumentError, _('Unknown format %{resource_name}: %{state}') % { resource_name: name, state: state }
     end
   end
 
@@ -99,19 +101,19 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
   # formats of output for different pkg versions.
   def self.parse_line(line)
     (case line.chomp
-    # FMRI                                                                         IFO
-    # pkg://omnios/SUNWcs@0.5.11,5.11-0.151008:20131204T022241Z                    ---
-    when %r'^pkg://([^/]+)/([^@]+)@(\S+) +(...)$'
-      {:publisher => $1, :name => $2, :ensure => $3}.merge ifo_flag($4)
+     # FMRI                                                                         IFO
+     # pkg://omnios/SUNWcs@0.5.11,5.11-0.151008:20131204T022241Z                    ---
+     when %r{^pkg://([^/]+)/([^@]+)@(\S+) +(...)$}
+       { :publisher => Regexp.last_match(1), :name => Regexp.last_match(2), :ensure => Regexp.last_match(3) }.merge ifo_flag(Regexp.last_match(4))
 
-    # FMRI                                                             STATE      UFOXI
-    # pkg://solaris/SUNWcs@0.5.11,5.11-0.151.0.1:20101105T001108Z      installed  u----
-    when %r'^pkg://([^/]+)/([^@]+)@(\S+) +(\S+) +(.....)$'
-      {:publisher => $1, :name => $2, :ensure => $3}.merge pkg_state($4).merge(ufoxi_flag($5))
+     # FMRI                                                             STATE      UFOXI
+     # pkg://solaris/SUNWcs@0.5.11,5.11-0.151.0.1:20101105T001108Z      installed  u----
+     when %r{^pkg://([^/]+)/([^@]+)@(\S+) +(\S+) +(.....)$}
+       { :publisher => Regexp.last_match(1), :name => Regexp.last_match(2), :ensure => Regexp.last_match(3) }.merge pkg_state(Regexp.last_match(4)).merge(ufoxi_flag(Regexp.last_match(5)))
 
-    else
-      raise ArgumentError, _('Unknown line format %{resource_name}: %{parse_line}') % { resource_name: self.name, parse_line: line }
-    end).merge({:provider => self.name})
+     else
+       raise ArgumentError, _('Unknown line format %{resource_name}: %{parse_line}') % { resource_name: name, parse_line: line }
+     end).merge({ :provider => name })
   end
 
   def hold
@@ -120,7 +122,7 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
 
   def unhold
     r = exec_cmd(command(:pkg), 'unfreeze', @resource[:name])
-    raise Puppet::Error, _("Unable to unfreeze %{package}") % { package: r[:out] } unless [0,4].include? r[:exit]
+    raise Puppet::Error, _("Unable to unfreeze %{package}") % { package: r[:out] } unless [0, 4].include? r[:exit]
   end
 
   def insync?(is)
@@ -152,12 +154,12 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
       # unfortunately it doesn't consider downgrades 'available' (eg. with
       # installed foo@1.0, list -a foo@0.9 would fail).
       name = @resource[:name]
-      potential_matches = pkg(:list, '-Hvfa', "#{name}@#{should}").split("\n").map{|l|self.class.parse_line(l)}
+      potential_matches = pkg(:list, '-Hvfa', "#{name}@#{should}").split("\n").map { |l| self.class.parse_line(l) }
       n = potential_matches.length
       if n > 1
         warning(_("Implicit version %{should} has %{n} possible matches") % { should: should, n: n })
       end
-      potential_matches.each{ |p|
+      potential_matches.each { |p|
         command = is == :absent ? 'install' : 'update'
         options = ['-n']
         options.concat(join_options(@resource[:install_options])) if @resource[:install_options]
@@ -180,7 +182,7 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
         end
       }
       raise Puppet::DevError, _("No version of %{name} matching %{should} is installable, even though the package is currently installed") %
-          { name: name, should: should }
+                              { name: name, should: should }
     end
 
     false
@@ -214,42 +216,43 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
     end
 
     # If not, then return the installed, else nil
-    (lst.find {|p| p[:status] == 'installed' } || {})[:ensure]
+    (lst.find { |p| p[:status] == 'installed' } || {})[:ensure]
   end
 
   # install the package and accept all licenses.
   def install(nofail = false)
     name = @resource[:name]
     should = @resource[:ensure]
-    is = self.query
+    is = query
     if is[:ensure].to_sym == :absent
       command = 'install'
     else
       command = 'update'
     end
     args = ['--accept']
-    if Puppet::Util::Package.versioncmp(Puppet.runtime[:facter].value(:operatingsystemrelease), '11.2') >= 0
+    if Puppet::Util::Package.versioncmp(Puppet.runtime[:facter].value('os.release.full'), '11.2') >= 0
       args.push('--sync-actuators-timeout', '900')
     end
     args.concat(join_options(@resource[:install_options])) if @resource[:install_options]
     unless should.is_a? Symbol
       name += "@#{should}"
     end
-    self.unhold if self.properties[:mark] == :hold
+    unhold if properties[:mark] == :hold
     begin
       tries = 1
       # pkg install exits with code 7 when the image is currently in use by another process and cannot be modified
       r = exec_cmd(command(:pkg), command, *args, name)
-      while r[:exit] == 7 do
+      while r[:exit] == 7
         if tries > 4
           raise Puppet::Error, _("Pkg could not install %{name} after %{tries} tries. Aborting run") % { name: name, tries: tries }
         end
-        sleep 2 ** tries
+
+        sleep 2**tries
         tries += 1
         r = exec_cmd(command(:pkg), command, *args, name)
       end
     ensure
-      self.hold if @resource[:mark] == :hold
+      hold if @resource[:mark] == :hold
     end
     return r if nofail
     raise Puppet::Error, _("Unable to update %{package}") % { package: r[:out] } if r[:exit] != 0
@@ -264,11 +267,11 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
       cmd << '-r'
     end
     cmd << @resource[:name]
-    self.unhold if self.properties[:mark] == :hold
+    unhold if properties[:mark] == :hold
     begin
       pkg cmd
     rescue StandardError, LoadError => e
-      self.hold if self.properties[:mark] == :hold
+      hold if properties[:mark] == :hold
       raise e
     end
   end
@@ -277,19 +280,21 @@ Puppet::Type.type(:package).provide :pkg, :parent => Puppet::Provider::Package d
   def update
     r = install(true)
     # 4 == /No updates available for this image./
-    return if [0,4].include? r[:exit]
+    return if [0, 4].include? r[:exit]
+
     raise Puppet::Error, _("Unable to update %{package}") % { package: r[:out] }
   end
 
   # list a specific package
   def query
     r = exec_cmd(command(:pkg), 'list', '-Hv', @resource[:name])
-    return {:ensure => :absent, :name => @resource[:name]} if r[:exit] != 0
+    return { :ensure => :absent, :name => @resource[:name] } if r[:exit] != 0
+
     self.class.parse_line(r[:out])
   end
 
   def exec_cmd(*cmd)
     output = Puppet::Util::Execution.execute(cmd, :failonfail => false, :combine => true)
-    {:out => output, :exit => output.exitstatus}
+    { :out => output, :exit => output.exitstatus }
   end
 end

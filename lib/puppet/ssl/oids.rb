@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl'
 
 # This module defines OIDs for use within Puppet.
@@ -27,7 +29,6 @@ require_relative '../../puppet/ssl'
 #
 # @api private
 module Puppet::SSL::Oids
-
   # Note: When updating the following OIDs make sure to also update the OID
   # definitions here:
   # https://github.com/puppetlabs/puppetserver/blob/master/src/clj/puppetlabs/puppetserver/certificate_authority.clj#L122-L159
@@ -69,8 +70,10 @@ module Puppet::SSL::Oids
 
     ["1.3.6.1.4.1.34380.1.3", 'ppAuthCertExt', 'Puppet Certificate Authorization Extension'],
 
-    ["1.3.6.1.4.1.34380.1.3.1",  'pp_authorization', 'Certificate Extension Authorization'],
+    ["1.3.6.1.4.1.34380.1.3.1", 'pp_authorization', 'Certificate Extension Authorization'],
+    ["1.3.6.1.4.1.34380.1.3.2", 'pp_auth_auto_renew', 'Auto-Renew Certificate Attribute'],
     ["1.3.6.1.4.1.34380.1.3.13", 'pp_auth_role', 'Puppet Node Role Name for Authorization'],
+    ["1.3.6.1.4.1.34380.1.3.39", 'pp_cli_auth', 'Puppetserver CA CLI Authorization']
   ]
 
   @did_register_puppet_oids = false
@@ -78,8 +81,8 @@ module Puppet::SSL::Oids
   # Register our custom Puppet OIDs with OpenSSL so they can be used as CSR
   # extensions. Without registering these OIDs, OpenSSL will fail when it
   # encounters such an extension in a CSR.
-  def self.register_puppet_oids()
-    if !@did_register_puppet_oids
+  def self.register_puppet_oids
+    unless @did_register_puppet_oids
       PUPPET_OIDS.each do |oid_defn|
         OpenSSL::ASN1::ObjectId.register(*oid_defn)
       end
@@ -103,7 +106,7 @@ module Puppet::SSL::Oids
   #  '1.3.6.1.4.1.34380.1.2.1.2':
   #    shortname: 'myothershortname'
   #    longname: 'Other Long name'
-  def self.parse_custom_oid_file(custom_oid_file, map_key='oid_mapping')
+  def self.parse_custom_oid_file(custom_oid_file, map_key = 'oid_mapping')
     if File.exist?(custom_oid_file) && File.readable?(custom_oid_file)
       mapping = nil
       begin
@@ -122,10 +125,11 @@ module Puppet::SSL::Oids
 
       oid_defns = []
       mapping[map_key].keys.each do |oid|
-        shortname, longname = mapping[map_key][oid].values_at("shortname","longname")
+        shortname, longname = mapping[map_key][oid].values_at("shortname", "longname")
         if shortname.nil? || longname.nil?
           raise Puppet::Error, _("Error loading ssl custom OIDs mapping file from '%{custom_oid_file}': incomplete definition of oid '%{oid}'") % { custom_oid_file: custom_oid_file, oid: oid }
         end
+
         oid_defns << [oid, shortname, longname]
       end
 
@@ -148,7 +152,7 @@ module Puppet::SSL::Oids
   #  '1.3.6.1.4.1.34380.1.2.1.2':
   #    shortname: 'myothershortname'
   #    longname: 'Other Long name'
-  def self.load_custom_oid_file(custom_oid_file, map_key='oid_mapping')
+  def self.load_custom_oid_file(custom_oid_file, map_key = 'oid_mapping')
     oid_defns = parse_custom_oid_file(custom_oid_file, map_key)
     unless oid_defns.nil?
       begin
@@ -183,7 +187,6 @@ module Puppet::SSL::Oids
   def self.subtree_of?(first, second, exclusive = false)
     first_oid = OpenSSL::ASN1::ObjectId.new(first).oid
     second_oid = OpenSSL::ASN1::ObjectId.new(second).oid
-
 
     if exclusive and first_oid == second_oid
       false

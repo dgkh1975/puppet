@@ -1,5 +1,6 @@
-module Puppet::Parser::Files
+# frozen_string_literal: true
 
+module Puppet::Parser::Files
   module_function
 
   # Return a list of manifests as absolute filenames matching the given
@@ -28,9 +29,10 @@ module Puppet::Parser::Files
   #   * modulename/filename selector: a file is found in the file directory
   #     of the named module.
   #
-  # In the second case a nil is returned if there isn't a file found. In the
-  # first case (absolute path), there is no existence check done and so the
-  # path will be returned even if there isn't a file available.
+  # The check for file existence is performed on the node compiling the
+  # manifest. A node running "puppet apply" compiles its own manifest, but
+  # a node running "puppet agent" depends on the configured puppetserver
+  # for compiling. In either case, a nil is returned if no file is found.
   #
   # @param template [String] the file selector
   # @param environment [Puppet::Node::Environment] the environment in which to search
@@ -38,7 +40,7 @@ module Puppet::Parser::Files
   #
   # @api private
   def find_file(file, environment)
-    find_in_module(file, environment) do |mod,module_file|
+    find_in_module(file, environment) do |mod, module_file|
       mod.file(module_file)
     end
   end
@@ -59,7 +61,7 @@ module Puppet::Parser::Files
   #
   # @api private
   def find_template(template, environment)
-    find_in_module(template, environment) do |mod,template_file|
+    find_in_module(template, environment) do |mod, template_file|
       mod.template(template_file)
     end
   end

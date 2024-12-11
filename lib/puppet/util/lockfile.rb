@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # This class provides a simple API for managing a lock file
 # whose contents are an (optional) String.  In addition
 # to querying the basic state (#locked?) of the lock, managing
@@ -23,14 +25,12 @@ class Puppet::Util::Lockfile
 
   # @return [boolean] true if lock is successfully acquired, false otherwise.
   def lock(lock_data = nil)
-    begin
-      Puppet::FileSystem.exclusive_create(@file_path, nil) do |fd|
-        fd.print(lock_data)
-      end
-      true
-    rescue Errno::EEXIST
-      false
+    Puppet::FileSystem.exclusive_create(@file_path, nil) do |fd|
+      fd.print(lock_data)
     end
+    true
+  rescue Errno::EEXIST
+    false
   end
 
   def unlock
@@ -51,7 +51,7 @@ class Puppet::Util::Lockfile
   #  was locked.
   # @return [String] the data object.
   def lock_data
-    return File.read(@file_path) if file_locked?
+    File.read(@file_path) if file_locked?
   end
 
   # Private, internal utility method for encapsulating the logic about

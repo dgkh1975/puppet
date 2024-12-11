@@ -1,3 +1,6 @@
+# frozen_string_literal: true
+
+require 'English'
 unless Puppet::Util::Platform.jruby_fips?
   require 'rubygems/commands/list_command'
 end
@@ -31,11 +34,11 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
   # CommandDefiner in provider.rb will set failonfail, combine, and environment.
 
   has_command(:puppetservercmd, '/opt/puppetlabs/bin/puppetserver') do
-    environment(HOME: ENV['HOME'])
+    environment(HOME: ENV.fetch('HOME', nil))
   end
 
   def self.gemlist(options)
-    command_options = ['gem', 'list']
+    command_options = %w[gem list]
 
     if options[:local]
       command_options << '--local'
@@ -53,7 +56,7 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
     end
 
     if options[:local]
-      list = execute_rubygems_list_command(gem_regex)
+      list = execute_rubygems_list_command(command_options)
     else
       begin
         list = puppetservercmd(command_options)
@@ -67,19 +70,19 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
     # causing gemsplit to output:
     # Warning: Could not match *** LOCAL GEMS ***
     gem_list = list
-                 .lines
-                 .select { |x| x =~ /^(\S+)\s+\((.+)\)/ }
-                 .map { |set| gemsplit(set) }
+               .lines
+               .select { |x| x =~ /^(\S+)\s+\((.+)\)/ }
+               .map { |set| gemsplit(set) }
 
     if options[:justme]
-      return gem_list.shift
+      gem_list.shift
     else
-      return gem_list
+      gem_list
     end
   end
 
   def install(useversion = true)
-    command_options = ['gem', 'install']
+    command_options = %w[gem install]
     command_options += install_options if resource[:install_options]
 
     command_options << '-v' << resource[:ensure] if (!resource[:ensure].is_a? Symbol) && useversion
@@ -101,10 +104,10 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
         command_options << uri.path
       when 'puppet'
         # we don't support puppet:// URLs (yet)
-        raise Puppet::Error.new(_('puppet:// URLs are not supported as gem sources'))
+        raise Puppet::Error, _('puppet:// URLs are not supported as gem sources')
       else
         # interpret it as a gem repository
-        command_options << '--source' << "#{resource[:source]}" << resource[:name]
+        command_options << '--source' << resource[:source].to_s << resource[:name]
       end
     else
       command_options << resource[:name]
@@ -116,7 +119,7 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
   end
 
   def uninstall
-    command_options = ['gem', 'uninstall']
+    command_options = %w[gem uninstall]
     command_options << '--executables' << '--all' << resource[:name]
     command_options += uninstall_options if resource[:uninstall_options]
 
@@ -137,7 +140,7 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
   # for example: json (1.8.3 java)
   # but java platform gems should not be managed by this (or any) provider.
 
-  def self.execute_rubygems_list_command(gem_regex)
+  def self.execute_rubygems_list_command(command_options)
     puppetserver_default_gem_home            = '/opt/puppetlabs/server/data/puppetserver/jruby-gems'
     puppetserver_default_vendored_jruby_gems = '/opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems'
     puppet_default_vendor_gems               = '/opt/puppetlabs/puppet/lib/ruby/vendor_gems'
@@ -156,25 +159,16 @@ Puppet::Type.type(:package).provide :puppetserver_gem, :parent => :gem do
       gem_env['GEM_HOME'] = puppetserver_conf['jruby-puppet'].key?('gem-home') ? puppetserver_conf['jruby-puppet']['gem-home'] : puppetserver_default_gem_home
       gem_env['GEM_PATH'] = puppetserver_conf['jruby-puppet'].key?('gem-path') ? puppetserver_conf['jruby-puppet']['gem-path'].join(':') : puppetserver_default_gem_path
     end
-    gem_env['GEM_SPEC_CACHE'] = "/tmp/#{$$}"
-    Gem.paths = gem_env
+    gem_env['GEM_SPEC_CACHE'] = "/tmp/#{$PROCESS_ID}"
 
-    sio_inn = StringIO.new
-    sio_out = StringIO.new
-    sio_err = StringIO.new
-    stream_ui = Gem::StreamUI.new(sio_inn, sio_out, sio_err, false)
-    gem_list_cmd = Gem::Commands::ListCommand.new
-    gem_list_cmd.options[:domain] = :local
-    gem_list_cmd.options[:args] = [gem_regex] if gem_regex
-    gem_list_cmd.ui = stream_ui
-    gem_list_cmd.execute
+    # Remove the 'gem' from the command_options
+    command_options.shift
+    gem_out = execute_gem_command(Puppet::Type::Package::ProviderPuppet_gem.provider_command, command_options, gem_env)
 
     # There is no method exclude default gems from the local gem list,
     # for example: psych (default: 2.2.2)
     # but default gems should not be managed by this (or any) provider.
-    gem_list = sio_out.string.lines.reject { |gem| gem =~ / \(default\: / }
+    gem_list = gem_out.lines.reject { |gem| gem =~ / \(default: / }
     gem_list.join("\n")
-  ensure
-    Gem.clear_paths
   end
 end

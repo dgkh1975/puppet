@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require_relative '../../../puppet/util/windows'
 require_relative 'windows/package'
@@ -20,8 +22,8 @@ Puppet::Type.type(:package).provide(:windows, :parent => Puppet::Provider::Packa
     `install_options` or `uninstall_options` attributes, respectively.  Puppet
     will automatically quote any option that contains spaces."
 
-  confine    :operatingsystem => :windows
-  defaultfor :operatingsystem => :windows
+  confine    'os.name' => :windows
+  defaultfor 'os.name' => :windows
 
   has_feature :installable
   has_feature :uninstallable
@@ -30,17 +32,16 @@ Puppet::Type.type(:package).provide(:windows, :parent => Puppet::Provider::Packa
   has_feature :versionable
 
   attr_accessor :package
+
   class << self
     attr_accessor :paths
   end
 
   def self.post_resource_eval
     @paths.each do |path|
-      begin
-        Puppet::FileSystem.unlink(path)
-      rescue => detail
-        raise Puppet::Error.new(_("Error when unlinking %{path}: %{detail}") % { path: path ,detail: detail.message}, detail)
-      end
+      Puppet::FileSystem.unlink(path)
+    rescue => detail
+      raise Puppet::Error.new(_("Error when unlinking %{path}: %{detail}") % { path: path, detail: detail.message }, detail)
     end if @paths
   end
 
@@ -55,8 +56,8 @@ Puppet::Type.type(:package).provide(:windows, :parent => Puppet::Provider::Packa
 
   def self.to_hash(pkg)
     {
-      :name     => pkg.name,
-      :ensure   => pkg.version || :installed,
+      :name => pkg.name,
+      :ensure => pkg.version || :installed,
       :provider => :windows
     }
   end

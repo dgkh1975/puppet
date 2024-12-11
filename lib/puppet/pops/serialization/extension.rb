@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Serialization
 module Extension
@@ -48,6 +50,7 @@ module Extension
   class Tabulation
     include NotTabulated
     attr_reader :index
+
     def initialize(index)
       @index = index
     end
@@ -62,6 +65,7 @@ module Extension
     include NotTabulated
     include SequenceStart
     attr_reader :size
+
     def initialize(size)
       @size = size
     end
@@ -77,6 +81,7 @@ module Extension
     include NotTabulated
     include SequenceStart
     attr_reader :size
+
     def initialize(size)
       @size = size
     end
@@ -97,6 +102,7 @@ module Extension
   class PcoreObjectStart
     include SequenceStart
     attr_reader :type_name, :attribute_count
+
     def initialize(type_name, attribute_count)
       @type_name = type_name
       @attribute_count = attribute_count
@@ -119,6 +125,7 @@ module Extension
   class ObjectStart
     include SequenceStart
     attr_reader :attribute_count
+
     def initialize(attribute_count)
       @attribute_count = attribute_count
     end
@@ -140,6 +147,7 @@ module Extension
   # The class that triggers the use of the COMMENT extension. The payload is comment text
   class Comment
     attr_reader :comment
+
     def initialize(comment)
       @comment = comment
     end

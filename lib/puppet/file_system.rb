@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::FileSystem
   require_relative '../puppet/util'
   require_relative 'file_system/path_pattern'
@@ -8,8 +10,8 @@ module Puppet::FileSystem
 
   # create instance of the file system implementation to use for the current platform
   @impl = if Puppet::Util::Platform.windows?
-           require_relative 'file_system/windows'
-           Puppet::FileSystem::Windows
+            require_relative 'file_system/windows'
+            Puppet::FileSystem::Windows
           elsif Puppet::Util::Platform.jruby?
             require_relative 'file_system/jruby'
             Puppet::FileSystem::JRuby
@@ -286,7 +288,7 @@ module Puppet::FileSystem
   # @api public
   #
   def self.unlink(*paths)
-    @impl.unlink(*(paths.map {|p| assert_path(p) }))
+    @impl.unlink(*(paths.map { |p| assert_path(p) }))
   end
 
   # @return [File::Stat] object for the named file.
@@ -397,7 +399,7 @@ module Puppet::FileSystem
   # @api public
   #
   def self.chmod(mode, path)
-    @impl.chmod(mode, path)
+    @impl.chmod(mode, assert_path(path))
   end
 
   # Replace the contents of a file atomically, creating the file if necessary.

@@ -252,6 +252,19 @@ RSpec.describe Puppet::Type.type(:exec) do
     expect(dependencies.collect(&:to_s)).to eq([Puppet::Relationship.new(tmp, execer).to_s])
   end
 
+  it "skips autorequire for deferred commands" do
+    foo = make_absolute('/bin/foo')
+    catalog = Puppet::Resource::Catalog.new
+    tmp = Puppet::Type.type(:file).new(:name => foo)
+    execer = Puppet::Type.type(:exec).new(:name => 'test array', :command => Puppet::Pops::Evaluator::DeferredValue.new(nil))
+
+    catalog.add_resource tmp
+    catalog.add_resource execer
+    dependencies = execer.autorequire(catalog)
+
+    expect(dependencies.collect(&:to_s)).to eq([])
+  end
+
   describe "when handling the path parameter" do
     expect = %w{one two three four}
     { "an array"                                      => expect,
@@ -266,15 +279,7 @@ RSpec.describe Puppet::Type.type(:exec) do
 
     describe "on platforms where path separator is not :" do
       before :each do
-        @old_verbosity = $VERBOSE
-        $VERBOSE = nil
-        @old_separator = File::PATH_SEPARATOR
-        File::PATH_SEPARATOR = 'q'
-      end
-
-      after :each do
-        File::PATH_SEPARATOR = @old_separator
-        $VERBOSE = @old_verbosity
+        stub_const('File::PATH_SEPARATOR', 'q')
       end
 
       it "should use the path separator of the current platform" do
@@ -295,7 +300,7 @@ RSpec.describe Puppet::Type.type(:exec) do
 
       it "accepts the current user" do
         allow(Puppet.features).to receive(:root?).and_return(false)
-        allow(Etc).to receive(:getpwuid).and_return(Struct::Passwd.new('input'))
+        allow(Etc).to receive(:getpwuid).and_return(Etc::Passwd.new('input'))
 
         type = Puppet::Type.type(:exec).new(:name => '/bin/true whatever', :user => 'input')
 

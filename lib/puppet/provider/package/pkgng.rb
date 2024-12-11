@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 
 Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package do
@@ -5,9 +7,9 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
 
   commands :pkg => "/usr/local/sbin/pkg"
 
-  confine :operatingsystem => [:freebsd, :dragonfly]
+  confine 'os.name' => [:freebsd, :dragonfly]
 
-  defaultfor :operatingsystem => [:freebsd, :dragonfly]
+  defaultfor 'os.name' => [:freebsd, :dragonfly]
 
   has_feature :versionable
   has_feature :upgradeable
@@ -22,7 +24,9 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
   end
 
   def self.cached_version_list
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     @version_list ||= get_version_list
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   def self.get_version_list
@@ -36,6 +40,7 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
       if ['!', '?'].include?(compare)
         return nil
       end
+
       latest_version = status.split(' ').last.split(')').first
       return latest_version
     end
@@ -44,22 +49,22 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
 
   def self.parse_pkg_query_line(line)
     name, version, origin = line.chomp.split(' ', 3)
-    latest_version  = get_latest_version(origin) || version
+    latest_version = get_latest_version(origin) || version
 
     {
-      :ensure   => version,
-      :name     => name,
+      :ensure => version,
+      :name => name,
       :provider => self.name,
-      :origin   => origin,
-      :version  => version,
-      :latest   => latest_version
+      :origin => origin,
+      :version => version,
+      :latest => latest_version
     }
   end
 
   def self.instances
     packages = []
     begin
-      info = self.get_query
+      info = get_query
       get_version_list
 
       unless info
@@ -71,16 +76,16 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
         packages << new(hash)
       end
 
-      return packages
+      packages
     rescue Puppet::ExecutionFailure
-      return []
+      []
     end
   end
 
   def self.prefetch(resources)
     packages = instances
     resources.each_key do |name|
-      provider = packages.find{|p| p.name == name or p.origin == name }
+      provider = packages.find { |p| p.name == name or p.origin == name }
       if provider
         resources[name].provider = provider
       end
@@ -91,6 +96,7 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
     # extract repo tag from URN: urn:freebsd:repo:<tag>
     match = /^urn:freebsd:repo:(.+)$/.match(urn)
     raise ArgumentError urn.inspect unless match
+
     match[1]
   end
 
@@ -107,14 +113,14 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
       # just 'curl'), drop the category prefix. pkgng doesn't support version
       # pinning with the origin syntax (pkg install curl-1.2.3 is valid, but
       # pkg install www/curl-1.2.3 is not).
-      if resource[:name] =~ /\//
+      if resource[:name] =~ %r{/}
         installname = resource[:name].split('/')[1] + '-' + resource[:ensure]
       else
         installname = resource[:name] + '-' + resource[:ensure]
       end
     end
 
-    if not source # install using default repo logic
+    if !source # install using default repo logic
       args = ['install', '-qy']
     elsif source.scheme == 'urn' # install from repo named in URN
       tag = repo_tag_from_urn(source.to_s)
@@ -169,5 +175,4 @@ Puppet::Type.type(:package).provide :pkgng, :parent => Puppet::Provider::Package
   def install_options
     join_options(@resource[:install_options])
   end
-
 end

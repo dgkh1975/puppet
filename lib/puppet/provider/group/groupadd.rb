@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/nameservice/objectadd'
 require_relative '../../../puppet/util/libuser'
 
@@ -9,31 +11,43 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
 
   commands :add => "groupadd", :delete => "groupdel", :modify => "groupmod"
 
-  has_feature :system_groups unless %w{HP-UX Solaris}.include? Puppet.runtime[:facter].value(:operatingsystem)
+  has_feature :system_groups unless %w[HP-UX Solaris].include? Puppet.runtime[:facter].value('os.name')
 
   verify :gid, _("GID must be an integer") do |value|
     value.is_a? Integer
   end
 
-  optional_commands :localadd => "lgroupadd", :localdelete => "lgroupdel", :localmodify => "lgroupmod"
+  optional_commands :localadd => "lgroupadd", :localdelete => "lgroupdel", :localmodify => "lgroupmod", :purgemember => "usermod"
 
-  has_feature :manages_local_users_and_groups, :manages_members if Puppet.features.libuser?
+  has_feature :manages_local_users_and_groups if Puppet.features.libuser?
+  has_feature :manages_members if Puppet.features.libuser? ||
+                                  (Puppet.runtime[:facter].value('os.name') == "Fedora" &&
+                                  Puppet.runtime[:facter].value('os.release.major').to_i >= 40)
 
-  options :members, :flag => '-M', :method => :mem
+  # Libuser's modify command 'lgroupmod' requires '-M' flag for member additions.
+  # 'groupmod' command requires the '-aU' flags for it.
+  if Puppet.features.libuser?
+    options :members, :flag => '-M', :method => :mem
+  else
+    options :members, :flag => '-aU', :method => :mem
+  end
 
   def exists?
     return !!localgid if @resource.forcelocal?
+
     super
   end
 
   def gid
     return localgid if @resource.forcelocal?
+
     get(:gid)
   end
 
   def localgid
     group = findgroup(:group_name, resource[:name])
     return group[:gid] if group
+
     false
   end
 
@@ -42,12 +56,12 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
     # because by default duplicates are allowed.  This check is
     # to ensure consistent behaviour of the useradd provider when
     # using both useradd and luseradd
-    if not @resource.allowdupe? and @resource.forcelocal?
-       if @resource.should(:gid) and findgroup(:gid, @resource.should(:gid).to_s)
-           raise(Puppet::Error, _("GID %{resource} already exists, use allowdupe to force group creation") % { resource: @resource.should(:gid).to_s })
-       end
-    elsif @resource.allowdupe? and not @resource.forcelocal?
-       return ["-o"]
+    if !@resource.allowdupe? and @resource.forcelocal?
+      if @resource.should(:gid) and findgroup(:gid, @resource.should(:gid).to_s)
+        raise(Puppet::Error, _("GID %{resource} already exists, use allowdupe to force group creation") % { resource: @resource.should(:gid).to_s })
+      end
+    elsif @resource.allowdupe? and !@resource.forcelocal?
+      return ["-o"]
     end
     []
   end
@@ -58,7 +72,8 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
   end
 
   def addcmd
-    if @resource.forcelocal?
+    # The localadd command (lgroupadd) must only be called when libuser is supported.
+    if Puppet.features.libuser? && @resource.forcelocal?
       cmd = [command(:localadd)]
       @custom_environment = Puppet::Util::Libuser.getenv
     else
@@ -86,7 +101,8 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
   end
 
   def modifycmd(param, value)
-    if @resource.forcelocal? || @resource[:members]
+    # The localmodify command (lgroupmod) must only be called when libuser is supported.
+    if Puppet.features.libuser? && (@resource.forcelocal? || @resource[:members])
       cmd = [command(:localmodify)]
       @custom_environment = Puppet::Util::Libuser.getenv
     else
@@ -109,7 +125,8 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
   end
 
   def deletecmd
-    if @resource.forcelocal?
+    # The localdelete command (lgroupdel) must only be called when libuser is supported.
+    if Puppet.features.libuser? && @resource.forcelocal?
       @custom_environment = Puppet::Util::Libuser.getenv
       [command(:localdelete), @resource[:name]]
     else
@@ -122,12 +139,22 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
   end
 
   def members_to_s(current)
-    return '' if current.nil? || !current.kind_of?(Array)
+    return '' if current.nil? || !current.is_a?(Array)
+
     current.join(',')
   end
 
   def purge_members
-    localmodify('-m', members_to_s(members), @resource.name)
+    # The groupadd provider doesn't have the ability currently to remove members from a group, libuser does.
+    # Use libuser's lgroupmod command to achieve purging members if libuser is supported.
+    # Otherwise use the 'usermod' command.
+    if Puppet.features.libuser?
+      localmodify('-m', members_to_s(members), @resource.name)
+    else
+      members.each do |member|
+        purgemember('-rG', @resource.name, member)
+      end
+    end
   end
 
   private
@@ -138,13 +165,13 @@ Puppet::Type.type(:group).provide :groupadd, :parent => Puppet::Provider::NameSe
 
     unless @groups
       unless Puppet::FileSystem.exist?(group_file)
-        raise Puppet::Error.new("Forcelocal set for group resource '#{resource[:name]}', but #{group_file} does not exist")
+        raise Puppet::Error, "Forcelocal set for group resource '#{resource[:name]}', but #{group_file} does not exist"
       end
 
       @groups = []
       Puppet::FileSystem.each_line(group_file) do |line|
         group = line.chomp.split(':')
-        @groups << Hash[group_keys.zip(group)]
+        @groups << group_keys.zip(group).to_h
       end
     end
 

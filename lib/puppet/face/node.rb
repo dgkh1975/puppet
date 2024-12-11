@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/face'
 Puppet::Indirector::Face.define(:node, '0.0.1') do
   copyright "Puppet Inc.", 2011
@@ -17,7 +19,7 @@ Puppet::Indirector::Face.define(:node, '0.0.1') do
   find = get_action(:find)
   find.summary _("Retrieve a node object.")
   find.arguments _("<host>")
-  #TRANSLATORS the following are specific names and should not be translated `classes`, `environment`, `expiration`, `name`, `parameters`, Puppet::Node
+  # TRANSLATORS the following are specific names and should not be translated `classes`, `environment`, `expiration`, `name`, `parameters`, Puppet::Node
   find.returns _(<<-'EOT')
     A hash containing the node's `classes`, `environment`, `expiration`, `name`,
     `parameters` (its facts, combined with any ENC-set parameters), and `time`.

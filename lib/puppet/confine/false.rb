@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/confine/boolean'
 
 class Puppet::Confine::False < Puppet::Confine
@@ -12,7 +14,7 @@ class Puppet::Confine::False < Puppet::Confine
   end
 
   def pass?(value)
-    ! value
+    !value
   end
 
   def message(value)

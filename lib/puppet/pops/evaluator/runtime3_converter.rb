@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops::Evaluator
 # Converts nested 4x supported values to 3x values. This is required because
 # resources and other objects do not know about the new type system, and does not support
@@ -7,7 +9,7 @@ module Puppet::Pops::Evaluator
 # Users should not create instances of this class. Instead the class methods {Runtime3Converter.convert},
 # {Runtime3Converter.map_args}, or {Runtime3Converter.instance} should be used
 class Runtime3Converter
-  MAX_INTEGER =  Puppet::Pops::MAX_INTEGER
+  MAX_INTEGER = Puppet::Pops::MAX_INTEGER
   MIN_INTEGER = Puppet::Pops::MIN_INTEGER
 
   # Converts 4x supported values to a 3x values. Same as calling Runtime3Converter.instance.map_args(...)
@@ -46,7 +48,7 @@ class Runtime3Converter
   # @return [Array] The converted values
   #
   def map_args(args, scope, undef_value)
-    args.map {|a| convert(a, scope, undef_value) }
+    args.map { |a| convert(a, scope, undef_value) }
   end
 
   # Converts a 4x supported value to a 3x value.
@@ -66,14 +68,16 @@ class Runtime3Converter
 
   def convert_Integer(o, scope, undef_value)
     return o unless o < MIN_INTEGER || o > MAX_INTEGER
+
     range_end = o > MAX_INTEGER ? 'max' : 'min'
-    raise Puppet::Error, "Use of a Ruby Integer outside of Puppet Integer #{range_end} range, got '#{"0x%x" % o}'"
+    raise Puppet::Error, "Use of a Ruby Integer outside of Puppet Integer #{range_end} range, got '#{'0x%x' % o}'"
   end
 
   def convert_BigDecimal(o, scope, undef_value)
     # transform to same value float value if possible without any rounding error
     f = o.to_f
     return f unless f != o
+
     raise Puppet::Error, "Use of a Ruby BigDecimal value outside Puppet Float range, got '#{o}'"
   end
 
@@ -90,13 +94,13 @@ class Runtime3Converter
 
   def convert_Array(o, scope, undef_value)
     ic = @inner_converter
-    o.map {|x| ic.convert(x, scope, undef_value) }
+    o.map { |x| ic.convert(x, scope, undef_value) }
   end
 
   def convert_Hash(o, scope, undef_value)
     result = {}
     ic = @inner_converter
-    o.each {|k,v| result[ic.convert(k, scope, undef_value)] = ic.convert(v, scope, undef_value) }
+    o.each { |k, v| result[ic.convert(k, scope, undef_value)] = ic.convert(v, scope, undef_value) }
     result
   end
 
@@ -106,6 +110,7 @@ class Runtime3Converter
 
   def convert_Symbol(o, scope, undef_value)
     return o unless o == :undef
+
     !@inner ? undef_value : nil
   end
 
@@ -132,23 +137,23 @@ class Runtime3Converter
   def catalog_type_to_split_type_title(catalog_type)
     split_type = catalog_type.is_a?(Puppet::Pops::Types::PTypeType) ? catalog_type.type : catalog_type
     case split_type
-      when Puppet::Pops::Types::PClassType
-        class_name = split_type.class_name
-        ['class', class_name.nil? ? nil : class_name.sub(/^::/, '')]
-      when Puppet::Pops::Types::PResourceType
-        type_name = split_type.type_name
-        title = split_type.title
-        if type_name =~ /^(::)?[Cc]lass$/
-          ['class', title.nil? ? nil : title.sub(/^::/, '')]
-        else
-          # Ensure that title is '' if nil
-          # Resources with absolute name always results in error because tagging does not support leading ::
-          [type_name.nil? ? nil : type_name.sub(/^::/, '').downcase, title.nil? ? '' : title]
-        end
+    when Puppet::Pops::Types::PClassType
+      class_name = split_type.class_name
+      ['class', class_name.nil? ? nil : class_name.sub(/^::/, '')]
+    when Puppet::Pops::Types::PResourceType
+      type_name = split_type.type_name
+      title = split_type.title
+      if type_name =~ /^(::)?[Cc]lass$/
+        ['class', title.nil? ? nil : title.sub(/^::/, '')]
       else
-        #TRANSLATORS 'PClassType' and 'PResourceType' are Puppet types and should not be translated
-        raise ArgumentError, _("Cannot split the type %{class_name}, it represents neither a PClassType, nor a PResourceType.") %
-            { class_name: catalog_type.class }
+        # Ensure that title is '' if nil
+        # Resources with absolute name always results in error because tagging does not support leading ::
+        [type_name.nil? ? nil : type_name.sub(/^::/, '').downcase, title.nil? ? '' : title]
+      end
+    else
+      # TRANSLATORS 'PClassType' and 'PResourceType' are Puppet types and should not be translated
+      raise ArgumentError, _("Cannot split the type %{class_name}, it represents neither a PClassType, nor a PResourceType.") %
+                           { class_name: catalog_type.class }
     end
   end
 
@@ -160,14 +165,13 @@ class Runtime3Converter
     @convert_visitor = Puppet::Pops::Visitor.new(self, 'convert', 2, 2)
   end
 
-  @instance = self.new
+  @instance = new
 end
 
 # A Ruby function written for the 3.x API cannot be expected to handle extended data types. This
 # converter ensures that they are converted to String format
 # @api private
 class Runtime3FunctionArgumentConverter < Runtime3Converter
-
   def convert_Regexp(o, scope, undef_value)
     # Puppet 3x cannot handle parameter values that are regular expressions. Turn into regexp string in
     # source form
@@ -202,20 +206,20 @@ class Runtime3FunctionArgumentConverter < Runtime3Converter
   # Converts result back to 4.x by replacing :undef with nil in Array and Hash objects
   #
   def self.convert_return(val3x)
-    if val3x == :undef
+    case val3x
+    when :undef
       nil
-    elsif val3x.is_a?(Array)
-      val3x.map {|v| convert_return(v) }
-    elsif val3x.is_a?(Hash)
+    when Array
+      val3x.map { |v| convert_return(v) }
+    when Hash
       hsh = {}
-      val3x.each_pair {|k,v| hsh[convert_return(k)] = convert_return(v)}
+      val3x.each_pair { |k, v| hsh[convert_return(k)] = convert_return(v) }
       hsh
     else
       val3x
     end
   end
 
-  @instance = self.new
+  @instance = new
 end
-
 end

@@ -271,6 +271,23 @@ describe Puppet::Resource::Catalog::Compiler do
         expect(catalog).to have_resource('Stage[main]')
       end
 
+      # versioned environment directories can cause this
+      it 'allows environments with the same name but mismatched modulepaths' do
+        envs = Puppet.lookup(:environments)
+        env_server = envs.get!(:env_server)
+        v1_env = env_server.override_with({ modulepath: ['/code-v1/env-v1/'] })
+        v2_env = env_server.override_with({ modulepath: ['/code-v2/env-v2/'] })
+
+        @request.options[:check_environment] = "true"
+        @request.environment = v1_env
+        node.environment = v2_env
+
+        catalog = compiler.find(@request)
+
+        expect(catalog.environment).to eq('env_server')
+        expect(catalog).to have_resource('Stage[main]')
+      end
+
       it 'returns an empty catalog if asked to check the environment and they are mismatched' do
         @request.options[:check_environment] = "true"
         catalog = compiler.find(@request)
@@ -321,7 +338,7 @@ describe Puppet::Resource::Catalog::Compiler do
         expect(facts.timestamp).to eq(time)
       end
 
-      it "accepts PSON facts from older agents" do
+      it "accepts PSON facts from older agents", :if => Puppet.features.pson? do
         request = a_legacy_request_that_contains(facts)
 
         facts = compiler.extract_facts_from_request(request)
@@ -432,9 +449,9 @@ describe Puppet::Resource::Catalog::Compiler do
     before do
       allow(Puppet).to receive(:version).and_return(1)
       set_facts({
-        'fqdn'       => "my.server.com",
-        'ipaddress'  => "my.ip.address",
-        'ipaddress6' => nil
+        'networking.fqdn' => "my.server.com",
+        'networking.ip'   => "my.ip.address",
+        'networking.ip6'  => nil
         })
       @request = Puppet::Indirector::Request.new(:catalog, :find, node_name, nil)
       allow(compiler).to receive(:compile)
@@ -467,16 +484,16 @@ describe Puppet::Resource::Catalog::Compiler do
     before do |example|
       allow(Puppet).to receive(:version).and_return(1)
       set_facts({
-        'fqdn'       => "my.server.com",
-        'ipaddress'  => nil,
+        'networking.fqdn' => "my.server.com",
+        'networking.ip'   => nil,
       })
       if example.metadata[:nil_ipv6]
         set_facts({
-          'ipaddress6' => nil
+          'networking.ip6' => nil
         })
       else
         set_facts({
-          'ipaddress6' => "my.ipv6.address"
+          'networking.ip6' => "my.ipv6.address"
         })
       end
       @request = Puppet::Indirector::Request.new(:catalog, :find, node_name, nil)
@@ -514,9 +531,10 @@ describe Puppet::Resource::Catalog::Compiler do
 
     it "should not add 'pe_serverversion' when FOSS" do
       allow(Puppet::Node.indirection).to receive(:find).with(node_name, anything).and_return(node)
-      catalog = compiler.find(request)
-
-      expect(catalog.resource('notify', 'PE Version: 2019.2.0')).to be_nil
+      expect {
+        catalog = compiler.find(request)
+        catalog.resource('notify', 'PE Version: 2019.2.0') 
+      }.to raise_error(/Evaluation Error: Unknown variable: 'pe_serverversion'./)
     end
 
     it "should add 'pe_serverversion' when PE" do

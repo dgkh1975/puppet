@@ -1,6 +1,8 @@
 require 'spec_helper'
 require 'puppet/indirector/facts/facter'
 
+class Puppet::Node::Facts::Facter::MyCollection < Hash; end
+
 describe Puppet::Node::Facts::Facter do
   FS = Puppet::FileSystem
 
@@ -63,7 +65,7 @@ describe Puppet::Node::Facts::Facter do
     end
 
     it "should return the Facter facts as the values in the Facts instance" do
-      expect(Facter).to receive(:to_hash).and_return("one" => "two")
+      expect(Facter).to receive(:resolve).and_return("one" => "two")
       facts = @facter.find(@request)
       expect(facts.values["one"]).to eq("two")
     end
@@ -82,6 +84,29 @@ describe Puppet::Node::Facts::Facter do
       expect(facts).to receive(:sanitize)
 
       @facter.find(@request)
+    end
+
+    it "can exclude legacy facts" do
+      Puppet[:include_legacy_facts] = false
+
+      expect(Puppet.runtime[:facter]).to receive(:resolve).with('')
+        .and_return({'kernelversion' => '1.2.3'})
+
+      values = @facter.find(@request).values
+      expect(values).to be_an_instance_of(Hash)
+      expect(values).to include({'kernelversion' => '1.2.3'})
+    end
+
+    it "can exclude legacy facts using buggy facter implementations that return a Hash subclass" do
+      Puppet[:include_legacy_facts] = false
+
+      collection = Puppet::Node::Facts::Facter::MyCollection["kernelversion" => '1.2.3']
+      expect(Puppet.runtime[:facter]).to receive(:resolve).with('')
+        .and_return(collection)
+
+      values = @facter.find(@request).values
+      expect(values).to be_an_instance_of(Hash)
+      expect(values).to include({'kernelversion' => '1.2.3'})
     end
   end
 

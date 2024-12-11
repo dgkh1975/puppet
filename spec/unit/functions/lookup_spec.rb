@@ -3,7 +3,6 @@ require 'puppet_spec/compiler'
 require 'puppet_spec/files'
 require 'puppet/pops'
 require 'deep_merge/core'
-require 'hiera'
 
 describe "The lookup function" do
   include PuppetSpec::Compiler
@@ -287,7 +286,6 @@ describe "The lookup function" do
             YAML
 
           it 'fails and reports error' do
-            Puppet[:strict] = :error
             expect { lookup('a') }.to raise_error(
               "'default_hierarchy' is only allowed in the module layer (file: #{code_dir}/hiera.yaml, line: 5)")
           end
@@ -303,8 +301,7 @@ describe "The lookup function" do
             YAML
 
           it 'fails and reports errors when strict == error' do
-            Puppet[:strict] = :error
-            expect { lookup('a') }.to raise_error("Undefined variable '::nonesuch' (file: #{code_dir}/hiera.yaml, line: 4)")
+            expect { lookup('a') }.to raise_error("Function lookup() did not find a value for the name 'a'")
           end
         end
 
@@ -317,7 +314,6 @@ describe "The lookup function" do
             YAML
 
           it 'fails and reports errors when strict == error' do
-            Puppet[:strict] = :error
             expect { lookup('a') }.to raise_error("Interpolation using method syntax is not allowed in this context (file: #{code_dir}/hiera.yaml)")
           end
         end
@@ -574,9 +570,11 @@ describe "The lookup function" do
         it 'reloads the configuration if interpolated values change' do
           Puppet[:log_level] = 'debug'
           collect_notices("notice('success')") do |scope|
+            scope['var'] = {}
             expect(lookup_func.call(scope, 'y')).to eql('value y from x')
-            scope['var'] = { 'sub' => '_d' }
-            expect(lookup_func.call(scope, 'y')).to eql('value y from x_d')
+            nested_scope = scope.compiler.newscope(scope)
+            nested_scope['var'] = { 'sub' => '_d' }
+            expect(lookup_func.call(nested_scope, 'y')).to eql('value y from x_d')
             nested_scope = scope.compiler.newscope(scope)
             nested_scope['var'] = { 'sub' => '_e' }
             expect(lookup_func.call(nested_scope, 'y')).to eql('value y from x_e')
@@ -603,15 +601,10 @@ describe "The lookup function" do
       context 'using global variable reference' do
         let(:data_path) { 'x%{::var.sub}.yaml' }
 
-        it 'reloads the configuration if interpolated that was previously undefined, gets defined' do
-          Puppet[:log_level] = 'debug'
+        it 'does not raise an error when reloads the configuration if interpolating undefined values' do
           collect_notices("notice('success')") do |scope|
-            expect(lookup_func.call(scope, 'y')).to eql('value y from x')
-            scope['var'] = { 'sub' => '_d' }
-            expect(lookup_func.call(scope, 'y')).to eql('value y from x_d')
+            expect { lookup_func.call(scope, 'y') }.to_not raise_error
           end
-          expect(notices).to eql(['success'])
-          expect(debugs.any? { |m| m =~ /Hiera configuration recreated due to change of scope variables used in interpolation expressions/ }).to be_truthy
         end
 
         it 'does not reload the configuration if value changes locally' do
@@ -727,10 +720,13 @@ describe "The lookup function" do
         it 'interpolates both key and value"' do
           Puppet[:log_level] = 'debug'
           collect_notices("notice('success')") do |scope|
+            scope['key'] = ''
+            scope['value'] = ''
             expect(lookup_func.call(scope, 'a')).to eql({'' => 'the '})
-            scope['key'] = 'a_key'
-            scope['value'] = 'interpolated value'
-            expect(lookup_func.call(scope, 'a')).to eql({'a_key' => 'the interpolated value'})
+            nested_scope = scope.compiler.newscope(scope)
+            nested_scope['key'] = 'a_key'
+            nested_scope['value'] = 'interpolated value'
+            expect(lookup_func.call(nested_scope, 'a')).to eql({'a_key' => 'the interpolated value'})
           end
           expect(notices).to eql(['success'])
         end
@@ -784,15 +780,26 @@ describe "The lookup function" do
       context 'that contains a legal yaml that is not a hash' do
         let(:common_yaml) { "- A list\n- of things" }
 
-        it 'fails with a "did not find"' do
+        it 'fails with a "invalid yaml hash"' do
           expect { lookup('a') }.to raise_error do |e|
-            expect(e.message).to match(/did not find a value for the name 'a'/)
+            expect(e.message).to match(/spec\/data\/common.yaml: file does not contain a valid yaml hash/)
           end
         end
 
-        it 'logs a warning that the file does not contain a hash' do
-          expect { lookup('a') }.to raise_error(Puppet::DataBinding::LookupError)
-          expect(warnings).to include(/spec\/data\/common.yaml: file does not contain a valid yaml hash/)
+        context 'when strict mode is off' do
+          before :each do
+            Puppet[:strict] = :warning
+          end
+          it 'fails with a "did not find"' do
+            expect { lookup('a') }.to raise_error do |e|
+              expect(e.message).to match(/did not find a value for the name 'a'/)
+            end
+          end
+
+          it 'logs a warning that the file does not contain a hash' do
+            expect { lookup('a') }.to raise_error(Puppet::DataBinding::LookupError)
+            expect(warnings).to include(/spec\/data\/common.yaml: file does not contain a valid yaml hash/)
+          end
         end
       end
 
@@ -1652,7 +1659,7 @@ describe "The lookup function" do
         end
       end
 
-      context 'version 3' do
+      context 'version 3', :if => Puppet.features.hiera? do
         it 'finds data in in global layer and reports deprecation warnings for hiera.yaml' do
           expect(lookup('a')).to eql('value a (from global)')
           expect(warnings).to include(/Use of 'hiera.yaml' version 3 is deprecated. It should be converted to version 5/)
@@ -1697,12 +1704,32 @@ describe "The lookup function" do
           expect(lookup('datasources')).to eql(['common', 'example.com'])
         end
 
+        it 'backend specific options are propagated to custom backend' do
+          expect(lookup('other_option')).to eql('value of other_option')
+        end
+
+        it 'dotted keys are passed down to custom backend' do
+          expect(lookup('dotted.key')).to eql('custom backend received request for dotted.key value')
+        end
+        
         it 'delegates configured hocon backend to hocon_data function' do
           expect(explain('xs')).to match(/Hierarchy entry "hocon"\n.*\n.*\n.*"common"\n\s*Found key: "xs"/m)
         end
 
         it 'can dig down into subkeys provided by hocon_data function' do
           expect(lookup('xs.subkey')).to eql('value xs.subkey (from global hocon)')
+        end
+
+        it 'multiple hiera3_backend declarations can be used and are merged into the generated config' do
+          expect(lookup(['datasources', 'other_option'])).to eql([['common', 'example.com'], 'value of other_option'])
+          expect(Hiera::Config.instance_variable_get(:@config)).to eql(
+            {
+              :backends => ['custom', 'other'],
+              :hierarchy => ['common', '%{domain}'],
+              :custom => { :datadir => "#{code_dir}/hieradata" },
+              :other => { :other_option => 'value of other_option', :datadir=>"#{code_dir}/hieradata" },
+              :logger => 'puppet'
+            })
         end
 
         context 'with a module data provider' do
@@ -2041,18 +2068,6 @@ describe "The lookup function" do
               paths:
                 - common.conf
                 - "%{domain}.conf"
-            - name: Custom
-              hiera3_backend: custom
-              paths:
-                - common.custom
-                - "%{domain}.custom"
-            - name: Other
-              hiera3_backend: other
-              options:
-                other_option: value of other_option
-              paths:
-                - common.other
-                - "%{domain}.other"
               YAML
         end
 
@@ -2067,7 +2082,6 @@ describe "The lookup function" do
           expect(explanation).to include('Hierarchy entry "Yaml"')
           expect(explanation).to include('Hierarchy entry "Json"')
           expect(explanation).to include('Hierarchy entry "Hocon"')
-          expect(explanation).to include('Hierarchy entry "Custom"')
           expect(explanation).to include('Found key: "a" value: "value a (from global)"')
         end
 
@@ -2079,32 +2093,7 @@ describe "The lookup function" do
                   'caa' => 'value hash_c.hash_ca.caa (from environment)',
                   'cab' => 'value hash_c.hash_ca.cab (from global)',
                   'cac' => 'value hash_c.hash_ca.cac (from global json)',
-                  'cad' => 'value hash_c.hash_ca.cad (from global custom)'
                 }
-            })
-        end
-
-        it 'backend data sources are propagated to custom backend' do
-          expect(lookup('datasources')).to eql(['common', 'example.com'])
-        end
-
-        it 'backend specific options are propagated to custom backend' do
-          expect(lookup('other_option')).to eql('value of other_option')
-        end
-
-        it 'dotted keys are passed down to custom backend' do
-          expect(lookup('dotted.key')).to eql('custom backend received request for dotted.key value')
-        end
-
-        it 'multiple hiera3_backend declarations can be used and are merged into the generated config' do
-          expect(lookup(['datasources', 'other_option'])).to eql([['common', 'example.com'], 'value of other_option'])
-          expect(Hiera::Config.instance_variable_get(:@config)).to eql(
-            {
-              :backends => ['custom', 'other'],
-              :hierarchy => ['common', '%{domain}'],
-              :custom => { :datadir => "#{code_dir}/hieradata" },
-              :other => { :other_option => 'value of other_option', :datadir=>"#{code_dir}/hieradata" },
-              :logger => 'puppet'
             })
         end
 
@@ -2156,7 +2145,7 @@ describe "The lookup function" do
             end
           end
 
-          context 'and eyaml_lookup_key function' do
+          context 'and eyaml_lookup_key function', :if => Puppet.features.hiera_eyaml? do
             let(:hiera_yaml) { <<-YAML.unindent }
               version: 5
               hierarchy:
@@ -2171,7 +2160,7 @@ describe "The lookup function" do
         end
       end
 
-      context 'with a hiera3_backend that has no paths' do
+      context 'with a hiera3_backend that has no paths', :if => Puppet.features.hiera? do
         let(:hiera_yaml) do
           <<-YAML.unindent
           ---
@@ -2215,7 +2204,7 @@ describe "The lookup function" do
           expect { lookup('mod_a::b') }.to raise_error(Puppet::DataBinding::LookupError, /did not find a value for the name 'mod_a::b'/)
         end
 
-        context 'with a Hiera v3 configuration' do
+        context 'with a Hiera v3 configuration', :if => Puppet.features.hiera?  do
           let(:mod_a_files) do
             {
               'mod_a' => {
@@ -2468,15 +2457,16 @@ describe "The lookup function" do
           expect(lookup('mod_a::interpolate_scope')).to eql('-- scope scalar value --')
         end
 
-        it 'interpolates not found in scope as empty string' do
-          expect(lookup('mod_a::interpolate_scope_not_found')).to eql('--  --')
+        it 'raises an error when trying to interpolate not found in scope' do
+          expect { lookup('mod_a::interpolate_scope_not_found') 
+          }.to raise_error(/Evaluation Error: Error while evaluating a Function Call, Undefined variable 'scope_nope';/)
         end
 
         it 'interpolates dotted key from scope' do
           expect(lookup('mod_a::interpolate_scope_dig')).to eql('-- scope hash a --')
         end
 
-        it 'treates interpolated dotted key but not found in scope as empty string' do
+        it 'treats interpolated dotted key but not found in scope as empty string' do
           expect(lookup('mod_a::interpolate_scope_dig_not_found')).to eql('--  --')
         end
 
@@ -2992,7 +2982,7 @@ describe "The lookup function" do
       end
     end
 
-    context 'and an eyaml lookup_key function' do
+    context 'and an eyaml lookup_key function', :if => Puppet.features.hiera_eyaml? do
       let(:private_key_name) { 'private_key.pkcs7.pem' }
       let(:public_key_name) { 'public_key.pkcs7.pem' }
 
@@ -3294,7 +3284,7 @@ describe "The lookup function" do
         expect(lookup('array_a')).to eql(['array_a[0]', 'array_a[1]'])
       end
 
-      context 'declared in global scope as a Hiera v3 backend' do
+      context 'declared in global scope as a Hiera v3 backend', :if => Puppet.features.hiera? do
         let(:environment_files) { {} }
         let(:data_file_content) { <<-YAML.unindent }
           a: >

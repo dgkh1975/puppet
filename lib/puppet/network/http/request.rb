@@ -1,4 +1,12 @@
-Puppet::Network::HTTP::Request = Struct.new(:headers, :params, :method, :path, :routing_path, :client_cert, :body) do
+# frozen_string_literal: true
+
+# This class is effectively public API, because a Request object is passed as a
+# parameter to the current Handler subclass. Puppetserver implements its own
+# Handler
+# https://github.com/puppetlabs/puppetserver/blob/8.3.0/src/ruby/puppetserver-lib/puppet/server/network/http/handler.rb#L9
+# and the Request object is passed to its Handler#body method
+# https://github.com/puppetlabs/puppetserver/blob/8.3.0/src/ruby/puppetserver-lib/puppet/server/network/http/handler.rb#L36
+Puppet::Network::HTTP::Request = Struct.new(:headers, :params, :method, :path, :routing_path, :client_cert, :body) do # rubocop:disable Lint/StructNewOverride
   def self.from_hash(hash)
     symbol_members = members.collect(&:intern)
     unknown = hash.keys - symbol_members
@@ -22,20 +30,22 @@ Puppet::Network::HTTP::Request = Struct.new(:headers, :params, :method, :path, :
   def formatter
     header = headers['content-type']
     if header
-      header.gsub!(/\s*;.*$/,'') # strip any charset
+      header.gsub!(/\s*;.*$/, '') # strip any charset
       format = Puppet::Network::FormatHandler.mime(header)
 
       return format if valid_network_format?(format)
 
-      #TRANSLATORS "mime-type" is a keyword and should not be translated
+      # TRANSLATORS "mime-type" is a keyword and should not be translated
       raise Puppet::Network::HTTP::Error::HTTPUnsupportedMediaTypeError.new(
-              _("Client sent a mime-type (%{header}) that doesn't correspond to a format we support") % { header: headers['content-type'] },
-              Puppet::Network::HTTP::Issues::UNSUPPORTED_MEDIA_TYPE)
+        _("Client sent a mime-type (%{header}) that doesn't correspond to a format we support") % { header: headers['content-type'] },
+        Puppet::Network::HTTP::Issues::UNSUPPORTED_MEDIA_TYPE
+      )
     end
 
     raise Puppet::Network::HTTP::Error::HTTPBadRequestError.new(
-            _("No Content-Type header was received, it isn't possible to unserialize the request"),
-            Puppet::Network::HTTP::Issues::MISSING_HEADER_FIELD)
+      _("No Content-Type header was received, it isn't possible to unserialize the request"),
+      Puppet::Network::HTTP::Issues::MISSING_HEADER_FIELD
+    )
   end
 
   def response_formatters_for(supported_formats, default_accepted_formats = nil)
@@ -47,7 +57,8 @@ Puppet::Network::HTTP::Request = Struct.new(:headers, :params, :method, :path, :
 
     formats = Puppet::Network::FormatHandler.most_suitable_formats_for(
       accepted_formats.split(/\s*,\s*/),
-      supported_formats)
+      supported_formats
+    )
 
     formats.find_all do |format|
       # we are only passed supported_formats that are suitable
@@ -59,13 +70,14 @@ Puppet::Network::HTTP::Request = Struct.new(:headers, :params, :method, :path, :
 
     raise Puppet::Network::HTTP::Error::HTTPNotAcceptableError.new(
       _("No supported formats are acceptable (Accept: %{accepted_formats})") % { accepted_formats: accepted_formats },
-      Puppet::Network::HTTP::Issues::UNSUPPORTED_FORMAT)
+      Puppet::Network::HTTP::Issues::UNSUPPORTED_FORMAT
+    )
   end
 
   private
 
   def valid_network_format?(format)
     # YAML in network requests is not supported. See http://links.puppet.com/deprecate_yaml_on_network
-    format != nil && format.name != :yaml && format.name != :b64_zlib_yaml
+    !format.nil? && format.name != :yaml && format.name != :b64_zlib_yaml
   end
 end

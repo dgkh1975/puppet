@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Loader
 # The PuppetResourceTypeImplInstantiator instantiates a Puppet::Pops::ResourceTypeImpl object.
@@ -38,10 +40,10 @@ class PuppetResourceTypeImplInstantiator
       if s.is_a?(Model::CallMethodExpression)
         functor_expr = s.functor_expr
         functor_expr.is_a?(Model::NamedAccessExpression) &&
-          functor_expr.left_expr.is_a?(Model::QualifiedReference) &&
-          functor_expr.left_expr.cased_value == rname &&
-          functor_expr.right_expr.is_a?(Model::QualifiedName) &&
-          functor_expr.right_expr.value == 'new'
+        functor_expr.left_expr.is_a?(Model::QualifiedReference) &&
+        functor_expr.left_expr.cased_value == rname &&
+        functor_expr.right_expr.is_a?(Model::QualifiedName) &&
+        functor_expr.right_expr.value == 'new'
       else
         false
       end
@@ -73,7 +75,6 @@ class PuppetResourceTypeImplInstantiator
     Adapters::LoaderAdapter.adapt(resource_type_impl).loader_name = loader.loader_name
     resource_type_impl
   end
-
 end
 end
 end

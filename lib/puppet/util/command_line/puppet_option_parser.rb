@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/command_line/trollop'
 
 module Puppet
@@ -23,7 +25,6 @@ module Puppet
           @parser = Trollop::Parser.new do
             banner usage_msg
           end
-
         end
 
         # This parameter, if set, will tell the underlying option parser not to throw an
@@ -39,36 +40,37 @@ module Puppet
 
         def on(*args, &block)
           # The 2nd element is an optional "short" representation.
-          if args.length == 3
+          case args.length
+          when 3
             long, desc, type = args
-          elsif args.length == 4
+          when 4
             long, short, desc, type = args
           else
             raise ArgumentError, _("this method only takes 3 or 4 arguments. Given: %{args}") % { args: args.inspect }
           end
 
           options = {
-              :long => long,
-              :short => short,
-              :required => false,
-              :callback => pass_only_last_value_on_to(block),
-              :multi => true,
+            :long => long,
+            :short => short,
+            :required => false,
+            :callback => pass_only_last_value_on_to(block),
+            :multi => true,
           }
 
           case type
-            when :REQUIRED
-              options[:type] = :string
-            when :NONE
-              options[:type] = :flag
-            else
-              raise PuppetOptionError.new(_("Unsupported type: '%{type}'") % { type: type })
+          when :REQUIRED
+            options[:type] = :string
+          when :NONE
+            options[:type] = :flag
+          else
+            raise PuppetOptionError, _("Unsupported type: '%{type}'") % { type: type }
           end
 
           @parser.opt long.sub("^--", "").intern, desc, options
         end
 
         def parse(*args)
-          args = args[0] if args.size == 1 and Array === args[0]
+          args = args[0] if args.size == 1 and args[0].is_a?(Array)
           args_copy = args.dup
           begin
             @parser.parse args_copy
@@ -78,7 +80,7 @@ module Puppet
         end
 
         def pass_only_last_value_on_to(block)
-          lambda { |values| block.call(values.is_a?(Array) ? values.last : values) }
+          ->(values) { block.call(values.is_a?(Array) ? values.last : values) }
         end
         private :pass_only_last_value_on_to
       end

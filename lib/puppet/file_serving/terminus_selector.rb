@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/file_serving'
 
 # This module is used to pick the appropriate terminus
@@ -16,7 +18,7 @@ module Puppet::FileServing::TerminusSelector
       else
         Puppet[:default_file_terminus]
       end
-    when "http","https"
+    when "http", "https"
       :http
     when nil
       if Puppet::Util.absolute_path?(request.key)

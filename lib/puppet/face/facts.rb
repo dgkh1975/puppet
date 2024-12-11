@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/face'
 require_relative '../../puppet/node/facts'
 
@@ -58,7 +60,7 @@ Puppet::Indirector::Face.define(:facts, '0.0.1') do
 
     render_as :json
 
-    when_invoked do |options|
+    when_invoked do |_options|
       # Use `agent` sections  settings for certificates, Puppet Server URL,
       # etc. instead of `user` section settings.
       Puppet.settings.preferred_run_mode = :agent
@@ -75,8 +77,9 @@ Puppet::Indirector::Face.define(:facts, '0.0.1') do
       puppet = session.route_to(:puppet)
 
       Puppet.notice(_("Uploading facts for '%{node}' to '%{server}'") % {
-                    node: Puppet[:node_name_value],
-                    server: puppet.url.hostname})
+        node: Puppet[:node_name_value],
+        server: puppet.url.hostname
+      })
 
       puppet.put_facts(Puppet[:node_name_value], facts: facts, environment: Puppet.lookup(:current_environment).name.to_s)
       nil
@@ -164,11 +167,18 @@ Puppet::Indirector::Face.define(:facts, '0.0.1') do
 
       case result
       when Array, Hash
-        Puppet::Util::Json.dump(result, :pretty => true)
+        # JSON < 2.8.0 would pretty print empty arrays and hashes with newlines
+        # Maintain that behavior for our users for now
+        if result.is_a?(Array) && result.empty?
+          "[\n\n]"
+        elsif result.is_a?(Hash) && result.empty?
+          "{\n}"
+        else
+          Puppet::Util::Json.dump(result, :pretty => true)
+        end
       else # one of VALID_TYPES above
         result
       end
     end
   end
 end
-

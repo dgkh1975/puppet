@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl/base'
 require_relative '../../puppet/ssl/certificate_signer'
 
@@ -35,7 +37,9 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
   end
 
   def extension_factory
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     @ef ||= OpenSSL::X509::ExtensionFactory.new
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   # Create a certificate request with our system settings.
@@ -68,10 +72,7 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
     csr.public_key = if key.is_a?(OpenSSL::PKey::EC)
                        # EC#public_key doesn't follow the PKey API,
                        # see https://github.com/ruby/openssl/issues/29
-                       point = key.public_key
-                       pubkey = OpenSSL::PKey::EC.new(point.group)
-                       pubkey.public_key = point
-                       pubkey
+                       key
                      else
                        key.public_key
                      end
@@ -141,8 +142,8 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
 
     # Prefer the standard extReq, but accept the Microsoft specific version as
     # a fallback, if the standard version isn't found.
-    attribute   = @content.attributes.find {|x| x.oid == "extReq" }
-    attribute ||= @content.attributes.find {|x| x.oid == "msExtReq" }
+    attribute   = @content.attributes.find { |x| x.oid == "extReq" }
+    attribute ||= @content.attributes.find { |x| x.oid == "msExtReq" }
     return [] unless attribute
 
     extensions = unpack_extension_request(attribute)
@@ -160,9 +161,9 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
       # fixed component in the sequence.
       case ext_values.length
       when 2
-        {"oid" => ext_values[0].value, "value" => value}
+        { "oid" => ext_values[0].value, "value" => value }
       when 3
-        {"oid" => ext_values[0].value, "value" => value, "critical" => ext_values[1].value}
+        { "oid" => ext_values[0].value, "value" => value, "critical" => ext_values[1].value }
       else
         raise Puppet::Error, _("In %{attr}, expected extension record %{index} to have two or three items, but found %{count}") % { attr: attribute.oid, index: index, count: ext_values.length }
       end
@@ -170,12 +171,12 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
   end
 
   def subject_alt_names
-    @subject_alt_names ||= request_extensions.
-      select {|x| x["oid"] == "subjectAltName" }.
-      map {|x| x["value"].split(/\s*,\s*/) }.
-      flatten.
-      sort.
-      uniq
+    @subject_alt_names ||= request_extensions
+                           .select { |x| x["oid"] == "subjectAltName" }
+                           .map { |x| x["value"].split(/\s*,\s*/) }
+                           .flatten
+                           .sort
+                           .uniq
   end
 
   # Return all user specified attributes attached to this CSR as a hash. IF an
@@ -195,7 +196,7 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
     end
 
     x509_attributes.map do |attr|
-      {"oid" => attr.oid, "value" => attr.value.value.first.value}
+      { "oid" => attr.oid, "value" => attr.value.value.first.value }
     end
   end
 
@@ -208,29 +209,27 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
   # we need to prevent that field from being written to directly.
   PRIVATE_CSR_ATTRIBUTES = [
     'extReq',   '1.2.840.113549.1.9.14',
-    'msExtReq', '1.3.6.1.4.1.311.2.1.14',
+    'msExtReq', '1.3.6.1.4.1.311.2.1.14'
   ]
 
   def add_csr_attributes(csr, csr_attributes)
     csr_attributes.each do |oid, value|
-      begin
-        if PRIVATE_CSR_ATTRIBUTES.include? oid
-          raise ArgumentError, _("Cannot specify CSR attribute %{oid}: conflicts with internally used CSR attribute") % { oid: oid }
-        end
-
-        encoded = OpenSSL::ASN1::PrintableString.new(value.to_s)
-
-        attr_set = OpenSSL::ASN1::Set.new([encoded])
-        csr.add_attribute(OpenSSL::X509::Attribute.new(oid, attr_set))
-        Puppet.debug("Added csr attribute: #{oid} => #{attr_set.inspect}")
-      rescue OpenSSL::X509::AttributeError => e
-        raise Puppet::Error, _("Cannot create CSR with attribute %{oid}: %{message}") % { oid: oid, message: e.message }, e.backtrace
+      if PRIVATE_CSR_ATTRIBUTES.include? oid
+        raise ArgumentError, _("Cannot specify CSR attribute %{oid}: conflicts with internally used CSR attribute") % { oid: oid }
       end
+
+      encoded = OpenSSL::ASN1::PrintableString.new(value.to_s)
+
+      attr_set = OpenSSL::ASN1::Set.new([encoded])
+      csr.add_attribute(OpenSSL::X509::Attribute.new(oid, attr_set))
+      Puppet.debug("Added csr attribute: #{oid} => #{attr_set.inspect}")
+    rescue OpenSSL::X509::AttributeError => e
+      raise Puppet::Error, _("Cannot create CSR with attribute %{oid}: %{message}") % { oid: oid, message: e.message }, e.backtrace
     end
   end
 
   PRIVATE_EXTENSIONS = [
-    'subjectAltName', '2.5.29.17',
+    'subjectAltName', '2.5.29.17'
   ]
 
   # @api private
@@ -239,16 +238,14 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
 
     if options[:extension_requests]
       options[:extension_requests].each_pair do |oid, value|
-        begin
-          if PRIVATE_EXTENSIONS.include? oid
-            raise Puppet::Error, _("Cannot specify CSR extension request %{oid}: conflicts with internally used extension request") % { oid: oid }
-          end
-
-          ext = OpenSSL::X509::Extension.new(oid, OpenSSL::ASN1::UTF8String.new(value.to_s).to_der, false)
-          extensions << ext
-        rescue OpenSSL::X509::ExtensionError => e
-          raise Puppet::Error, _("Cannot create CSR with extension request %{oid}: %{message}") % { oid: oid, message: e.message }, e.backtrace
+        if PRIVATE_EXTENSIONS.include? oid
+          raise Puppet::Error, _("Cannot specify CSR extension request %{oid}: conflicts with internally used extension request") % { oid: oid }
         end
+
+        ext = OpenSSL::X509::Extension.new(oid, OpenSSL::ASN1::UTF8String.new(value.to_s).to_der, false)
+        extensions << ext
+      rescue OpenSSL::X509::ExtensionError => e
+        raise Puppet::Error, _("Cannot create CSR with extension request %{oid}: %{message}") % { oid: oid, message: e.message }, e.backtrace
       end
     end
 
@@ -296,7 +293,6 @@ class Puppet::SSL::CertificateRequest < Puppet::SSL::Base
   # @return [Array<Array<Object>>] A array of arrays containing the extension
   #   OID the critical state if present, and the extension value.
   def unpack_extension_request(attribute)
-
     unless attribute.value.is_a? OpenSSL::ASN1::Set
       raise Puppet::Error, _("In %{attr}, expected Set but found %{klass}") % { attr: attribute.oid, klass: attribute.value.class }
     end

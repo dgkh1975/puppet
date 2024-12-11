@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Matches a regular expression against a string and returns an array containing the match
 # and any matched capturing groups.
 #
@@ -53,7 +55,7 @@ Puppet::Functions.create_function(:match) do
     # a puppet runtime (where this function is) without a reboot. If you model a function in a module after
     # this class, use a regular instance variable instead to enable reloading of the module without reboot
     #
-    @@match_visitor   ||= Puppet::Pops::Visitor.new(self, "match", 1, 1)
+    @@match_visitor ||= Puppet::Pops::Visitor.new(self, "match", 1, 1)
   end
 
   # Matches given string against given pattern and returns an Array with matches.
@@ -72,7 +74,7 @@ Puppet::Functions.create_function(:match) do
   # @return [Array<Array<String, nil>>] Array with matches (see {#match}), non matching entries produce a nil entry
   #
   def enumerable_match(array, pattern)
-    array.map {|s| match(s, pattern) }
+    array.map { |s| match(s, pattern) }
   end
 
   protected
@@ -97,12 +99,13 @@ Puppet::Functions.create_function(:match) do
   def match_PVariantType(var_t, s)
     # Find first matching type (or error out if one of the variants is not acceptable)
     result = nil
-    var_t.types.find {|t| result = match(s, t) }
+    var_t.types.find { |t| result = match(s, t) }
     result
   end
 
   def match_PRegexpType(regexp_t, s)
     raise ArgumentError, _("Given Regexp Type has no regular expression") unless regexp_t.pattern
+
     do_match(s, regexp_t.regexp)
   end
 
@@ -110,14 +113,14 @@ Puppet::Functions.create_function(:match) do
     # Since we want the actual match result (not just a boolean), an iteration over
     # Pattern's regular expressions is needed. (They are of PRegexpType)
     result = nil
-    pattern_t.patterns.find {|pattern| result = match(s, pattern) }
+    pattern_t.patterns.find { |pattern| result = match(s, pattern) }
     result
   end
 
   # Returns the first matching entry
   def match_Array(array, s)
     result = nil
-    array.flatten.find {|entry| result = match(s, entry) }
+    array.flatten.find { |entry| result = match(s, entry) }
     result
   end
 

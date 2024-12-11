@@ -1,18 +1,19 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
 class PURIType < PAnyType
-
   # Tell evaluator that an members of instances of this type can be invoked using dot notation
   include TypeWithMembers
 
-  SCHEME = 'scheme'.freeze
-  USERINFO = 'userinfo'.freeze
-  HOST = 'host'.freeze
-  PORT = 'port'.freeze
-  PATH = 'path'.freeze
-  QUERY = 'query'.freeze
-  FRAGMENT = 'fragment'.freeze
-  OPAQUE = 'opaque'.freeze
+  SCHEME = 'scheme'
+  USERINFO = 'userinfo'
+  HOST = 'host'
+  PORT = 'port'
+  PATH = 'path'
+  QUERY = 'query'
+  FRAGMENT = 'fragment'
+  OPAQUE = 'opaque'
 
   URI_MEMBERS = {
     SCHEME => AttrReader.new(SCHEME),
@@ -33,23 +34,29 @@ class PURIType < PAnyType
     TypeFactory.optional(PATH) => PStringType::NON_EMPTY,
     TypeFactory.optional(QUERY) => PStringType::NON_EMPTY,
     TypeFactory.optional(FRAGMENT) => PStringType::NON_EMPTY,
-    TypeFactory.optional(OPAQUE) => PStringType::NON_EMPTY,
+    TypeFactory.optional(OPAQUE) => PStringType::NON_EMPTY
   )
 
-  TYPE_STRING_PARAM = TypeFactory.optional(PVariantType.new([
-    PStringType::NON_EMPTY,
-    PRegexpType::DEFAULT,
-    TypeFactory.type_type(PPatternType::DEFAULT),
-    TypeFactory.type_type(PEnumType::DEFAULT),
-    TypeFactory.type_type(PNotUndefType::DEFAULT),
-    TypeFactory.type_type(PUndefType::DEFAULT),
-  ]))
+  TYPE_STRING_PARAM =
+    TypeFactory
+    .optional(PVariantType
+        .new([
+               PStringType::NON_EMPTY,
+               PRegexpType::DEFAULT,
+               TypeFactory.type_type(PPatternType::DEFAULT),
+               TypeFactory.type_type(PEnumType::DEFAULT),
+               TypeFactory.type_type(PNotUndefType::DEFAULT),
+               TypeFactory.type_type(PUndefType::DEFAULT)
+             ]))
 
-  TYPE_INTEGER_PARAM = TypeFactory.optional(PVariantType.new([
-    PIntegerType.new(0),
-    TypeFactory.type_type(PNotUndefType::DEFAULT),
-    TypeFactory.type_type(PUndefType::DEFAULT),
-  ]))
+  TYPE_INTEGER_PARAM =
+    TypeFactory
+    .optional(PVariantType
+        .new([
+               PIntegerType.new(0),
+               TypeFactory.type_type(PNotUndefType::DEFAULT),
+               TypeFactory.type_type(PUndefType::DEFAULT)
+             ]))
 
   TYPE_URI_PARAM_HASH_TYPE = TypeFactory.struct(
     TypeFactory.optional(SCHEME) => TYPE_STRING_PARAM,
@@ -59,17 +66,16 @@ class PURIType < PAnyType
     TypeFactory.optional(PATH) => TYPE_STRING_PARAM,
     TypeFactory.optional(QUERY) => TYPE_STRING_PARAM,
     TypeFactory.optional(FRAGMENT) => TYPE_STRING_PARAM,
-    TypeFactory.optional(OPAQUE) => TYPE_STRING_PARAM,
+    TypeFactory.optional(OPAQUE) => TYPE_STRING_PARAM
   )
 
   TYPE_URI_PARAM_TYPE = PVariantType.new([PStringType::NON_EMPTY, TYPE_URI_PARAM_HASH_TYPE])
 
   def self.register_ptype(loader, ir)
     create_ptype(loader, ir, 'AnyType',
-      {
-        'parameters' => { KEY_TYPE => TypeFactory.optional(TYPE_URI_PARAM_TYPE), KEY_VALUE => nil }
-      }
-    )
+                 {
+                   'parameters' => { KEY_TYPE => TypeFactory.optional(TYPE_URI_PARAM_TYPE), KEY_VALUE => nil }
+                 })
   end
 
   def self.new_function(type)
@@ -99,12 +105,13 @@ class PURIType < PAnyType
   attr_reader :parameters
 
   def initialize(parameters = nil)
-    if parameters.is_a?(String)
+    case parameters
+    when String
       parameters = TypeAsserter.assert_instance_of('URI-Type parameter', Pcore::TYPE_URI, parameters, true)
       @parameters = uri_to_hash(URI.parse(parameters))
-    elsif parameters.is_a?(URI)
+    when URI
       @parameters = uri_to_hash(parameters)
-    elsif parameters.is_a?(Hash)
+    when Hash
       params = TypeAsserter.assert_instance_of('URI-Type parameter', TYPE_URI_PARAM_TYPE, parameters, true)
       @parameters = params.empty? ? nil : params
     end
@@ -149,8 +156,9 @@ class PURIType < PAnyType
   protected
 
   def _assignable?(o, guard = nil)
-    return false unless o.class == self.class
+    return false unless o.instance_of?(self.class)
     return true if @parameters.nil?
+
     o_params = o.parameters || EMPTY_HASH
 
     eval = Parser::EvaluatingParser.singleton.evaluator

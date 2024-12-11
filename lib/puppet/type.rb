@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# frozen_string_literal: true
+
 require_relative '../puppet'
 require_relative '../puppet/util/log'
 require_relative '../puppet/util/metric'
@@ -13,7 +15,6 @@ require_relative '../puppet/util/tagging'
 require_relative '../puppet/concurrent/lock'
 
 # see the bottom of the file for the rest of the inclusions
-
 
 module Puppet
 # The base class for all Puppet types.
@@ -100,8 +101,9 @@ class Type
     # Order is only maintained against other types, not arbitrary objects.
     # The natural order is based on the reference name used when comparing
     return nil unless other.is_a?(Puppet::CompilableResourceType) || other.class.is_a?(Puppet::CompilableResourceType)
+
     # against other type instances.
-    self.ref <=> other.ref
+    ref <=> other.ref
   end
 
   # Code related to resource type attributes.
@@ -121,7 +123,7 @@ class Type
   # @return [Array<String>] all type attribute names in a defined order.
   #
   def self.allattrs
-    key_attributes | (parameters & [:provider]) | properties.collect { |property| property.name } | parameters | metaparams
+    key_attributes | (parameters & [:provider]) | properties.collect(&:name) | parameters | metaparams
   end
 
   # Returns the class associated with the given attribute name.
@@ -134,11 +136,11 @@ class Type
     # We cache the value, since this method gets called such a huge number
     # of times (as in, hundreds of thousands in a given run).
     unless @attrclasses.include?(name)
-      @attrclasses[name] = case self.attrtype(name)
-      when :property; @validproperties[name]
-      when :meta; @@metaparamhash[name]
-      when :param; @paramhash[name]
-      end
+      @attrclasses[name] = case attrtype(name)
+                           when :property; @validproperties[name]
+                           when :meta; @@metaparamhash[name]
+                           when :param; @paramhash[name]
+                           end
     end
     @attrclasses[name]
   end
@@ -152,10 +154,10 @@ class Type
     @attrtypes ||= {}
     unless @attrtypes.include?(attr)
       @attrtypes[attr] = case
-        when @validproperties.include?(attr); :property
-        when @paramhash.include?(attr); :param
-        when @@metaparamhash.include?(attr); :meta
-        end
+                         when @validproperties.include?(attr); :property
+                         when @paramhash.include?(attr); :param
+                         when @@metaparamhash.include?(attr); :meta
+                         end
     end
 
     @attrtypes[attr]
@@ -182,7 +184,7 @@ class Type
   #   specification to clearly state that the type is ensurable.
   #
   # @overload ensurable()
-  # @overload ensurable({|| ... })
+  # @overload ensurable({ ... })
   # @yield [ ] A block evaluated in scope of the new Parameter
   # @yieldreturn [void]
   # @return [void]
@@ -191,10 +193,10 @@ class Type
   #
   def self.ensurable(&block)
     if block_given?
-      self.newproperty(:ensure, :parent => Puppet::Property::Ensure, &block)
+      newproperty(:ensure, :parent => Puppet::Property::Ensure, &block)
     else
-      self.newproperty(:ensure, :parent => Puppet::Property::Ensure) do
-        self.defaultvalues
+      newproperty(:ensure, :parent => Puppet::Property::Ensure) do
+        defaultvalues
       end
     end
   end
@@ -209,7 +211,7 @@ class Type
     # If the class has all three of these methods defined, then it's
     # ensurable.
     [:exists?, :create, :destroy].all? { |method|
-      self.public_method_defined?(method)
+      public_method_defined?(method)
     }
   end
 
@@ -258,7 +260,7 @@ class Type
   # @api private
   #
   def self.can_apply_to(target)
-    [ target == :device ? :device : :host, :both ].include?(apply_to)
+    [target == :device ? :device : :host, :both].include?(apply_to)
   end
 
   # Processes the options for a named parameter.
@@ -273,7 +275,7 @@ class Type
       define_method(name.to_s + "?") do
         val = self[name]
         if val == :true or val == true
-          return true
+          true
         end
       end
     end
@@ -294,6 +296,7 @@ class Type
   #
   def self.metaparamclass(name)
     return nil if name.nil?
+
     @@metaparamhash[name.intern]
   end
 
@@ -301,7 +304,7 @@ class Type
   # @return [Array<String>] all meta-parameter names
   #
   def self.metaparams
-    @@metaparams.collect { |param| param.name }
+    @@metaparams.collect(&:name)
   end
 
   # Returns the documentation for a given meta-parameter of this type.
@@ -356,6 +359,16 @@ class Type
     param
   end
 
+  # Copies all of a resource's metaparameters (except `alias`) to a generated child resource
+  # @param parameters [Hash] of a resource's parameters
+  # @return [Void]
+  def copy_metaparams(parameters)
+    parameters.each do |name, param|
+      self[name] = param.value if param.metaparam? && name != :alias
+    end
+    nil
+  end
+
   # Returns the list of parameters that comprise the composite key / "uniqueness key".
   # All parameters that return true from #isnamevar? or is named `:name` are included in the returned result.
   # @see uniqueness_key
@@ -375,7 +388,9 @@ class Type
   #
   def self.key_attributes
     # This is a cache miss around 0.05 percent of the time. --daniel 2012-07-17
-    @key_attributes_cache ||= key_attribute_parameters.collect { |p| p.name }
+    # rubocop:disable Naming/MemoizedInstanceVariableName
+    @key_attributes_cache ||= key_attribute_parameters.collect(&:name)
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   # Returns any parameters that should be included by default in puppet resource's output
@@ -416,7 +431,7 @@ class Type
     case key_attributes.length
     when 0; []
     when 1;
-      [ [ /(.*)/m, [ [key_attributes.first] ] ] ]
+      [[/(.*)/m, [[key_attributes.first]]]]
     else
       raise Puppet::DevError, _("you must specify title patterns when there are two or more key attributes")
     end
@@ -428,7 +443,7 @@ class Type
   # @return [Object] an object that is a _uniqueness_key_ for this object
   #
   def uniqueness_key
-    self.class.key_attributes.sort_by { |attribute_name| attribute_name.to_s }.map{ |attribute_name| self[attribute_name] }
+    self.class.key_attributes.sort_by(&:to_s).map { |attribute_name| self[attribute_name] }
   end
 
   # Creates a new parameter.
@@ -451,12 +466,12 @@ class Type
 
     param = genclass(
       name,
-      :parent     => options[:parent] || Puppet::Parameter,
+      :parent => options[:parent] || Puppet::Parameter,
       :attributes => options[:attributes],
-      :block      => block,
-      :prefix     => "Parameter",
-      :array      => @parameters,
-      :hash       => @paramhash
+      :block => block,
+      :prefix => "Parameter",
+      :array => @parameters,
+      :hash => @paramhash
     )
 
     handle_param_options(name, options)
@@ -537,7 +552,8 @@ class Type
   # @return [Array<String>] Returns the parameter names
   def self.parameters
     return [] unless defined?(@parameters)
-    @parameters.collect { |klass| klass.name }
+
+    @parameters.collect(&:name)
   end
 
   # @return [Puppet::Parameter] Returns the parameter class associated with the given parameter name.
@@ -556,10 +572,11 @@ class Type
   def self.validattr?(name)
     name = name.intern
     return true if name == :name
+
     @validattrs ||= {}
 
     unless @validattrs.include?(name)
-      @validattrs[name] = !!(self.validproperty?(name) or self.validparameter?(name) or self.metaparam?(name))
+      @validattrs[name] = !!(validproperty?(name) or validparameter?(name) or metaparam?(name))
     end
 
     @validattrs[name]
@@ -584,6 +601,7 @@ class Type
   # @return [Boolean] Returns true if the given name is the name of an existing parameter
   def self.validparameter?(name)
     raise Puppet::DevError, _("Class %{class_name} has not defined parameters") % { class_name: self } unless defined?(@parameters)
+
     !!(@paramhash.include?(name) or @@metaparamhash.include?(name))
   end
 
@@ -604,7 +622,7 @@ class Type
   # @return [Boolean] true if a new parameter was added, false otherwise
   def add_property_parameter(prop_name)
     if self.class.validproperty?(prop_name) && !@parameters[prop_name]
-      self.newattr(prop_name)
+      newattr(prop_name)
       return true
     end
     false
@@ -619,6 +637,7 @@ class Type
   #
   def name_var
     return @name_var_cache unless @name_var_cache.nil?
+
     key_attributes = self.class.key_attributes
     @name_var_cache = (key_attributes.length == 1) && key_attributes.first
   end
@@ -643,16 +662,16 @@ class Type
       # not the current value.
       obj.value
     else
-      return nil
+      nil
     end
   end
 
   # Sets the 'should' (wanted state) value of a property, or the value of a parameter.
-  # @return
+  #
   # @raise [Puppet::Error] if the setting of the value fails, or if the given name is nil.
   # @raise [Puppet::ResourceError] when the parameter validation raises Puppet::Error or
   #   ArgumentError
-  def []=(name,value)
+  def []=(name, value)
     name = name.intern
 
     fail("no parameter named '#{name}'") unless self.class.validattr?(name)
@@ -661,9 +680,9 @@ class Type
       nv = name_var
       name = nv if nv
     end
-    raise Puppet::Error.new("Got nil value for #{name}") if value.nil?
+    raise Puppet::Error, "Got nil value for #{name}" if value.nil?
 
-    property = self.newattr(name)
+    property = newattr(name)
 
     if property
       begin
@@ -676,8 +695,6 @@ class Type
         raise error
       end
     end
-
-    nil
   end
 
   # Removes an attribute from the object; useful in testing or in cleanup
@@ -693,7 +710,7 @@ class Type
     if @parameters.has_key?(attr)
       @parameters.delete(attr)
     else
-      raise Puppet::DevError.new(_("Undefined attribute '%{attribute}' in %{name}") % { attribute: attr, name: self})
+      raise Puppet::DevError, _("Undefined attribute '%{attribute}' in %{name}") % { attribute: attr, name: self }
     end
   end
 
@@ -711,7 +728,7 @@ class Type
   # included since they are a subclass of parameter.
   # @return [Array<Puppet::Parameter>] Array of parameter objects ( or subclass thereof )
   def parameters_with_value
-    self.class.allattrs.collect { |attr| parameter(attr) }.compact
+    self.class.allattrs.filter_map { |attr| parameter(attr) }
   end
 
   # Iterates over all parameters with value currently set.
@@ -730,7 +747,7 @@ class Type
   # @param options [Hash] options merged with a fixed set of options defined by this method, passed on to {Puppet::Transaction::Event}.
   # @return [Puppet::Transaction::Event] the created event
   def event(options = {})
-    Puppet::Transaction::Event.new(**{:resource => self, :file => file, :line => line, :tags => tags}.merge(options))
+    Puppet::Transaction::Event.new(**{ :resource => self, :file => file, :line => line, :tags => tags }.merge(options))
   end
 
   # @return [Object, nil] Returns the 'should' (wanted state) value for a specified property, or nil if the
@@ -768,8 +785,8 @@ class Type
       raise Puppet::Error, "Resource type #{self.class.name} does not support parameter #{name}"
     end
 
-    if provider and ! provider.class.supports_parameter?(klass)
-      missing = klass.required_features.find_all { |f| ! provider.class.feature?(f) }
+    if provider and !provider.class.supports_parameter?(klass)
+      missing = klass.required_features.find_all { |f| !provider.class.feature?(f) }
       debug "Provider %s does not support features %s; not managing attribute %s" % [provider.class.name, missing.join(", "), name]
       return nil
     end
@@ -842,7 +859,7 @@ class Type
     return unless parameter
 
     value = parameter.default
-    if value and ! value.nil?
+    if value and !value.nil?
       parameter.value = value
     else
       @parameters.delete(parameter.name)
@@ -896,6 +913,7 @@ class Type
   # @return [???] the version of the catalog or 0 if there is no catalog.
   def version
     return 0 unless catalog
+
     catalog.version
   end
 
@@ -905,7 +923,7 @@ class Type
   #   ruby file adding a new type with new properties?
   #
   def properties
-    self.class.properties.collect { |prop| @parameters[prop.name] }.compact
+    self.class.properties.filter_map { |prop| @parameters[prop.name] }
   end
 
   # Returns true if the type's notion of name is the identity of a resource.
@@ -915,9 +933,9 @@ class Type
   # @return [Boolean] true, if this type's name is isomorphic with the object
   def self.isomorphic?
     if defined?(@isomorphic)
-      return @isomorphic
+      @isomorphic
     else
-      return true
+      true
     end
   end
 
@@ -937,19 +955,17 @@ class Type
     # Once an object is managed, it always stays managed; but an object
     # that is listed as unmanaged might become managed later in the process,
     # so we have to check that every time
-    if @managed
-      return @managed
-    else
+    unless @managed
       @managed = false
       properties.each { |property|
         s = property.should
-        if s and ! property.class.unmanaged
+        if s and !property.class.unmanaged
           @managed = true
           break
         end
       }
-      return @managed
     end
+    @managed
   end
 
   ###############################
@@ -968,10 +984,10 @@ class Type
   # Removes this object (FROM WHERE?)
   # @todo removes if from where?
   # @return [void]
-  def remove()
+  def remove
     # This is hackish (mmm, cut and paste), but it works for now, and it's
     # better than warnings.
-    @parameters.each do |name, obj|
+    @parameters.each do |_name, obj|
       obj.remove
     end
     @parameters.clear
@@ -979,7 +995,7 @@ class Type
     @parent = nil
 
     # Remove the reference to the provider.
-    if self.provider
+    if provider
       @provider.clear
       @provider = nil
     end
@@ -1019,48 +1035,7 @@ class Type
   #
   # @return [???, nil] WHAT DOES IT RETURN? GUESS IS VOID
   def flush
-    self.provider.flush if self.provider and self.provider.respond_to?(:flush)
-  end
-
-  # Returns true if all contained objects are in sync.
-  # @todo "contained in what?" in the given "in" parameter?
-  #
-  # @todo deal with the comment _"FIXME I don't think this is used on the type instances any more,
-  #   it's really only used for testing"_
-  # @return [Boolean] true if in sync, false otherwise.
-  #
-  def insync?(is)
-    insync = true
-
-    property = @parameters[:ensure]
-    if property
-      unless is.include? property
-        #TRANSLATORS 'is' is a variable name and should not be translated
-        raise Puppet::DevError, _("The 'is' value is not in the 'is' array for '%{name}'") % { name: property.name }
-      end
-      ensureis = is[property]
-      if property.safe_insync?(ensureis) and property.should == :absent
-        return true
-      end
-    end
-
-    properties.each { |prop|
-      unless is.include? prop
-        #TRANSLATORS 'is' is a variable name and should not be translated
-        raise Puppet::DevError, _("The 'is' value is not in the 'is' array for '%{name}'") % { name: prop.name }
-      end
-
-      propis = is[prop]
-      unless prop.safe_insync?(propis)
-        prop.debug("Not in sync: #{propis.inspect} vs #{prop.should.inspect}")
-        insync = false
-      #else
-      #    property.debug("In sync")
-      end
-    }
-
-    #self.debug("#{self} sync status is #{insync}")
-    insync
+    provider.flush if provider and provider.respond_to?(:flush)
   end
 
   # Says if the ensure property should be retrieved if the resource is ensurable
@@ -1076,7 +1051,7 @@ class Type
   # @return [Puppet::Resource] array of all property values (mix of types)
   # @raise [fail???] if there is a provider and it is not suitable for the host this is evaluated for.
   def retrieve
-    fail "Provider #{provider.class.name} is not functional on this host" if self.provider.is_a?(Puppet::Provider) and ! provider.class.suitable?
+    fail "Provider #{provider.class.name} is not functional on this host" if provider.is_a?(Puppet::Provider) and !provider.class.suitable?
 
     result = Puppet::Resource.new(self.class, title)
 
@@ -1096,6 +1071,7 @@ class Type
 
     properties.each do |property|
       next if property.name == :ensure
+
       if ensure_state == :absent
         result[property] = :absent
       else
@@ -1139,18 +1115,15 @@ class Type
     # is the first property, which is important for skipping 'retrieve' on
     # all the properties if the resource is absent.
     ensure_state = false
-    return properties.inject({}) do | prophash, property|
+    properties.each_with_object({}) do |property, prophash|
       if property.name == :ensure
         ensure_state = property.retrieve
         prophash[property] = ensure_state
+      elsif ensure_state == :absent
+        prophash[property] = :absent
       else
-        if ensure_state == :absent
-          prophash[property] = :absent
-        else
-          prophash[property] = property.retrieve
-        end
+        prophash[property] = property.retrieve
       end
-      prophash
     end
   end
 
@@ -1159,7 +1132,7 @@ class Type
   def noop?
     # If we're not a host_config, we're almost certainly part of
     # Settings, and we want to ignore 'noop'
-    return false if catalog and ! catalog.host_config?
+    return false if catalog and !catalog.host_config?
 
     if defined?(@noop)
       @noop
@@ -1178,7 +1151,7 @@ class Type
   # Either requires providers or must be overridden.
   # @raise [Puppet::DevError] when there are no providers and the implementation has not overridden this method.
   def self.instances
-    raise Puppet::DevError, _("%{name} has no providers and has not overridden 'instances'") % { name: self.name } if provider_hash.empty?
+    raise Puppet::DevError, _("%{name} has no providers and has not overridden 'instances'") % { name: name } if provider_hash.empty?
 
     # Put the default provider first, then the rest of the suitable providers.
     provider_instances = {}
@@ -1190,7 +1163,7 @@ class Type
         other = provider_instances[title]
         if other
           Puppet.debug {
-            "%s %s found in both %s and %s; skipping the %s version" % [self.name.to_s.capitalize, title, other.class.name, instance.class.name, instance.class.name]
+            "%s %s found in both %s and %s; skipping the %s version" % [name.to_s.capitalize, title, other.class.name, instance.class.name, instance.class.name]
           }
           next
         end
@@ -1210,13 +1183,13 @@ class Type
   def self.providers_by_source
     # Put the default provider first (can be nil), then the rest of the suitable providers.
     sources = []
-    [defaultprovider, suitableprovider].flatten.uniq.collect do |provider|
+    [defaultprovider, suitableprovider].flatten.uniq.filter_map do |provider|
       next if provider.nil?
       next if sources.include?(provider.source)
 
       sources << provider.source
       provider
-    end.compact
+    end
   end
 
   # Converts a simple hash into a Resource instance.
@@ -1225,7 +1198,7 @@ class Type
   # @return [Puppet::Resource] the resource created from the hash
   # @raise [Puppet::Error] if a title is missing in the given hash
   def self.hash2resource(hash)
-    hash = hash.inject({}) { |result, ary| result[ary[0].to_sym] = ary[1]; result }
+    hash = hash.each_with_object({}) { |ary, result| result[ary[0].to_sym] = ary[1]; }
 
     title = hash.delete(:title)
     title ||= hash[:name]
@@ -1248,7 +1221,6 @@ class Type
     resource
   end
 
-
   # Returns an array of strings representing the containment hierarchy
   # (types/classes) that make up the path to the resource from the root
   # of the catalog.  This is mostly used for logging purposes.
@@ -1257,9 +1229,9 @@ class Type
   def pathbuilder
     p = parent
     if p
-      [p.pathbuilder, self.ref].flatten
+      [p.pathbuilder, ref].flatten
     else
-      [self.ref]
+      [ref]
     end
   end
 
@@ -1337,10 +1309,11 @@ class Type
       and the second run will log the edit made by Puppet.)"
 
     validate do |list|
-      list = Array(list).collect {|p| p.to_sym}
+      list = Array(list).collect(&:to_sym)
       unless list == [:all]
         list.each do |param|
           next if @resource.class.validattr?(param)
+
           fail "Cannot audit #{param}: not a valid attribute for #{resource}"
         end
       end
@@ -1349,6 +1322,7 @@ class Type
     munge do |args|
       properties_to_audit(args).each do |param|
         next unless resource.class.validproperty?(param)
+
         resource.newattr(param)
       end
     end
@@ -1356,16 +1330,14 @@ class Type
     def all_properties
       resource.class.properties.find_all do |property|
         resource.provider.nil? or resource.provider.class.supports_parameter?(property)
-      end.collect do |property|
-        property.name
-      end
+      end.collect(&:name)
     end
 
     def properties_to_audit(list)
-      if !list.kind_of?(Array) && list.to_sym == :all
+      if !list.is_a?(Array) && list.to_sym == :all
         all_properties
       else
-        Array(list).collect { |p| p.to_sym }
+        Array(list).collect(&:to_sym)
       end
     end
   end
@@ -1401,11 +1373,11 @@ class Type
   end
 
   newmetaparam(:alias) do
-    desc %q{Creates an alias for the resource.  Puppet uses this internally when you
+    desc "Creates an alias for the resource.  Puppet uses this internally when you
       provide a symbolic title and an explicit namevar value:
 
           file { 'sshdconfig':
-            path => $operatingsystem ? {
+            path => $os['name'] ? {
               solaris => '/usr/local/etc/ssh/sshd_config',
               default => '/etc/ssh/sshd_config',
             },
@@ -1437,7 +1409,7 @@ class Type
       There's no way here for the Puppet parser to know that these two stanzas
       should be affecting the same file.
 
-      }
+      "
 
     munge do |aliases|
       aliases = [aliases] unless aliases.is_a?(Array)
@@ -1447,7 +1419,7 @@ class Type
       aliases.each do |other|
         obj = @resource.catalog.resource(@resource.class.name, other)
         if obj
-          unless obj.object_id == @resource.object_id
+          unless obj.equal?(@resource) # same object?
             self.fail("#{@resource.title} can not create alias #{other}: object already exists")
           end
           next
@@ -1520,11 +1492,11 @@ class Type
     # @return [void]
     def validate_relationship
       @value.each do |ref|
-        unless @resource.catalog.resource(ref.to_s)
-          description = self.class.direction == :in ? "dependency" : "dependent"
-          fail ResourceError, _("Could not find %{description} %{ref} for %{resource}") %
-              { description: description, ref: ref, resource: resource.ref }
-        end
+        next if @resource.catalog.resource(ref.to_s)
+
+        description = self.class.direction == :in ? "dependency" : "dependent"
+        fail ResourceError, _("Could not find %{description} %{ref} for %{resource}") %
+                            { description: description, ref: ref, resource: resource.ref }
       end
     end
 
@@ -1576,15 +1548,15 @@ class Type
 
         ## Corrected syntax of debug statement to reflect the way this was called.
         # i.e. before, after, subscribe, notify
-        self.debug do
+        debug do
           relation = case self.class.name
-          when "subscribe"
-            "subscribes"
-          when "notify"
-            "notifies"
-          else
-            self.class.name
-          end
+                     when "subscribe"
+                       "subscribes"
+                     when "notify"
+                       "notifies"
+                     else
+                       self.class.name
+                     end
 
           "#{relation} to #{related_resource.ref}"
         end
@@ -1600,13 +1572,12 @@ class Type
     RelationshipMetaparam.subclasses
   end
 
-
   # Note that the order in which the relationships params is defined
   # matters.  The labeled params (notify and subscribe) must be later,
   # so that if both params are used, those ones win.  It's a hackish
   # solution, but it works.
 
-  newmetaparam(:require, :parent => RelationshipMetaparam, :attributes => {:direction => :in, :events => :NONE}) do
+  newmetaparam(:require, :parent => RelationshipMetaparam, :attributes => { :direction => :in, :events => :NONE }) do
     desc "One or more resources that this resource depends on, expressed as
       [resource references](https://puppet.com/docs/puppet/latest/lang_data_resource_reference.html).
       Multiple resources can be specified as an array of references. When this
@@ -1620,7 +1591,7 @@ class Type
       [the language page on relationships](https://puppet.com/docs/puppet/latest/lang_relationships.html)."
   end
 
-  newmetaparam(:subscribe, :parent => RelationshipMetaparam, :attributes => {:direction => :in, :events => :ALL_EVENTS, :callback => :refresh}) do
+  newmetaparam(:subscribe, :parent => RelationshipMetaparam, :attributes => { :direction => :in, :events => :ALL_EVENTS, :callback => :refresh }) do
     desc "One or more resources that this resource depends on, expressed as
       [resource references](https://puppet.com/docs/puppet/latest/lang_data_resource_reference.html).
       Multiple resources can be specified as an array of references. When this
@@ -1638,7 +1609,7 @@ class Type
       [the language page on relationships](https://puppet.com/docs/puppet/latest/lang_relationships.html)."
   end
 
-  newmetaparam(:before, :parent => RelationshipMetaparam, :attributes => {:direction => :out, :events => :NONE}) do
+  newmetaparam(:before, :parent => RelationshipMetaparam, :attributes => { :direction => :out, :events => :NONE }) do
     desc "One or more resources that depend on this resource, expressed as
       [resource references](https://puppet.com/docs/puppet/latest/lang_data_resource_reference.html).
       Multiple resources can be specified as an array of references. When this
@@ -1652,7 +1623,7 @@ class Type
       [the language page on relationships](https://puppet.com/docs/puppet/latest/lang_relationships.html)."
   end
 
-  newmetaparam(:notify, :parent => RelationshipMetaparam, :attributes => {:direction => :out, :events => :ALL_EVENTS, :callback => :refresh}) do
+  newmetaparam(:notify, :parent => RelationshipMetaparam, :attributes => { :direction => :out, :events => :ALL_EVENTS, :callback => :refresh }) do
     desc "One or more resources that depend on this resource, expressed as
       [resource references](https://puppet.com/docs/puppet/latest/lang_data_resource_reference.html).
       Multiple resources can be specified as an array of references. When this
@@ -1738,16 +1709,16 @@ class Type
     suitable = suitableprovider
 
     # Find which providers are a default for this system.
-    defaults = suitable.find_all { |provider| provider.default? }
+    defaults = suitable.find_all(&:default?)
 
     # If we don't have any default we use suitable providers
     defaults = suitable if defaults.empty?
-    max = defaults.collect { |provider| provider.specificity }.max
+    max = defaults.collect(&:specificity).max
     defaults = defaults.find_all { |provider| provider.specificity == max }
 
     if defaults.length > 1
       Puppet.warning(_("Found multiple default providers for %{name}: %{provider_list}; using %{selected_provider}") %
-                         { name: self.name, provider_list:  defaults.collect { |i| i.name.to_s }.join(", "), selected_provider: defaults[0].name })
+                         { name: name, provider_list: defaults.collect { |i| i.name.to_s }.join(", "), selected_provider: defaults[0].name })
     end
 
     @defaultprovider = defaults.shift unless defaults.empty?
@@ -1763,7 +1734,7 @@ class Type
   # @return [Hash{ ??? => Puppet::Provider}] Returns a hash of WHAT EXACTLY for this type.
   # @see provider_hash_by_type method to get the same for some other type
   def self.provider_hash
-    Puppet::Type.provider_hash_by_type(self.name)
+    Puppet::Type.provider_hash_by_type(name)
   end
 
   # Returns the provider having the given name.
@@ -1799,7 +1770,7 @@ class Type
   def self.validprovider?(name)
     name = name.intern
 
-    (provider_hash.has_key?(name) && provider_hash[name].suitable?)
+    provider_hash.has_key?(name) && provider_hash[name].suitable?
   end
 
   # Creates a new provider of a type.
@@ -1825,37 +1796,31 @@ class Type
 
     pname = options[:parent]
     parent = if pname
-      options.delete(:parent)
-      if pname.is_a? Class
-        pname
-      else
-        provider = self.provider(pname)
-        if provider
-          provider
-        else
-          raise Puppet::DevError, _("Could not find parent provider %{parent} of %{name}") % { parent: pname, name: name }
-        end
-      end
-    else
-      Puppet::Provider
-    end
+               options.delete(:parent)
+               if pname.is_a? Class
+                 pname
+               else
+                 provider = self.provider(pname)
+                 provider || raise(Puppet::DevError, _("Could not find parent provider %{parent} of %{name}") % { parent: pname, name: name })
+               end
+             else
+               Puppet::Provider
+             end
 
     options[:resource_type] ||= self
 
-    self.providify
+    providify
 
-    provider = genclass(
+    genclass(
       name,
-      :parent     => parent,
-      :hash       => provider_hash,
-      :prefix     => "Provider",
-      :block      => block,
-      :include    => feature_module,
-      :extend     => feature_module,
+      :parent => parent,
+      :hash => provider_hash,
+      :prefix => "Provider",
+      :block => block,
+      :include => feature_module,
+      :extend => feature_module,
       :attributes => options
     )
-
-    provider
   end
 
   # Ensures there is a `:provider` parameter defined.
@@ -1870,7 +1835,7 @@ class Type
       # We expect that the class in which this code is executed will be something
       # like Puppet::Type::Ssh_authorized_key::ParameterProvider.
       desc <<-EOT
-        The specific backend to use for this `#{self.to_s.split('::')[2].downcase}`
+        The specific backend to use for this `#{to_s.split('::')[2].downcase}`
         resource. You will seldom need to specify this --- Puppet will usually
         discover the appropriate provider for your platform.
       EOT
@@ -1891,7 +1856,7 @@ class Type
         # its indentation with scrub. But we don't need to manually scrub the
         # provider's doc string, since markdown_definitionlist sanitizes its inputs.
         scrub(@doc) + "Available providers are:\n\n" + parenttype.providers.sort_by(&:to_s).collect { |i|
-          markdown_definitionlist( i, scrub(parenttype().provider(i).doc) )
+          markdown_definitionlist(i, scrub(parenttype().provider(i).doc))
         }.join
       end
 
@@ -1907,7 +1872,7 @@ class Type
         provider_class = provider_class.class.name if provider_class.is_a?(Puppet::Provider)
 
         unless @resource.class.provider(provider_class)
-          raise ArgumentError, _("Invalid %{resource} provider '%{provider_class}'") % { resource: @resource.class.name, provider_class: provider_class}
+          raise ArgumentError, _("Invalid %{resource} provider '%{provider_class}'") % { resource: @resource.class.name, provider_class: provider_class }
         end
       end
 
@@ -1939,15 +1904,15 @@ class Type
 
   # Returns a list of suitable providers for the given type.
   # A call to this method will load all providers if not already loaded and ask each if it is
-  # suitable - those that are are included in the result.
+  # suitable - those that are included in the result.
   # @note This method also does some special processing which rejects a provider named `:fake` (for testing purposes).
   # @return [Array<Puppet::Provider>] Returns an array of all suitable providers.
   #
   def self.suitableprovider
     providerloader.loadall(Puppet.lookup(:current_environment)) if provider_hash.empty?
-    provider_hash.find_all { |name, provider|
+    provider_hash.find_all { |_name, provider|
       provider.suitable?
-    }.collect { |name, provider|
+    }.collect { |_name, provider|
       provider
     }.reject { |p| p.name == :fake } # For testing
   end
@@ -2014,16 +1979,16 @@ class Type
   # requirement.
   #
   # @example Autorequire the files File['foo', 'bar']
-  #   autorequire( 'file', {|| ['foo', 'bar'] })
+  #   autorequire( 'file', { ['foo', 'bar'] })
   #
   # @example Autobefore the files File['foo', 'bar']
-  #   autobefore( 'file', {|| ['foo', 'bar'] })
+  #   autobefore( 'file', { ['foo', 'bar'] })
   #
   # @example Autosubscribe the files File['foo', 'bar']
-  #   autosubscribe( 'file', {|| ['foo', 'bar'] })
+  #   autosubscribe( 'file', { ['foo', 'bar'] })
   #
   # @example Autonotify the files File['foo', 'bar']
-  #   autonotify( 'file', {|| ['foo', 'bar'] })
+  #   autonotify( 'file', { ['foo', 'bar'] })
   #
   # @param name [String] the name of a type of which one or several resources should be autorelated e.g. "file"
   # @yield [ ] a block returning list of names of given type to auto require
@@ -2071,7 +2036,7 @@ class Type
   # @return [void]
   def self.eachautobefore
     @autobefores ||= {}
-    @autobefores.each { |type,block|
+    @autobefores.each { |type, block|
       yield(type, block)
     }
   end
@@ -2083,7 +2048,7 @@ class Type
   # @return [void]
   def self.eachautosubscribe
     @autosubscribes ||= {}
-    @autosubscribes.each { |type,block|
+    @autosubscribes.each { |type, block|
       yield(type, block)
     }
   end
@@ -2095,7 +2060,7 @@ class Type
   # @return [void]
   def self.eachautonotify
     @autonotifies ||= {}
-    @autonotifies.each { |type,block|
+    @autonotifies.each { |type, block|
       yield(type, block)
     }
   end
@@ -2121,8 +2086,9 @@ class Type
       next unless Puppet::Type.type(type)
 
       # Retrieve the list of names from the block.
-      list = self.instance_eval(&block)
+      list = instance_eval(&block)
       next unless list
+
       list = [list] unless list.is_a?(Array)
 
       # Collect the current prereqs
@@ -2170,7 +2136,7 @@ class Type
     self.class.relationship_params.collect do |klass|
       param = @parameters[klass.name]
       param.to_edges if param
-    end.flatten.reject { |r| r.nil? }
+    end.flatten.compact
   end
 
   # Sets the initial list of tags to associate to this resource.
@@ -2221,6 +2187,7 @@ class Type
     # @return [Boolean] true if the type should send itself a refresh event on change.
     #
     attr_accessor :self_refresh
+
     include Enumerable, Puppet::Util::ClassGen
 
     include Puppet::Util
@@ -2244,7 +2211,7 @@ class Type
     @parameters = []
     @paramhash = {}
 
-    @paramdoc = Hash.new { |hash,key|
+    @paramdoc = Hash.new { |hash, key|
       key = key.intern if key.is_a?(String)
       if hash.include?(key)
         hash[key]
@@ -2252,9 +2219,9 @@ class Type
         "Param Documentation for #{key} not found"
       end
     }
-
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     @doc ||= ""
-
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   # Returns the name of this type (if specified) or the parent type #to_s.
@@ -2282,7 +2249,13 @@ class Type
   # @api public
   #
   def self.validate(&block)
-    define_method(:validate, &block)
+    define_method(:unsafe_validate, &block)
+
+    define_method(:validate) do
+      return if enum_for(:eachparameter).any? { |p| p.value.instance_of?(Puppet::Pops::Evaluator::DeferredValue) }
+
+      unsafe_validate
+    end
   end
 
   # @return [String] The file from which this type originates from
@@ -2306,16 +2279,13 @@ class Type
   # @return [void]
   #
   def log(msg)
-
     Puppet::Util::Log.create(
-
       :level => @parameters[:loglevel].value,
       :message => msg,
 
       :source => self
     )
   end
-
 
   # instance methods related to instance intrinsics
   # e.g., initialize and name
@@ -2359,7 +2329,7 @@ class Type
     [:file, :line, :catalog, :exported, :virtual].each do |getter|
       setter = getter.to_s + "="
       val = resource.send(getter)
-      self.send(setter, val) if val
+      send(setter, val) if val
     end
 
     merge_tags_from(resource)
@@ -2372,15 +2342,24 @@ class Type
 
     set_parameters(@original_parameters)
 
-    begin
-      self.validate if self.respond_to?(:validate)
-    rescue Puppet::Error, ArgumentError => detail
-      error = Puppet::ResourceError.new("Validation of #{ref} failed: #{detail}")
-      adderrorcontext(error, detail)
-      raise error
-    end
+    validate_resource
 
     set_sensitive_parameters(resource.sensitive_parameters)
+  end
+
+  # Optionally validate the resource. This method is a noop if the type has not defined
+  # a `validate` method using the puppet DSL. If validation fails, then an exception will
+  # be raised with this resources as the context.
+  #
+  # @api public
+  #
+  # @return [void]
+  def validate_resource
+    validate if respond_to?(:validate)
+  rescue Puppet::Error, ArgumentError => detail
+    error = Puppet::ResourceError.new("Validation of #{ref} failed: #{detail}")
+    adderrorcontext(error, detail)
+    raise error
   end
 
   protected
@@ -2422,8 +2401,9 @@ class Type
       end
     end
 
-    parameters.each do |name, param|
+    parameters.each do |_name, param|
       next if param.sensitive
+
       if param.is_a?(Puppet::Parameter)
         param.sensitive = param.is_sensitive if param.respond_to?(:is_sensitive)
       end
@@ -2464,22 +2444,20 @@ class Type
     # on invalid attributes.
     no_values = []
     (self.class.allattrs + hash.keys).uniq.each do |attr|
-      begin
-        # Set any defaults immediately.  This is mostly done so
-        # that the default provider is available for any other
-        # property validation.
-        if hash.has_key?(attr)
-          self[attr] = hash[attr]
-        else
-          no_values << attr
-        end
-      rescue ArgumentError, Puppet::Error, TypeError
-        raise
-      rescue => detail
-        error = Puppet::DevError.new(_("Could not set %{attribute} on %{class_name}: %{detail}") % { attribute: attr, class_name: self.class.name, detail: detail })
-        error.set_backtrace(detail.backtrace)
-        raise error
+      # Set any defaults immediately.  This is mostly done so
+      # that the default provider is available for any other
+      # property validation.
+      if hash.has_key?(attr)
+        self[attr] = hash[attr]
+      else
+        no_values << attr
       end
+    rescue ArgumentError, Puppet::Error, TypeError
+      raise
+    rescue => detail
+      error = Puppet::DevError.new(_("Could not set %{attribute} on %{class_name}: %{detail}") % { attribute: attr, class_name: self.class.name, detail: detail })
+      error.set_backtrace(detail.backtrace)
+      raise error
     end
     no_values.each do |attr|
       set_default(attr)
@@ -2509,7 +2487,7 @@ class Type
     self.class.relationship_params.collect do |klass|
       param = @parameters[klass.name]
       param.validate_relationship if param
-    end.flatten.reject { |r| r.nil? }
+    end.flatten.compact
   end
 
   # @comment For now, leave the 'name' method functioning like it used to.  Once 'title'
@@ -2531,12 +2509,13 @@ class Type
   def parent
     return nil unless catalog
     return @parent if @parent
+
     parents = catalog.adjacent(self, :direction => :in)
     @parent = if parents
-      parents.shift
-    else
-      nil
-    end
+                parents.shift
+              else
+                nil
+              end
   end
 
   # Returns a reference to this as a string in "Type[name]" format.
@@ -2545,7 +2524,7 @@ class Type
   def ref
     # memoizing this is worthwhile ~ 3 percent of calls are the "first time
     # around" in an average run of Puppet. --daniel 2012-07-17
-    @ref ||= "#{self.class.name.to_s.capitalize}[#{self.title}]"
+    @ref ||= "#{self.class.name.to_s.capitalize}[#{title}]"
   end
 
   # (see self_refresh)
@@ -2591,9 +2570,9 @@ class Type
       if self.class.validparameter?(name_var)
         @title = self[:name]
       elsif self.class.validproperty?(name_var)
-        @title = self.should(name_var)
+        @title = should(name_var)
       else
-        self.devfail "Could not find namevar #{name_var} for #{self.class.name}"
+        devfail "Could not find namevar #{name_var} for #{self.class.name}"
       end
     end
 
@@ -2604,22 +2583,23 @@ class Type
   # @see #ref
   #
   def to_s
-    self.ref
+    ref
   end
 
   # Convert this resource type instance to a Puppet::Resource.
   # @return [Puppet::Resource] Returns a serializable representation of this resource
   #
   def to_resource
-    resource = self.retrieve_resource
+    resource = retrieve_resource
     resource.merge_tags_from(self)
 
     @parameters.each do |name, param|
       # Avoid adding each instance name twice
-      next if param.class.isnamevar? and param.value == self.title
+      next if param.class.isnamevar? and param.value == title
 
       # We've already got property values
       next if param.is_a?(Puppet::Property)
+
       resource[name] = param.value
     end
 

@@ -1,11 +1,12 @@
+# frozen_string_literal: true
+
 # @abstract base class for PObjectType and other types that implements lazy evaluation of content
 # @api private
 module Puppet::Pops
 module Types
-
-KEY_NAME = 'name'.freeze
-KEY_TYPE = 'type'.freeze
-KEY_VALUE = 'value'.freeze
+KEY_NAME = 'name'
+KEY_TYPE = 'type'
+KEY_VALUE = 'value'
 
 class PMetaType < PAnyType
   include Annotatable
@@ -68,7 +69,7 @@ class PMetaType < PAnyType
   def resolve_type_refs(loader, o)
     case o
     when Hash
-      Hash[o.map { |k, v| [resolve_type_refs(loader, k), resolve_type_refs(loader, v)] }]
+      o.to_h { |k, v| [resolve_type_refs(loader, k), resolve_type_refs(loader, v)] }
     when Array
       o.map { |e| resolve_type_refs(loader, e) }
     when PAnyType

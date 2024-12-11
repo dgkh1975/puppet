@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2009 Thomas Bellman
 #
 # Permission is hereby granted, free of charge, to any person obtaining
@@ -26,10 +28,10 @@
 
 module Puppet::Parser::Functions
   newfunction(
-  :regsubst, :type => :rvalue,
-  :arity => -4,
+    :regsubst, :type => :rvalue,
+               :arity => -4,
 
-  :doc => "
+               :doc => "
 Perform regexp replacement on a string or array of strings.
 
 * *Parameters* (in order):
@@ -56,7 +58,8 @@ Get the third octet from the node's IP address:
 Put angle brackets around each octet in the node's IP address:
 
     $x = regsubst($ipaddress, '([0-9]+)', '<\\1>', 'G')
-") do |args|
+"
+  ) do |_args|
     Error.is4x('regsubst')
-end
+  end
 end

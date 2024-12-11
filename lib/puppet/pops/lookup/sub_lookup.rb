@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Lookup
 module SubLookup
-  SPECIAL = /['"\.]/
+  SPECIAL = /['".]/
 
   # Split key into segments. A segment may be a quoted string (both single and double quotes can
   # be used) and the segment separator is the '.' character. Whitespace will be trimmed off on
@@ -18,6 +20,7 @@ module SubLookup
   # @api public
   def split_key(key)
     return [key] if key.match(SPECIAL).nil?
+
     segments = key.split(/(\s*"[^"]+"\s*|\s*'[^']+'\s*|[^'".]+)/)
     if segments.empty?
       # Only happens if the original key was an empty string
@@ -28,6 +31,7 @@ module SubLookup
 
       segments.keep_if { |seg| seg != '.' }
       raise yield('Syntax error') unless segments.size * 2 == count + 1
+
       segments.map! do |segment|
         segment.strip!
         if segment.start_with?('"', "'")
@@ -72,8 +76,8 @@ module SubLookup
           else
             unless value.respond_to?(:'[]') && !(value.is_a?(Array) || value.instance_of?(String))
               raise Puppet::DataBinding::LookupError,
-                _("Data Provider type mismatch: Got %{klass} when a hash-like object was expected to access value using '%{segment}' from key '%{key}'") %
-                  { klass: value.class.name, segment: segment, key: key }
+                    _("Data Provider type mismatch: Got %{klass} when a hash-like object was expected to access value using '%{segment}' from key '%{key}'") %
+                    { klass: value.class.name, segment: segment, key: key }
             end
             unless value.include?(segment)
               lookup_invocation.report_not_found(segment)

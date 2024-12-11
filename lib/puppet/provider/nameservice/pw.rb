@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/nameservice/objectadd'
 
 class Puppet::Provider::NameService
@@ -7,15 +9,13 @@ class Puppet::Provider::NameService
     end
 
     def modifycmd(param, value)
-      cmd = [
-          command(:pw),
-          "#{@resource.class.name}mod",
-          @resource[:name],
-          flag(param),
-          munge(param, value)
+      [
+        command(:pw),
+        "#{@resource.class.name}mod",
+        @resource[:name],
+        flag(param),
+        munge(param, value)
       ]
-      cmd
     end
   end
 end
-

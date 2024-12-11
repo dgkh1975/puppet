@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/property'
 
 # This property is automatically added to any {Puppet::Type} that responds
@@ -38,7 +40,9 @@ class Puppet::Property::Ensure < Puppet::Property
     end
 
     # This doc will probably get overridden
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     @doc ||= "The basic property that the resource should be in."
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   def self.inherited(sub)
@@ -48,19 +52,17 @@ class Puppet::Property::Ensure < Puppet::Property
   end
 
   def change_to_s(currentvalue, newvalue)
-    begin
-      if currentvalue == :absent || currentvalue.nil?
-        return _("created")
-      elsif newvalue == :absent
-        return _("removed")
-      else
-        return _('%{name} changed %{is} to %{should}') % { name: name, is: is_to_s(currentvalue), should: should_to_s(newvalue) }
-      end
-    rescue Puppet::Error
-      raise
-    rescue => detail
-      raise Puppet::DevError, _("Could not convert change %{name} to string: %{detail}") % { name: self.name, detail: detail }, detail.backtrace
+    if currentvalue == :absent || currentvalue.nil?
+      _("created")
+    elsif newvalue == :absent
+      _("removed")
+    else
+      _('%{name} changed %{is} to %{should}') % { name: name, is: is_to_s(currentvalue), should: should_to_s(newvalue) }
     end
+  rescue Puppet::Error
+    raise
+  rescue => detail
+    raise Puppet::DevError, _("Could not convert change %{name} to string: %{detail}") % { name: name, detail: detail }, detail.backtrace
   end
 
   # Retrieves the _is_ value for the ensure property.
@@ -86,15 +88,15 @@ class Puppet::Property::Ensure < Puppet::Property
       raise Puppet::DevError, _("No ability to determine if %{name} exists") % { name: @resource.class.name }
     end
     if result
-      return :present
+      :present
     else
-      return :absent
+      :absent
     end
   end
 
   # If they're talking about the thing at all, they generally want to
   # say it should exist.
-  #defaultto :present
+  # defaultto :present
   defaultto do
     if @resource.managed?
       :present
@@ -103,4 +105,3 @@ class Puppet::Property::Ensure < Puppet::Property
     end
   end
 end
-

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Loader
 # BaseLoader
@@ -9,7 +11,6 @@ module Loader
 # @api private
 #
 class BaseLoader < Loader
-
   # The parent loader
   attr_reader :parent
 
@@ -84,7 +85,7 @@ class BaseLoader < Loader
       if typed_name.type == :type && !allow_shadowing?
         entry = loaded_entry(typed_name)
         if entry
-          fail_redefine(entry) unless entry.value.nil? #|| entry.value == value
+          fail_redefine(entry) unless entry.value.nil? # || entry.value == value
         end
       end
 
@@ -148,7 +149,7 @@ class BaseLoader < Loader
   end
 
   def format_uri(uri)
-    (uri.scheme == 'puppet' ? 'by ' : 'at ') + uri.to_s.sub(/^puppet:/,'')
+    (uri.scheme == 'puppet' ? 'by ' : 'at ') + uri.to_s.sub(/^puppet:/, '')
   end
 
   # loads in priority order:
@@ -175,4 +176,3 @@ class BaseLoader < Loader
 end
 end
 end
-

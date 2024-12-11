@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The TypeDefinitionInstantiator instantiates a type alias or a type definition
 #
 module Puppet::Pops
@@ -17,24 +19,24 @@ class TypeDefinitionInstantiator
       # ok
     else
       raise ArgumentError,
-        _("The code loaded from %{source_ref} must contain only the type '%{name}' - it has additional definitions.") % { source_ref: source_ref, name: name }
+            _("The code loaded from %{source_ref} must contain only the type '%{name}' - it has additional definitions.") % { source_ref: source_ref, name: name }
     end
     type_definition = model.definitions[0]
 
     unless type_definition.is_a?(Model::TypeAlias) || type_definition.is_a?(Model::TypeDefinition)
       raise ArgumentError,
-        _("The code loaded from %{source_ref} does not define the type '%{name}' - no type alias or type definition found.") % { source_ref: source_ref, name: name }
+            _("The code loaded from %{source_ref} does not define the type '%{name}' - no type alias or type definition found.") % { source_ref: source_ref, name: name }
     end
 
     actual_name = type_definition.name
     unless name == actual_name.downcase
       raise ArgumentError,
-        _("The code loaded from %{source_ref} produced type with the wrong name, expected '%{name}', actual '%{actual_name}'") % { source_ref: source_ref, name: name, actual_name: actual_name }
+            _("The code loaded from %{source_ref} produced type with the wrong name, expected '%{name}', actual '%{actual_name}'") % { source_ref: source_ref, name: name, actual_name: actual_name }
     end
 
     unless model.body == type_definition
       raise ArgumentError,
-        _("The code loaded from %{source_ref} contains additional logic - can only contain the type '%{name}'") % { source_ref: source_ref, name: name }
+            _("The code loaded from %{source_ref} contains additional logic - can only contain the type '%{name}'") % { source_ref: source_ref, name: name }
     end
 
     # Adapt the type definition with loader - this is used from logic contained in its body to find the
@@ -51,7 +53,8 @@ class TypeDefinitionInstantiator
     loader.set_entry(
       typed_name,
       type,
-      type_definition.locator.to_uri(type_definition))
+      type_definition.locator.to_uri(type_definition)
+    )
     type
   end
 
@@ -89,6 +92,7 @@ class TypeDefinitionInstantiator
   # @api private
   def self.named_definition(te)
     return 'Object' if te.is_a?(Model::LiteralHash)
+
     te.is_a?(Model::AccessExpression) && (left = te.left_expr).is_a?(Model::QualifiedReference) ? left.cased_value : nil
   end
 

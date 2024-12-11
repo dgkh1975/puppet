@@ -3,46 +3,8 @@ require 'puppet/settings'
 
 describe "Defaults" do
   describe ".default_diffargs" do
-    describe "on AIX" do
-      before(:each) do
-        allow(Facter).to receive(:value).with(:kernel).and_return("AIX")
-      end
-
-      describe "on 5.3" do
-        before(:each) do
-          allow(Facter).to receive(:value).with(:kernelmajversion).and_return("5300")
-        end
-
-        it "should be empty" do
-          expect(Puppet.default_diffargs).to eq("")
-        end
-      end
-
-      [ "",
-        nil,
-        "6300",
-        "7300",
-      ].each do |kernel_version|
-        describe "on kernel version #{kernel_version.inspect}" do
-          before(:each) do
-            allow(Facter).to receive(:value).with(:kernelmajversion).and_return(kernel_version)
-          end
-
-          it "should be '-u'" do
-            expect(Puppet.default_diffargs).to eq("-u")
-          end
-        end
-      end
-    end
-
-    describe "on everything else" do
-      before(:each) do
-        allow(Facter).to receive(:value).with(:kernel).and_return("NOT_AIX")
-      end
-
-      it "should be '-u'" do
-        expect(Puppet.default_diffargs).to eq("-u")
-      end
+    it "should be '-u'" do
+      expect(Puppet.default_diffargs).to eq("-u")
     end
   end
 
@@ -139,7 +101,7 @@ describe "Defaults" do
       let(:installdir) { 'C:\Program Files\Puppet Labs\Puppet' }
 
       it 'includes user and system modules' do
-        allow(ENV).to receive(:[]).with("FACTER_env_windows_installdir").and_return(installdir)
+        allow(ENV).to receive(:fetch).with("FACTER_env_windows_installdir", anything).and_return(installdir)
 
         expect(
           Puppet.default_basemodulepath
@@ -167,7 +129,7 @@ describe "Defaults" do
       let(:installdir) { 'C:\Program Files\Puppet Labs\Puppet' }
 
       it 'includes the default vendormoduledir' do
-        allow(ENV).to receive(:[]).with("FACTER_env_windows_installdir").and_return(installdir)
+        allow(ENV).to receive(:fetch).with("FACTER_env_windows_installdir", anything).and_return(installdir)
 
         expect(
           Puppet.default_vendormoduledir
@@ -207,6 +169,14 @@ describe "Defaults" do
       cadir = File.join(Puppet[:ssldir], 'ca')
       FileUtils.mkdir_p(cadir)
       expect(Puppet.default_cadir).to eq(cadir)
+    end
+  end
+
+  describe "#preferred_serialization_format" do
+    it 'raises if PSON is not available', unless: Puppet.features.pson? do
+      expect {
+        Puppet.settings[:preferred_serialization_format] = "pson"
+      }.to raise_error(Puppet::Settings::ValidationError, "The 'puppet-pson' gem must be installed to use the PSON serialization format.")
     end
   end
 end

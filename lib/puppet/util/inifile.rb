@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Module Puppet::IniConfig
 # A generic way to parse .ini style files and manipulate them in memory
 # One 'file' can be made up of several physical files. Changes to sections
@@ -71,14 +73,14 @@ module Puppet::Util::IniConfig
     # exists, return nil
     def [](key)
       entry = find_entry(key)
-      return(entry.nil? ? nil : entry[1])
+      (entry.nil? ? nil : entry[1])
     end
 
     # Format the section as text in the way it should be
     # written to file
     def format
       if @destroy
-        text = ""
+        text = ''.dup
       else
         text = "[#{name}]\n"
         @entries.each do |entry|
@@ -94,17 +96,16 @@ module Puppet::Util::IniConfig
     end
 
     private
+
     def find_entry(key)
       @entries.each do |entry|
         return entry if entry.is_a?(Array) && entry[0] == key
       end
       nil
     end
-
   end
 
   class PhysicalFile
-
     # @!attribute [r] filetype
     #   @api private
     #   @return [Puppet::Util::FileType::FileTypeFlat]
@@ -138,6 +139,7 @@ module Puppet::Util::IniConfig
       if text.nil?
         raise IniParseError, _("Cannot read nonexistent file %{file}") % { file: @file.inspect }
       end
+
       parse(text)
     end
 
@@ -148,7 +150,7 @@ module Puppet::Util::IniConfig
     )
     INI_CONTINUATION = /^[ \t\r\n\f]/
     INI_SECTION_NAME = /^\[([^\]]+)\]/
-    INI_PROPERTY     = /^\s*([^\s=]+)\s*\=\s*(.*)$/
+    INI_PROPERTY     = /^\s*([^\s=]+)\s*=\s*(.*)$/
 
     # @api private
     def parse(text)
@@ -182,7 +184,7 @@ module Puppet::Util::IniConfig
           val = match[2].rstrip
 
           if section.nil?
-            raise IniParseError.new(_("Property with key %{key} outside of a section") % { key: key.inspect })
+            raise IniParseError, _("Property with key %{key} outside of a section") % { key: key.inspect }
           end
 
           section[key] = val
@@ -207,7 +209,7 @@ module Puppet::Util::IniConfig
     end
 
     def format
-      text = ""
+      text = ''.dup
 
       @contents.each do |content|
         if content.is_a? Section
@@ -249,7 +251,7 @@ module Puppet::Util::IniConfig
     private
 
     def section_exists?(name)
-      if self.get_section(name)
+      if get_section(name)
         true
       elsif @file_collection and @file_collection.get_section(name)
         true
@@ -260,7 +262,6 @@ module Puppet::Util::IniConfig
   end
 
   class FileCollection
-
     attr_reader :files
 
     def initialize
@@ -274,9 +275,7 @@ module Puppet::Util::IniConfig
     end
 
     def store
-      @files.values.each do |file|
-        file.store
-      end
+      @files.values.each(&:store)
     end
 
     def each_section(&block)
@@ -305,7 +304,7 @@ module Puppet::Util::IniConfig
     alias [] get_section
 
     def include?(name)
-      !! get_section(name)
+      !!get_section(name)
     end
 
     def add_section(name, file)
@@ -317,11 +316,7 @@ module Puppet::Util::IniConfig
     # Return a file if it's already been defined, create a new file if it hasn't
     # been defined.
     def get_physical_file(file)
-      if @files[file]
-        @files[file]
-      else
-        new_physical_file(file)
-      end
+      @files[file] || new_physical_file(file)
     end
 
     # Create a new physical file and set required attributes on that file.

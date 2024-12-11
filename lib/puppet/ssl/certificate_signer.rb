@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 # Take care of signing a certificate in a FIPS 140-2 compliant manner.
 #
 # @see https://projects.puppetlabs.com/issues/17295
 #
 # @api private
 class Puppet::SSL::CertificateSigner
-
   # @!attribute [r] digest
   #   @return [OpenSSL::Digest]
   attr_reader :digest
@@ -22,9 +23,8 @@ class Puppet::SSL::CertificateSigner
       @digest = OpenSSL::Digest::SHA224
     else
       raise Puppet::Error,
-        "No FIPS 140-2 compliant digest algorithm in OpenSSL::Digest"
+            "No FIPS 140-2 compliant digest algorithm in OpenSSL::Digest"
     end
-    @digest
   end
 
   # Sign a certificate signing request (CSR) with a private key.

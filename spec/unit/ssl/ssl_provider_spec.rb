@@ -113,10 +113,19 @@ describe Puppet::SSL::SSLProvider do
       }.to raise_error(/can't modify frozen/)
     end
 
-    it 'trusts system ca store' do
+    it 'trusts system ca store by default' do
       expect_any_instance_of(OpenSSL::X509::Store).to receive(:set_default_paths)
 
       subject.create_system_context(cacerts: [])
+    end
+
+    it 'trusts an external ca store' do
+      path = tmpfile('system_cacerts')
+      File.write(path, cert_fixture('ca.pem').to_pem)
+
+      expect_any_instance_of(OpenSSL::X509::Store).to receive(:add_file).with(path)
+
+      subject.create_system_context(cacerts: [], path: path)
     end
 
     it 'verifies peer' do
@@ -133,6 +142,47 @@ describe Puppet::SSL::SSLProvider do
       sslctx = subject.create_system_context(cacerts: [])
       expect(sslctx.client_cert).to be_nil
       expect(sslctx.private_key).to be_nil
+    end
+
+    it 'includes the client cert and private key when requested' do
+      Puppet[:hostcert] = fixtures('ssl/signed.pem')
+      Puppet[:hostprivkey] = fixtures('ssl/signed-key.pem')
+      sslctx = subject.create_system_context(cacerts: [], include_client_cert: true)
+      expect(sslctx.client_cert).to be_an(OpenSSL::X509::Certificate)
+      expect(sslctx.private_key).to be_an(OpenSSL::PKey::RSA)
+    end
+
+    it 'ignores non-existent client cert and private key when requested' do
+      Puppet[:certname] = 'doesnotexist'
+      sslctx = subject.create_system_context(cacerts: [], include_client_cert: true)
+      expect(sslctx.client_cert).to be_nil
+      expect(sslctx.private_key).to be_nil
+    end
+
+    it 'warns if the client cert does not exist' do
+      Puppet[:certname] = 'missingcert'
+      Puppet[:hostprivkey] = fixtures('ssl/signed-key.pem')
+
+      expect(Puppet).to receive(:warning).with("Client certificate for 'missingcert' does not exist")
+      subject.create_system_context(cacerts: [], include_client_cert: true)
+    end
+
+    it 'warns if the private key does not exist' do
+      Puppet[:certname] = 'missingkey'
+      Puppet[:hostcert] = fixtures('ssl/signed.pem')
+
+      expect(Puppet).to receive(:warning).with("Private key for 'missingkey' does not exist")
+      subject.create_system_context(cacerts: [], include_client_cert: true)
+    end
+
+    it 'raises if client cert and private key are mismatched' do
+      Puppet[:hostcert] = fixtures('ssl/signed.pem')
+      Puppet[:hostprivkey] = fixtures('ssl/127.0.0.1-key.pem')
+
+      expect {
+        subject.create_system_context(cacerts: [], include_client_cert: true)
+      }.to raise_error(Puppet::SSL::SSLError,
+        "The certificate for 'CN=signed' does not match its private key")
     end
 
     it 'trusts additional system certs' do
@@ -204,7 +254,7 @@ describe Puppet::SSL::SSLProvider do
       }.to raise_error(ArgumentError, /CA certs are missing/)
     end
 
-    it 'raises if CRLs are are missing' do
+    it 'raises if CRLs are missing' do
       expect {
         subject.create_context(**config.merge(crls: nil))
       }.to raise_error(ArgumentError, /CRLs are missing/)
@@ -249,6 +299,7 @@ describe Puppet::SSL::SSLProvider do
     end
 
     it 'raises if client cert signature is invalid' do
+      client_cert.public_key = wrong_key.public_key
       client_cert.sign(wrong_key, OpenSSL::Digest::SHA256.new)
       expect {
         subject.create_context(**config.merge(client_cert: client_cert))
@@ -287,8 +338,9 @@ describe Puppet::SSL::SSLProvider do
       end
     end
 
-    it 'raises if intermediate CA signature is invalid' do
+    it 'raises if intermediate CA signature is invalid', unless: Puppet::Util::Platform.jruby? && RUBY_VERSION.to_f >= 2.6 do
       int = global_cacerts.last
+      int.public_key = wrong_key.public_key if Puppet::Util::Platform.jruby?
       int.sign(wrong_key, OpenSSL::Digest::SHA256.new)
 
       expect {
@@ -339,6 +391,9 @@ describe Puppet::SSL::SSLProvider do
 
     it 'raises if cert is not valid yet', unless: Puppet::Util::Platform.jruby? do
       client_cert.not_before = Time.now + (5 * 60 * 60)
+      int_key = key_fixture('intermediate-key.pem')
+      client_cert.sign(int_key, OpenSSL::Digest::SHA256.new)
+
       expect {
         subject.create_context(**config.merge(client_cert: client_cert))
       }.to raise_error(Puppet::SSL::CertVerifyError,
@@ -347,6 +402,9 @@ describe Puppet::SSL::SSLProvider do
 
     it 'raises if cert is expired', unless: Puppet::Util::Platform.jruby? do
       client_cert.not_after = Time.at(0)
+      int_key = key_fixture('intermediate-key.pem')
+      client_cert.sign(int_key, OpenSSL::Digest::SHA256.new)
+
       expect {
         subject.create_context(**config.merge(client_cert: client_cert))
       }.to raise_error(Puppet::SSL::CertVerifyError,
@@ -409,10 +467,13 @@ describe Puppet::SSL::SSLProvider do
     it "raises if root CA's isCA basic constraint is false", unless: Puppet::Util::Platform.jruby? || OpenSSL::OPENSSL_VERSION_NUMBER < 0x10100000 do
       certs = [cert_fixture('bad-basic-constraints.pem'), cert_fixture('intermediate.pem')]
 
+      # openssl 3 returns 79
+      # define X509_V_ERR_NO_ISSUER_PUBLIC_KEY                 24
+      # define X509_V_ERR_INVALID_CA                           79
       expect {
         subject.create_context(**config.merge(cacerts: certs, crls: [], revocation: false))
       }.to raise_error(Puppet::SSL::CertVerifyError,
-                       "Certificate 'CN=Test CA' failed verification (24): invalid CA certificate")
+                       /Certificate 'CN=Test CA' failed verification \((24|79)\): invalid CA certificate/)
     end
 
     # OpenSSL < 1.1 does not verify basicConstraints
@@ -422,7 +483,7 @@ describe Puppet::SSL::SSLProvider do
       expect {
         subject.create_context(**config.merge(cacerts: certs, crls: [], revocation: false))
       }.to raise_error(Puppet::SSL::CertVerifyError,
-                       "Certificate 'CN=Test CA Subauthority' failed verification (24): invalid CA certificate")
+                       /Certificate 'CN=Test CA Subauthority' failed verification \((24|79)\): invalid CA certificate/)
     end
 
     it 'accepts CA certs in any order' do
@@ -447,6 +508,18 @@ describe Puppet::SSL::SSLProvider do
     it 'verifies peer' do
       sslctx = subject.create_context(**config)
       expect(sslctx.verify_peer).to eq(true)
+    end
+
+    it 'does not trust the system ca store by default' do
+      expect_any_instance_of(OpenSSL::X509::Store).to receive(:set_default_paths).never
+
+      subject.create_context(**config)
+    end
+
+    it 'trusts the system ca store' do
+      expect_any_instance_of(OpenSSL::X509::Store).to receive(:set_default_paths)
+
+      subject.create_context(**config.merge(include_system_store: true))
     end
   end
 
@@ -530,6 +603,18 @@ describe Puppet::SSL::SSLProvider do
         }.to raise_error(Puppet::SSL::SSLError, /Failed to load private key for host 'signed': Could not parse PKey/)
       end
     end
+
+    it 'does not trust the system ca store by default' do
+      expect_any_instance_of(OpenSSL::X509::Store).to receive(:set_default_paths).never
+
+      subject.load_context
+    end
+
+    it 'trusts the system ca store' do
+      expect_any_instance_of(OpenSSL::X509::Store).to receive(:set_default_paths)
+
+      subject.load_context(include_system_store: true)
+    end
   end
 
   context 'when verifying requests' do
@@ -553,6 +638,26 @@ describe Puppet::SSL::SSLProvider do
         subject.verify_request(csr, csr.public_key)
       }.to raise_error(Puppet::SSL::SSLError,
                        "The CSR for host 'CN=signed' does not match the public key")
+    end
+  end
+
+  context 'printing' do
+    let(:client_cert) { cert_fixture('signed.pem') }
+    let(:private_key) { key_fixture('signed-key.pem') }
+    let(:config) { { cacerts: global_cacerts, crls: global_crls, client_cert: client_cert, private_key: private_key } }
+
+    it 'prints in debug' do
+      Puppet[:log_level] = 'debug'
+
+      ctx = subject.create_context(**config)
+      subject.print(ctx)
+      expect(@logs.map(&:message)).to include(
+        /Verified CA certificate 'CN=Test CA' fingerprint/,
+        /Verified CA certificate 'CN=Test CA Subauthority' fingerprint/,
+        /Verified client certificate 'CN=signed' fingerprint/,
+        /Using CRL 'CN=Test CA' authorityKeyIdentifier '(keyid:)?[A-Z0-9:]{59}' crlNumber '0'/,
+        /Using CRL 'CN=Test CA Subauthority' authorityKeyIdentifier '(keyid:)?[A-Z0-9:]{59}' crlNumber '0'/
+      )
     end
   end
 end

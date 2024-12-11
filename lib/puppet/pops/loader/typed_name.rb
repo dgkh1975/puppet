@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Loader
 # A namespace/name/type combination that can be used as a compound hash key
@@ -19,14 +21,14 @@ class TypedName
     parts = name.to_s.split(DOUBLE_COLON)
     if parts[0].empty?
       parts.shift
-      @name = name[2..-1]
+      @name = name[2..]
     else
       @name = name
     end
     @name_parts = parts.freeze
 
     # Use a frozen compound key for the hash and comparison. Most varying part first
-    @compound_name = "#{@name}/#{@type}/#{@name_authority}".freeze
+    @compound_name = "#{@name}/#{@type}/#{@name_authority}"
     @hash = @compound_name.hash
     freeze
   end

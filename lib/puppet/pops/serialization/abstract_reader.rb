@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'extension'
 require_relative 'time_factory'
 
@@ -114,7 +116,7 @@ class AbstractReader
     end
 
     register_type(Extension::DEFAULT) do |data|
-      read_payload(data) { |ep| Extension::Default::INSTANCE }
+      read_payload(data) { |_ep| Extension::Default::INSTANCE }
     end
 
     register_type(Extension::COMMENT) do |data|
@@ -122,7 +124,7 @@ class AbstractReader
     end
 
     register_type(Extension::SENSITIVE_START) do |data|
-      read_payload(data) { |ep| Extension::SensitiveStart::INSTANCE }
+      read_payload(data) { |_ep| Extension::SensitiveStart::INSTANCE }
     end
 
     register_type(Extension::REGEXP) do |data|
@@ -141,7 +143,7 @@ class AbstractReader
       read_payload(data) do |ep|
         sec = ep.read
         nsec = ep.read
-        Time::Timestamp.new(sec * 1000000000 + nsec)
+        Time::Timestamp.new(sec * 1_000_000_000 + nsec)
       end
     end
 
@@ -149,7 +151,7 @@ class AbstractReader
       read_payload(data) do |ep|
         sec = ep.read
         nsec = ep.read
-        Time::Timespan.new(sec * 1000000000 + nsec)
+        Time::Timespan.new(sec * 1_000_000_000 + nsec)
       end
     end
 

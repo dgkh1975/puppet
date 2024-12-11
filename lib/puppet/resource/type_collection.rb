@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative '../../puppet/parser/type_loader'
 require_relative '../../puppet/util/file_watcher'
 require_relative '../../puppet/util/warnings'
@@ -24,6 +25,7 @@ class Puppet::Resource::TypeCollection
     @definitions = {}
     @nodes = {}
     @notfound = {}
+    # always lock the environment before acquiring this lock
     @lock = Puppet::Concurrent::Lock.new
 
     # So we can keep a list and match the first-defined regex
@@ -72,6 +74,7 @@ class Puppet::Resource::TypeCollection
   def handle_hostclass_merge(instance)
     # Only main class (named '') can be merged (for purpose of merging top-scopes).
     return instance unless instance.name == ''
+
     if instance.type == :hostclass && (other = @hostclasses[instance.name]) && other.type == :hostclass
       other.merge(instance)
       # throw is used to signal merge - avoids dupe checks and adding it to hostclasses
@@ -80,11 +83,11 @@ class Puppet::Resource::TypeCollection
   end
 
   # Replaces the known settings with a new instance (that must be named 'settings').
-  # This is primarily needed for testing purposes. Also see PUP-5954 as it makes 
+  # This is primarily needed for testing purposes. Also see PUP-5954 as it makes
   # it illegal to merge classes other than the '' (main) class. Prior to this change
   # settings where always merged rather than being defined from scratch for many testing scenarios
   # not having a complete side effect free setup for compilation.
-  # 
+  #
   def replace_settings(instance)
     @hostclasses['settings'] = instance
   end
@@ -165,7 +168,7 @@ class Puppet::Resource::TypeCollection
   end
 
   def version
-    if !defined?(@version)
+    unless defined?(@version)
       if environment.config_version.nil? || environment.config_version == ""
         @version = Time.now.to_i
       else
@@ -185,26 +188,29 @@ class Puppet::Resource::TypeCollection
   # Resolve namespaces and find the given object.  Autoload it if
   # necessary.
   def find_or_load(name, type)
-    @lock.synchronize do
-      # Name is always absolute, but may start with :: which must be removed
-      fqname = (name[0,2] == COLON_COLON ? name[2..-1] : name)
+    # always lock the environment before locking the type collection
+    @environment.lock.synchronize do
+      @lock.synchronize do
+        # Name is always absolute, but may start with :: which must be removed
+        fqname = (name[0, 2] == COLON_COLON ? name[2..] : name)
 
-      result = send(type, fqname)
-      unless result
-        if @notfound[ fqname ] && Puppet[ :ignoremissingtypes ]
-          # do not try to autoload if we already tried and it wasn't conclusive
-          # as this is a time consuming operation. Warn the user.
-          # Check first if debugging is on since the call to debug_once is expensive
-          if Puppet[:debug]
-            debug_once _("Not attempting to load %{type} %{fqname} as this object was missing during a prior compilation") % { type: type, fqname: fqname }
+        result = send(type, fqname)
+        unless result
+          if @notfound[fqname] && Puppet[:ignoremissingtypes]
+            # do not try to autoload if we already tried and it wasn't conclusive
+            # as this is a time consuming operation. Warn the user.
+            # Check first if debugging is on since the call to debug_once is expensive
+            if Puppet[:debug]
+              debug_once _("Not attempting to load %{type} %{fqname} as this object was missing during a prior compilation") % { type: type, fqname: fqname }
+            end
+          else
+            fqname = munge_name(fqname)
+            result = loader.try_load_fqname(type, fqname)
+            @notfound[fqname] = result.nil?
           end
-        else
-          fqname = munge_name(fqname)
-          result = loader.try_load_fqname(type, fqname)
-          @notfound[ fqname ] = result.nil?
         end
+        result
       end
-      result
     end
   end
 
@@ -215,12 +221,14 @@ class Puppet::Resource::TypeCollection
   def dupe_check(instance, hash)
     dupe = hash[instance.name]
     return unless dupe
+
     message = yield dupe
     instance.fail Puppet::ParseError, message
   end
 
   def dupe_check_singleton(instance, set)
     return if set.empty?
+
     message = yield set[0]
     instance.fail Puppet::ParseError, message
   end

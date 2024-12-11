@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/parameter/value'
 
 # A collection of values and regular expressions, used for specifying allowed values
@@ -11,7 +13,6 @@ require_relative '../../puppet/parameter/value'
 # @api private
 #
 class Puppet::Parameter::ValueCollection
-
   # Aliases the given existing _other_ value with the additional given _name_.
   # @return [void]
   # @api private
@@ -30,13 +31,13 @@ class Puppet::Parameter::ValueCollection
   #
   def doc
     unless defined?(@doc)
-      @doc = ""
+      @doc = ''.dup
       unless values.empty?
         @doc << "Valid values are "
         @doc << @strings.collect do |value|
           aliases = value.aliases
-          if aliases && ! aliases.empty?
-            "`#{value.name}` (also called `#{aliases.join(", ")}`)"
+          if aliases && !aliases.empty?
+            "`#{value.name}` (also called `#{aliases.join(', ')}`)"
           else
             "`#{value.name}`"
           end
@@ -44,7 +45,7 @@ class Puppet::Parameter::ValueCollection
       end
 
       unless regexes.empty?
-        @doc << "Values can match `#{regexes.join("`, `")}`."
+        @doc << "Values can match `#{regexes.join('`, `')}`."
       end
     end
 
@@ -102,12 +103,12 @@ class Puppet::Parameter::ValueCollection
     instance = match?(value)
     if instance
       if instance.regex?
-        return value
+        value
       else
-        return instance.name
+        instance.name
       end
     else
-      return value
+      value
     end
   end
 
@@ -120,7 +121,7 @@ class Puppet::Parameter::ValueCollection
   # @option options [Symbol] :event The event that should be emitted when this value is set.
   # @todo Option :event original comment says "event should be returned...", is "returned" the correct word
   #   to use?
- # @option options [Symbol] :invalidate_refreshes True if a change on this property should invalidate and
+  # @option options [Symbol] :invalidate_refreshes True if a change on this property should invalidate and
   #   remove any scheduled refreshes (from notify or subscribe) targeted at the same resource. For example, if
   #   a change in this property takes into account any changes that a scheduled refresh would have performed,
   #   then the scheduled refresh would be deleted.
@@ -133,11 +134,11 @@ class Puppet::Parameter::ValueCollection
     call_opt = options[:call]
     unless call_opt.nil?
       devfail "Cannot use obsolete :call value '#{call_opt}' for property '#{self.class.name}'" unless call_opt == :none || call_opt == :instead
-      #TRANSLATORS ':call' is a property and should not be translated
+      # TRANSLATORS ':call' is a property and should not be translated
       message = _("Property option :call is deprecated and no longer used.")
       message += ' ' + _("Please remove it.")
       Puppet.deprecation_warning(message)
-      options = options.reject { |k,v| k == :call }
+      options = options.reject { |k, _v| k == :call }
     end
 
     value = Puppet::Parameter::Value.new(name)
@@ -152,9 +153,9 @@ class Puppet::Parameter::ValueCollection
     if block_given?
       devfail "Cannot use :call value ':none' in combination with a block for property '#{self.class.name}'" if call_opt == :none
       value.block = block
-      value.method ||= "set_#{value.name}" if !value.regex?
-    else
-      devfail "Cannot use :call value ':instead' without a block for property '#{self.class.name}'" if call_opt == :instead
+      value.method ||= "set_#{value.name}" unless value.regex?
+    elsif call_opt == :instead
+      devfail "Cannot use :call value ':instead' without a block for property '#{self.class.name}'"
     end
     value
   end
@@ -183,7 +184,7 @@ class Puppet::Parameter::ValueCollection
   def validate(value)
     return if empty?
 
-    unless @values.detect {|name, v| v.match?(value)}
+    unless @values.detect { |_name, v| v.match?(value) }
       str = _("Invalid value %{value}.") % { value: value.inspect }
       str += " " + _("Valid values are %{value_list}.") % { value_list: values.join(", ") } unless values.empty?
       str += " " + _("Valid values match %{pattern}.") % { pattern: regexes.join(", ") } unless regexes.empty?
@@ -207,6 +208,6 @@ class Puppet::Parameter::ValueCollection
   # @api private
   #
   def values
-    @strings.collect { |s| s.name }
+    @strings.collect(&:name)
   end
 end

@@ -503,6 +503,9 @@ Searching for "a"
       include PuppetSpec::Files
 
       it "is unaffected by global variables unless '--compile' is used" do
+        # strict mode is off so behavior this test is trying to check isn't stubbed out
+        Puppet[:strict_variables] = false
+        Puppet[:strict] = :warning
         lookup.options[:node] = node
         lookup.options[:render_as] = :s
         allow(lookup.command_line).to receive(:args).and_return(['c'])
@@ -518,33 +521,162 @@ Searching for "a"
       end
 
       it 'receives extra facts in top scope' do
-        file_path = tmpdir('lookup_spec')
-        filename = File.join(file_path, "facts.yaml")
-        File.open(filename, "w+") { |f| f.write(<<-YAML.unindent) }
+        file_path = file_containing('facts.yaml', <<~CONTENT)
           ---
           cx: ' C from facts'
-          YAML
+        CONTENT
 
         lookup.options[:node] = node
-        lookup.options[:fact_file] = filename
+        lookup.options[:fact_file] = file_path
         lookup.options[:render_as] = :s
         allow(lookup.command_line).to receive(:args).and_return(['c'])
         expect(run_lookup(lookup)).to eql("This is C from facts")
       end
 
       it 'receives extra facts in the facts hash' do
-        file_path = tmpdir('lookup_spec')
-        filename = File.join(file_path, "facts.yaml")
-        File.open(filename, "w+") { |f| f.write(<<-YAML.unindent) }
+        file_path = file_containing('facts.yaml', <<~CONTENT)
           ---
           cx: ' G from facts'
-        YAML
+        CONTENT
 
         lookup.options[:node] = node
-        lookup.options[:fact_file] = filename
+        lookup.options[:fact_file] = file_path
         lookup.options[:render_as] = :s
         allow(lookup.command_line).to receive(:args).and_return(['g'])
         expect(run_lookup(lookup)).to eql("This is G from facts in facts hash")
+      end
+
+      it 'looks up server facts' do
+        lookup.options[:node] = node
+        lookup.options[:render_as] = :s
+        allow(lookup.command_line).to receive(:args).and_return(['h'])
+        expect(run_lookup(lookup)).to eql("server version is #{Puppet.version}")
+      end
+
+      describe 'when retrieving given facts' do
+        before do
+          lookup.options[:node] = node
+          allow(lookup.command_line).to receive(:args).and_return(['g'])
+        end
+
+        it 'loads files with yaml extension as yaml on first try' do
+          file_path = file_containing('facts.yaml', <<~CONTENT)
+            ---
+            cx: ' G from facts'
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect(Puppet::Util::Yaml).to receive(:safe_load_file).with(file_path, []).and_call_original
+          run_lookup(lookup)
+        end
+
+        it 'loads files with yml extension as yaml on first try' do
+          file_path = file_containing('facts.yml', <<~CONTENT)
+            ---
+            cx: ' G from facts'
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect(Puppet::Util::Yaml).to receive(:safe_load_file).with(file_path, []).and_call_original
+          run_lookup(lookup)
+        end
+
+        it 'loads files with json extension as json on first try' do
+          file_path = file_containing('facts.json', <<~CONTENT)
+            {
+              "cx": " G from facts"
+            }
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect(Puppet::Util::Json).to receive(:load_file).with(file_path, {}).and_call_original
+          run_lookup(lookup)
+        end
+
+        it 'detects file format accordingly even with random file extension' do
+          file_path = file_containing('facts.txt', <<~CONTENT)
+            {
+              "cx": " G from facts"
+            }
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect(Puppet::Util::Json).to receive(:load_file_if_valid).with(file_path).and_call_original
+          expect(Puppet::Util::Yaml).not_to receive(:safe_load_file_if_valid).with(file_path)
+          run_lookup(lookup)
+        end
+
+        it 'detects file without extension as json due to valid contents' do
+          file_path = file_containing('facts', <<~CONTENT)
+            {
+              "cx": " G from facts"
+            }
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect(Puppet::Util::Json).to receive(:load_file_if_valid).with(file_path).and_call_original
+          expect(Puppet::Util::Yaml).not_to receive(:safe_load_file_if_valid).with(file_path)
+          run_lookup(lookup)
+        end
+
+        it 'detects file without extension as yaml due to valid contents' do
+          file_path = file_containing('facts', <<~CONTENT)
+            ---
+            cx: ' G from facts'
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect(Puppet::Util::Json.load_file_if_valid(file_path)).to be_nil
+          expect(Puppet::Util::Yaml).to receive(:safe_load_file_if_valid).with(file_path).and_call_original
+          run_lookup(lookup)
+        end
+
+        it 'raises error due to invalid contents' do
+          file_path = file_containing('facts.yml', <<~CONTENT)
+            INVALID CONTENT
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect {
+            lookup.run_command
+          }.to raise_error(/Incorrectly formatted data in .+ given via the --facts flag \(only accepts yaml and json files\)/)
+        end
+
+        it "fails when a node doesn't have facts" do
+          lookup.options[:node] = "bad.node"
+          allow(lookup.command_line).to receive(:args).and_return(['c'])
+
+          expected_error = "No facts available for target node: #{lookup.options[:node]}"
+          expect { lookup.run_command }.to raise_error(RuntimeError, expected_error)
+        end
+
+        it 'raises error due to missing trusted information facts in --facts file' do
+          file_path = file_containing('facts.yaml', <<~CONTENT)
+            ---
+            fqdn: some.fqdn.com
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect {
+            lookup.run_command
+          }.to raise_error(/When overriding any of the hostname,domain,fqdn,clientcert facts with #{file_path} given via the --facts flag, they must all be overridden./)
+        end
+
+        it 'does not fail when all trusted information facts are provided via --facts file' do
+          file_path = file_containing('facts.yaml', <<~CONTENT)
+            ---
+            fqdn: some.fqdn.com
+            hostname: some.hostname
+            domain: some.domain
+            clientcert: some.clientcert
+          CONTENT
+          lookup.options[:fact_file] = file_path
+
+          expect {
+            lookup.run_command
+          }.to exit_with(0)
+           .and output(/This is in facts hash/).to_stdout
+        end
       end
     end
 
@@ -552,6 +684,9 @@ Searching for "a"
       let(:node) { Puppet::Node.new("testnode", :facts => facts, :environment => 'puppet_func_provider') }
 
       it "works OK in the absense of '--compile'" do
+        # strict mode is off so behavior this test is trying to check isn't stubbed out
+        Puppet[:strict_variables] = false
+        Puppet[:strict] = :warning
         lookup.options[:node] = node
         allow(lookup.command_line).to receive(:args).and_return(['c'])
         lookup.options[:render_as] = :s

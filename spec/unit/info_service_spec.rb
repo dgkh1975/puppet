@@ -11,6 +11,9 @@ describe "Puppet::InfoService" do
 
   context 'task information service' do
     let(:mod_name) { 'test1' }
+    let(:metadata) {
+      { "private" => true,
+        "description" => "a task that does a thing" } }
     let(:task_name) { "#{mod_name}::thingtask" }
     let(:modpath) { tmpdir('modpath') }
     let(:env_name) { 'testing' }
@@ -20,8 +23,34 @@ describe "Puppet::InfoService" do
     context 'tasks_per_environment method' do
       it "returns task data for the tasks in an environment" do
         Puppet.override(:environments => env_loader) do
-          PuppetSpec::Modules.create(mod_name, modpath, {:environment => env, :tasks => [['thingtask']]})
-          expect(Puppet::InfoService.tasks_per_environment(env_name)).to eq([{:name => task_name, :module => {:name => mod_name}}])
+          PuppetSpec::Modules.create(mod_name, modpath, {:environment => env,
+                                                         :tasks => [['thingtask',
+                                                                     {:name => 'thingtask.json',
+                                                                      :content => metadata.to_json}]]})
+          expect(Puppet::InfoService.tasks_per_environment(env_name)).to eq([{:name => task_name,
+                                                                              :module => {:name => mod_name},
+                                                                              :metadata => metadata}  ])
+        end
+      end
+
+      it "returns task data for valid tasks in an environment even if invalid tasks exist" do
+        Puppet.override(:environments => env_loader) do
+          @mod = PuppetSpec::Modules.create(mod_name, modpath, {:environment => env,
+                                                                :tasks => [['atask',
+                                                                            {:name => 'atask.json',
+                                                                             :content => metadata.to_json}],
+                                                                           ['btask',
+                                                                            {:name => 'btask.json',
+                                                                             :content => metadata.to_json}],
+                                                                           ['ctask',
+                                                                            {:name => 'ctask.json',
+                                                                             :content => metadata.to_json}]]})
+          File.write("#{modpath}/#{mod_name}/tasks/atask.json", "NOT JSON")
+
+          expect(Puppet).to receive(:send_log).with(:err, /unexpected token at 'NOT JSON'/)
+
+          @tasks = Puppet::InfoService.tasks_per_environment(env_name)
+          expect(@tasks.map{|t| t[:name]}).to contain_exactly('test1::btask', 'test1::ctask')
         end
       end
 
@@ -207,7 +236,7 @@ describe "Puppet::InfoService" do
       end
     end
   end
-  
+
   context 'plan information service' do
     let(:mod_name) { 'test1' }
     let(:plan_name) { "#{mod_name}::thingplan" }
@@ -284,6 +313,12 @@ describe "Puppet::InfoService" do
         CODE
         'json_unsafe.pp' => <<-CODE,
              class json_unsafe($arg1 = /.*/, $arg2 = default, $arg3 = {1 => 1}) {}
+        CODE
+        'non_literal.pp' => <<-CODE,
+            class oops(Integer[1-3] $bad_int) { }
+        CODE
+        'non_literal_2.pp' => <<-CODE,
+           class oops_2(Optional[[String]] $double_brackets) { }
           CODE
        })
     end
@@ -478,6 +513,22 @@ describe "Puppet::InfoService" do
                 ]}
             ]}} # end production env
          })
+     end
+
+     it "errors with a descriptive message if non-literal class parameter is given" do
+       files = ['non_literal.pp', 'non_literal_2.pp'].map {|f| File.join(code_dir, f) }
+       result = Puppet::InfoService.classes_per_environment({'production' => files })
+       expect(@logs).to have_matching_log_with_source(/The parameter '\$bad_int' must be a literal type, not a Puppet::Pops::Model::AccessExpression/, "#{code_dir}/non_literal.pp", 1, 37)
+       expect(@logs).to have_matching_log_with_source(/The parameter '\$double_brackets' must be a literal type, not a Puppet::Pops::Model::AccessExpression/, "#{code_dir}/non_literal_2.pp", 1, 44)
+
+       expect(result).to eq({
+        "production"=>{
+           "#{code_dir}/non_literal.pp" =>
+           {:error=> "The parameter '\$bad_int' is invalid: The expression <1-3> is not a valid type specification."},
+           "#{code_dir}/non_literal_2.pp" =>
+           {:error=> "The parameter '\$double_brackets' is invalid: The expression <Optional[[String]]> is not a valid type specification."}
+          } # end production env
+        })
      end
 
     it "produces no type entry if type is not given" do

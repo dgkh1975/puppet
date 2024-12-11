@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Evaluator
 # AccessOperator handles operator []
@@ -32,7 +34,7 @@ class AccessOperator
       access_func = type['[]']
       return access_func.invoke(o, scope, keys) unless access_func.nil?
     end
-    fail(Issues::OPERATOR_NOT_APPLICABLE, @semantic.left_expr, :operator=>'[]', :left_value => o)
+    fail(Issues::OPERATOR_NOT_APPLICABLE, @semantic.left_expr, :operator => '[]', :left_value => o)
   end
 
   def access_Binary(o, scope, keys)
@@ -42,36 +44,36 @@ class AccessOperator
   def access_String(o, scope, keys)
     keys.flatten!
     result = case keys.size
-    when 0
-      fail(Issues::BAD_STRING_SLICE_ARITY, @semantic.left_expr, {:actual => keys.size})
-    when 1
-      # Note that Ruby 1.8.7 requires a length of 1 to produce a String
-      k1 = Utils.to_n(keys[0])
-      bad_string_access_key_type(o, 0, k1.nil? ? keys[0] : k1) unless k1.is_a?(Integer)
-      k2 = 1
-      k1 = k1 < 0 ? o.length + k1 : k1           # abs pos
-      # if k1 is outside, a length of 1 always produces an empty string
-      if k1 < 0
-        EMPTY_STRING
-      else
-        o[ k1, k2 ]
-      end
-    when 2
-      k1 = Utils.to_n(keys[0])
-      k2 = Utils.to_n(keys[1])
-      [k1, k2].each_with_index { |k,i| bad_string_access_key_type(o, i, k.nil? ? keys[i] : k) unless k.is_a?(Integer) }
+             when 0
+               fail(Issues::BAD_STRING_SLICE_ARITY, @semantic.left_expr, { :actual => keys.size })
+             when 1
+               # Note that Ruby 1.8.7 requires a length of 1 to produce a String
+               k1 = Utils.to_n(keys[0])
+               bad_string_access_key_type(o, 0, k1.nil? ? keys[0] : k1) unless k1.is_a?(Integer)
+               k2 = 1
+               k1 = k1 < 0 ? o.length + k1 : k1 # abs pos
+               # if k1 is outside, a length of 1 always produces an empty string
+               if k1 < 0
+                 EMPTY_STRING
+               else
+                 o[k1, k2]
+               end
+             when 2
+               k1 = Utils.to_n(keys[0])
+               k2 = Utils.to_n(keys[1])
+               [k1, k2].each_with_index { |k, i| bad_string_access_key_type(o, i, k.nil? ? keys[i] : k) unless k.is_a?(Integer) }
 
-      k1 = k1 < 0 ? o.length + k1 : k1           # abs pos (negative is count from end)
-      k2 = k2 < 0 ? o.length - k1 + k2 + 1 : k2  # abs length (negative k2 is length from pos to end count)
-      # if k1 is outside, adjust to first position, and adjust length
-      if k1 < 0
-        k2 = k2 + k1
-        k1 = 0
-      end
-      o[ k1, k2 ]
-    else
-      fail(Issues::BAD_STRING_SLICE_ARITY, @semantic.left_expr, {:actual => keys.size})
-    end
+               k1 = k1 < 0 ? o.length + k1 : k1           # abs pos (negative is count from end)
+               k2 = k2 < 0 ? o.length - k1 + k2 + 1 : k2  # abs length (negative k2 is length from pos to end count)
+               # if k1 is outside, adjust to first position, and adjust length
+               if k1 < 0
+                 k2 += k1
+                 k1 = 0
+               end
+               o[k1, k2]
+             else
+               fail(Issues::BAD_STRING_SLICE_ARITY, @semantic.left_expr, { :actual => keys.size })
+             end
     # Specified as: an index outside of range, or empty result == empty string
     (result.nil? || result.empty?) ? EMPTY_STRING : result
   end
@@ -82,7 +84,7 @@ class AccessOperator
     keys.flatten!
     unless keys.size == 1
       blamed = keys.size == 0 ? @semantic : @semantic.keys[1]
-      fail(Issues::BAD_TYPE_SLICE_ARITY, blamed, :base_type => o, :min=>1, :actual => keys.size)
+      fail(Issues::BAD_TYPE_SLICE_ARITY, blamed, :base_type => o, :min => 1, :actual => keys.size)
     end
     assert_keys(keys, o, 1, 1, String, Regexp)
     Types::TypeFactory.regexp(*keys)
@@ -94,7 +96,7 @@ class AccessOperator
     keys.flatten!
     case keys.size
     when 0
-      fail(Issues::BAD_ARRAY_SLICE_ARITY, @semantic.left_expr, {:actual => keys.size})
+      fail(Issues::BAD_ARRAY_SLICE_ARITY, @semantic.left_expr, { :actual => keys.size })
     when 1
       key = coerce_numeric(keys[0], @semantic.keys[0], scope)
       unless key.is_a?(Integer)
@@ -106,7 +108,7 @@ class AccessOperator
       k1 = coerce_numeric(keys[0], @semantic.keys[0], scope)
       k2 = coerce_numeric(keys[1], @semantic.keys[1], scope)
 
-      [k1, k2].each_with_index { |k,i| bad_access_key_type(o, i, k, Integer) unless k.is_a?(Integer) }
+      [k1, k2].each_with_index { |k, i| bad_access_key_type(o, i, k, Integer) unless k.is_a?(Integer) }
 
       # Help confused Ruby do the right thing (it truncates to the right, but negative index + length can never overlap
       # the available range.
@@ -114,17 +116,16 @@ class AccessOperator
       k2 = k2 < 0 ? o.length - k1 + k2 + 1 : k2  # abs length (negative k2 is length from pos to end count)
       # if k1 is outside, adjust to first position, and adjust length
       if k1 < 0
-        k2 = k2 + k1
+        k2 += k1
         k1 = 0
       end
       # Help ruby always return empty array when asking for a sub array
-      result = o[ k1, k2 ]
+      result = o[k1, k2]
       result.nil? ? [] : result
     else
-      fail(Issues::BAD_ARRAY_SLICE_ARITY, @semantic.left_expr, {:actual => keys.size})
+      fail(Issues::BAD_ARRAY_SLICE_ARITY, @semantic.left_expr, { :actual => keys.size })
     end
   end
-
 
   # Evaluates <hsh>[] with support for one or more arguments. If more than one argument is used, the result
   # is an array with each lookup.
@@ -139,7 +140,7 @@ class AccessOperator
     end
     case result.size
     when 0
-      fail(Issues::BAD_HASH_SLICE_ARITY, @semantic.left_expr, {:actual => keys.size})
+      fail(Issues::BAD_HASH_SLICE_ARITY, @semantic.left_expr, { :actual => keys.size })
     when 1
       result.pop
     else
@@ -181,13 +182,15 @@ class AccessOperator
 
   def access_PTimestampType(o, scope, keys)
     keys.flatten!
-    fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min=>0, :max => 2, :actual => keys.size) if keys.size > 2
+    fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min => 0, :max => 2, :actual => keys.size) if keys.size > 2
+
     Types::TypeFactory.timestamp(*keys)
   end
 
   def access_PTimespanType(o, scope, keys)
     keys.flatten!
-    fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min=>0, :max => 2, :actual => keys.size) if keys.size > 2
+    fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min => 0, :max => 2, :actual => keys.size) if keys.size > 2
+
     Types::TypeFactory.timespan(*keys)
   end
 
@@ -207,8 +210,9 @@ class AccessOperator
   def access_PCallableType(o, scope, keys)
     if keys.size > 0 && keys[0].is_a?(Array)
       unless keys.size == 2
-        fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min=>2, :max => 2, :actual => keys.size)
+        fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min => 2, :max => 2, :actual => keys.size)
       end
+
       unless keys[1].is_a?(Types::PAnyType)
         bad_type_specialization_key_type(o, 1, k, Types::PAnyType)
       end
@@ -229,7 +233,7 @@ class AccessOperator
     when 2
       size_t = collection_size_t(0, keys[0], keys[1])
     else
-      fail(Issues::BAD_STRING_SLICE_ARITY, @semantic, {:actual => keys.size})
+      fail(Issues::BAD_STRING_SLICE_ARITY, @semantic, { :actual => keys.size })
     end
     Types::TypeFactory.string(size_t)
   end
@@ -245,10 +249,11 @@ class AccessOperator
   def assert_keys(keys, o, min, max, *allowed_classes)
     size = keys.size
     unless size.between?(min, max || Float::INFINITY)
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min=>1, :max => max, :actual => keys.size)
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, :base_type => o, :min => 1, :max => max, :actual => keys.size)
     end
+
     keys.each_with_index do |k, i|
-      unless allowed_classes.any? {|clazz| k.is_a?(clazz) }
+      unless allowed_classes.any? { |clazz| k.is_a?(clazz) }
         bad_type_specialization_key_type(o, i, k, *allowed_classes)
       end
     end
@@ -256,17 +261,17 @@ class AccessOperator
 
   def bad_access_key_type(lhs, key_index, actual, *expected_classes)
     fail(Issues::BAD_SLICE_KEY_TYPE, @semantic.keys[key_index], {
-      :left_value => lhs,
-      :actual => bad_key_type_name(actual),
-      :expected_classes => expected_classes
-    })
+           :left_value => lhs,
+           :actual => bad_key_type_name(actual),
+           :expected_classes => expected_classes
+         })
   end
 
   def bad_string_access_key_type(lhs, key_index, actual)
     fail(Issues::BAD_STRING_SLICE_KEY_TYPE, @semantic.keys[key_index], {
-      :left_value => lhs,
-      :actual_type => bad_key_type_name(actual),
-    })
+           :left_value => lhs,
+           :actual_type => bad_key_type_name(actual),
+         })
   end
 
   def bad_key_type_name(actual)
@@ -282,11 +287,11 @@ class AccessOperator
 
   def bad_type_specialization_key_type(type, key_index, actual, *expected_classes)
     label_provider = Model::ModelLabelProvider.new()
-    expected = expected_classes.map {|c| label_provider.label(c) }.join(' or ')
+    expected = expected_classes.map { |c| label_provider.label(c) }.join(' or ')
     fail(Issues::BAD_TYPE_SPECIALIZATION, @semantic.keys[key_index], {
-      :type => type,
-      :message => _("Cannot use %{key} where %{expected} is expected") % { key: bad_key_type_name(actual), expected: expected }
-    })
+           :type => type,
+           :message => _("Cannot use %{key} where %{expected} is expected") % { key: bad_key_type_name(actual), expected: expected }
+         })
   end
 
   def access_PPatternType(o, scope, keys)
@@ -300,11 +305,12 @@ class AccessOperator
     if keys.size == 1
       param = keys[0]
       unless Types::PURIType::TYPE_URI_PARAM_TYPE.instance?(param)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'URI-Type', :actual => param.class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'URI-Type', :actual => param.class })
       end
+
       Types::PURIType.new(param)
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'URI-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'URI-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -316,12 +322,12 @@ class AccessOperator
         if type.is_a?(String)
           type = Types::TypeFactory.string(type)
         else
-          fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Optional-Type', :actual => type.class})
+          fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Optional-Type', :actual => type.class })
         end
       end
       Types::POptionalType.new(type)
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'Optional-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'Optional-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -330,11 +336,12 @@ class AccessOperator
     if keys.size == 1
       type = keys[0]
       unless type.is_a?(Types::PAnyType)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Sensitive-Type', :actual => type.class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Sensitive-Type', :actual => type.class })
       end
+
       Types::PSensitiveType.new(type)
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'Sensitive-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'Sensitive-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -342,12 +349,10 @@ class AccessOperator
     keys.flatten!
     if o.resolved? && !o.name.nil?
       Types::PObjectTypeExtension.create(o, keys)
+    elsif keys.size == 1
+      Types::TypeFactory.object(keys[0])
     else
-      if keys.size == 1
-        Types::TypeFactory.object(keys[0])
-      else
-        fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'Object-Type', :min => 1, :actual => keys.size})
-      end
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'Object-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -356,7 +361,7 @@ class AccessOperator
     if keys.size == 1
       Types::TypeFactory.type_set(keys[0])
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'TypeSet-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'TypeSet-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -371,13 +376,13 @@ class AccessOperator
       when String
         type = Types::TypeFactory.string(type)
       when Types::PAnyType
-        type = nil if type.class == Types::PAnyType
+        type = nil if type.instance_of?(Types::PAnyType)
       else
-        fail(Issues::BAD_NOT_UNDEF_SLICE_TYPE, @semantic.keys[0], {:base_type => 'NotUndef-Type', :actual => type.class})
+        fail(Issues::BAD_NOT_UNDEF_SLICE_TYPE, @semantic.keys[0], { :base_type => 'NotUndef-Type', :actual => type.class })
       end
       Types::TypeFactory.not_undef(type)
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'NotUndef-Type', :min => 0, :max => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'NotUndef-Type', :min => 0, :max => 1, :actual => keys.size })
     end
   end
 
@@ -385,18 +390,20 @@ class AccessOperator
     keys.flatten!
     if keys.size == 1
       unless keys[0].is_a?(Types::PAnyType)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Type-Type', :actual => keys[0].class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Type-Type', :actual => keys[0].class })
       end
+
       Types::PTypeType.new(keys[0])
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'Type-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'Type-Type', :min => 1, :actual => keys.size })
     end
   end
 
   def access_PInitType(o, scope, keys)
     unless keys[0].is_a?(Types::PAnyType)
-      fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Init-Type', :actual => keys[0].class})
+      fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Init-Type', :actual => keys[0].class })
     end
+
     Types::TypeFactory.init(*keys)
   end
 
@@ -404,11 +411,12 @@ class AccessOperator
     keys.flatten!
     if keys.size == 1
       unless keys[0].is_a?(Types::PAnyType)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Iterable-Type', :actual => keys[0].class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Iterable-Type', :actual => keys[0].class })
       end
+
       Types::PIterableType.new(keys[0])
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'Iterable-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'Iterable-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -416,11 +424,12 @@ class AccessOperator
     keys.flatten!
     if keys.size == 1
       unless keys[0].is_a?(Types::PAnyType)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Iterator-Type', :actual => keys[0].class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Iterator-Type', :actual => keys[0].class })
       end
+
       Types::PIteratorType.new(keys[0])
     else
-      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {:base_type => 'Iterator-Type', :min => 1, :actual => keys.size})
+      fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, { :base_type => 'Iterator-Type', :min => 1, :actual => keys.size })
     end
   end
 
@@ -434,11 +443,12 @@ class AccessOperator
   def access_PIntegerType(o, scope, keys)
     keys.flatten!
     unless keys.size.between?(1, 2)
-      fail(Issues::BAD_INTEGER_SLICE_ARITY, @semantic, {:actual => keys.size})
+      fail(Issues::BAD_INTEGER_SLICE_ARITY, @semantic, { :actual => keys.size })
     end
+
     keys.each_with_index do |x, index|
       fail(Issues::BAD_INTEGER_SLICE_TYPE, @semantic.keys[index],
-        {:actual => x.class}) unless (x.is_a?(Integer) || x == :default)
+           { :actual => x.class }) unless x.is_a?(Integer) || x == :default
     end
     Types::PIntegerType.new(*keys)
   end
@@ -446,11 +456,12 @@ class AccessOperator
   def access_PFloatType(o, scope, keys)
     keys.flatten!
     unless keys.size.between?(1, 2)
-      fail(Issues::BAD_FLOAT_SLICE_ARITY, @semantic, {:actual => keys.size})
+      fail(Issues::BAD_FLOAT_SLICE_ARITY, @semantic, { :actual => keys.size })
     end
+
     keys.each_with_index do |x, index|
       fail(Issues::BAD_FLOAT_SLICE_TYPE, @semantic.keys[index],
-        {:actual => x.class}) unless (x.is_a?(Float) || x.is_a?(Integer) || x == :default)
+           { :actual => x.class }) unless x.is_a?(Float) || x.is_a?(Integer) || x == :default
     end
     from, to = keys
     from = from == :default || from.nil? ? nil : Float(from)
@@ -468,9 +479,9 @@ class AccessOperator
       return Types::PHashType.new(nil, nil, Types::PIntegerType.new(*keys))
     end
 
-    keys[0,2].each_with_index do |k, index|
+    keys[0, 2].each_with_index do |k, index|
       unless k.is_a?(Types::PAnyType)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[index], {:base_type => 'Hash-Type', :actual => k.class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[index], { :base_type => 'Hash-Type', :actual => k.class })
       end
     end
     case keys.size
@@ -483,8 +494,8 @@ class AccessOperator
       size_t = collection_size_t(2, keys[2], keys[3])
     else
       fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic, {
-        :base_type => 'Hash-Type', :min => 2, :max => 4, :actual => keys.size
-      })
+             :base_type => 'Hash-Type', :min => 2, :max => 4, :actual => keys.size
+           })
     end
     Types::PHashType.new(keys[0], keys[1], size_t)
   end
@@ -499,7 +510,7 @@ class AccessOperator
       size_t = collection_size_t(0, keys[0], keys[1])
     else
       fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic,
-        {:base_type => 'Collection-Type', :min => 1, :max => 2, :actual => keys.size})
+           { :base_type => 'Collection-Type', :min => 1, :max => 2, :actual => keys.size })
     end
     Types::PCollectionType.new(size_t)
   end
@@ -511,8 +522,9 @@ class AccessOperator
     case keys.size
     when 1
       unless keys[0].is_a?(Types::PAnyType)
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Array-Type', :actual => keys[0].class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Array-Type', :actual => keys[0].class })
       end
+
       type = keys[0]
       size_t = nil
     when 2
@@ -528,11 +540,11 @@ class AccessOperator
         size_t = collection_size_t(1, keys[1], keys[2])
         type = keys[0]
       else
-        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], {:base_type => 'Array-Type', :actual => keys[0].class})
+        fail(Issues::BAD_TYPE_SLICE_TYPE, @semantic.keys[0], { :base_type => 'Array-Type', :actual => keys[0].class })
       end
     else
       fail(Issues::BAD_TYPE_SLICE_ARITY, @semantic,
-        {:base_type => 'Array-Type', :min => 1, :max => 3, :actual => keys.size})
+           { :base_type => 'Array-Type', :min => 1, :max => 3, :actual => keys.size })
     end
     Types::PArrayType.new(type, size_t)
   end
@@ -544,7 +556,7 @@ class AccessOperator
     else
       keys.each_with_index do |x, index|
         fail(Issues::BAD_COLLECTION_SLICE_TYPE, @semantic.keys[start_index + index],
-          {:actual => x.class}) unless (x.is_a?(Integer) || x == :default)
+             { :actual => x.class }) unless x.is_a?(Integer) || x == :default
       end
       Types::PIntegerType.new(*keys)
     end
@@ -563,7 +575,7 @@ class AccessOperator
 
   # If a type reference is encountered here, it's an error
   def access_PTypeReferenceType(o, scope, keys)
-    fail(Issues::UNKNOWN_RESOURCE_TYPE, @semantic, {:type_name => o.type_string })
+    fail(Issues::UNKNOWN_RESOURCE_TYPE, @semantic, { :type_name => o.type_string })
   end
 
   # A Resource can create a new more specific Resource type, and/or an array of resource types
@@ -583,7 +595,7 @@ class AccessOperator
 
     if keys.size == 0
       fail(Issues::BAD_TYPE_SLICE_ARITY, blamed,
-        :base_type => o.to_s, :min => 1, :max => -1, :actual => 0)
+           :base_type => o.to_s, :min => 1, :max => -1, :actual => 0)
     end
 
     # Must know which concrete resource type to operate on in all cases.
@@ -591,19 +603,19 @@ class AccessOperator
     # type_name is LHS type_name if set, else the first given arg
     type_name = o.type_name || Types::TypeFormatter.singleton.capitalize_segments(keys.shift)
     type_name = case type_name
-    when Types::PResourceType
-      type_name.type_name
-    when String
-      type_name
-    else
-      # blame given left expression if it defined the type, else the first given key expression
-      blame = o.type_name.nil? ? @semantic.keys[0] : @semantic.left_expr
-      fail(Issues::ILLEGAL_RESOURCE_SPECIALIZATION, blame, {:actual => bad_key_type_name(type_name)})
-    end
+                when Types::PResourceType
+                  type_name.type_name
+                when String
+                  type_name
+                else
+                  # blame given left expression if it defined the type, else the first given key expression
+                  blame = o.type_name.nil? ? @semantic.keys[0] : @semantic.left_expr
+                  fail(Issues::ILLEGAL_RESOURCE_SPECIALIZATION, blame, { :actual => bad_key_type_name(type_name) })
+                end
 
     # type name must conform
     if type_name !~ Patterns::CLASSREF_EXT
-      fail(Issues::ILLEGAL_CLASSREF, blamed, {:name=>type_name})
+      fail(Issues::ILLEGAL_CLASSREF, blamed, { :name => type_name })
     end
 
     # The result is an array if multiple titles are given, or if titles are specified with an array
@@ -623,41 +635,40 @@ class AccessOperator
       return result_type_array ? [] : nil
     end
 
-    if !o.title.nil?
+    unless o.title.nil?
       # lookup resource and return one or more parameter values
       resource = find_resource(scope, o.type_name, o.title)
       unless resource
-        fail(Issues::UNKNOWN_RESOURCE, @semantic, {:type_name => o.type_name, :title => o.title})
+        fail(Issues::UNKNOWN_RESOURCE, @semantic, { :type_name => o.type_name, :title => o.title })
       end
 
       result = keys.map do |k|
         unless is_parameter_of_resource?(scope, resource, k)
           fail(Issues::UNKNOWN_RESOURCE_PARAMETER, @semantic,
-            {:type_name => o.type_name, :title => o.title, :param_name=>k})
+               { :type_name => o.type_name, :title => o.title, :param_name => k })
         end
         get_resource_parameter_value(scope, resource, k)
       end
       return result_type_array ? result : result.pop
     end
 
-
     keys = [:no_title] if keys.size < 1 # if there was only a type_name and it was consumed
     result = keys.each_with_index.map do |t, i|
       unless t.is_a?(String) || t == :no_title
-        index = keys_orig_size != keys.size ? i+1 : i
+        index = keys_orig_size != keys.size ? i + 1 : i
         fail(Issues::BAD_TYPE_SPECIALIZATION, @semantic.keys[index], {
-          :type => o,
-          :message => "Cannot use #{bad_key_type_name(t)} where a resource title String is expected"
-        })
+               :type => o,
+               :message => "Cannot use #{bad_key_type_name(t)} where a resource title String is expected"
+             })
       end
 
       Types::PResourceType.new(type_name, t == :no_title ? nil : t)
     end
     # returns single type if request was for a single entity, else an array of types (possibly empty)
-    return result_type_array ? result : result.pop
+    result_type_array ? result : result.pop
   end
 
-  NS = '::'.freeze
+  NS = '::'
 
   def access_PClassType(o, scope, keys)
     blamed = keys.size == 0 ? @semantic : @semantic.keys[0]
@@ -665,7 +676,7 @@ class AccessOperator
 
     if keys_orig_size == 0
       fail(Issues::BAD_TYPE_SLICE_ARITY, blamed,
-        :base_type => o.to_s, :min => 1, :max => -1, :actual => 0)
+           :base_type => o.to_s, :min => 1, :max => -1, :actual => 0)
     end
 
     # The result is an array if multiple classnames are given, or if classnames are specified with an array
@@ -686,12 +697,14 @@ class AccessOperator
 
     if o.class_name.nil?
       result = keys.each_with_index.map do |c, i|
-        fail(Issues::ILLEGAL_HOSTCLASS_NAME, @semantic.keys[i], {:name => c}) unless c.is_a?(String)
+        fail(Issues::ILLEGAL_HOSTCLASS_NAME, @semantic.keys[i], { :name => c }) unless c.is_a?(String)
+
         name = c.downcase
         # Remove leading '::' since all references are global, and 3x runtime does the wrong thing
-        name = name[2..-1] if name[0,2] == NS
+        name = name[2..] if name[0, 2] == NS
 
-        fail(Issues::ILLEGAL_NAME, @semantic.keys[i], {:name=>c}) unless name =~ Patterns::NAME
+        fail(Issues::ILLEGAL_NAME, @semantic.keys[i], { :name => c }) unless name =~ Patterns::NAME
+
         Types::PClassType.new(name)
       end
     else
@@ -703,16 +716,16 @@ class AccessOperator
             get_resource_parameter_value(scope, resource, k)
           else
             fail(Issues::UNKNOWN_RESOURCE_PARAMETER, @semantic,
-              {:type_name => 'Class', :title => o.class_name, :param_name=>k})
+                 { :type_name => 'Class', :title => o.class_name, :param_name => k })
           end
         end
       else
-        fail(Issues::UNKNOWN_RESOURCE, @semantic, {:type_name => 'Class', :title => o.class_name})
+        fail(Issues::UNKNOWN_RESOURCE, @semantic, { :type_name => 'Class', :title => o.class_name })
       end
     end
 
     # returns single type as type, else an array of types
-    return result_type_array ? result : result.pop
+    result_type_array ? result : result.pop
   end
 end
 end

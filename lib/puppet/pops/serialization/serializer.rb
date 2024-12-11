@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'extension'
 
 module Puppet::Pops
@@ -15,6 +17,8 @@ module Serialization
     # @option options [Boolean] :type_by_reference `true` if Object types are serialized by name only.
     # @api public
     def initialize(writer, options = EMPTY_HASH)
+      # Hash#compare_by_identity is intentionally not used since we only need to map
+      # object ids to their size and we don't want to store entire objects in memory
       @written = {}
       @writer = writer
       @options = options
@@ -36,7 +40,7 @@ module Serialization
       when :default
         @writer.write(Extension::Default::INSTANCE)
       else
-        index = @written[value.object_id]
+        index = @written[value.object_id] # rubocop:disable Lint/HashCompareByIdentity
         if index.nil?
           write_tabulated_first_time(value)
         else
@@ -75,7 +79,7 @@ module Serialization
     end
 
     def push_written(value)
-      @written[value.object_id] = @written.size
+      @written[value.object_id] = @written.size # rubocop:disable Lint/HashCompareByIdentity
     end
 
     # Write the start of a sensitive object
@@ -101,37 +105,37 @@ module Serialization
     # @param [Object] value the value to write
     # @api private
     def write_tabulated_first_time(value)
-      case
-      when value.instance_of?(Symbol),
-          value.instance_of?(Regexp),
-          value.instance_of?(SemanticPuppet::Version),
-          value.instance_of?(SemanticPuppet::VersionRange),
-          value.instance_of?(Time::Timestamp),
-          value.instance_of?(Time::Timespan),
-          value.instance_of?(Types::PBinaryType::Binary),
-          value.is_a?(URI)
+      if value.instance_of?(Symbol) ||
+         value.instance_of?(Regexp) ||
+         value.instance_of?(SemanticPuppet::Version) ||
+         value.instance_of?(SemanticPuppet::VersionRange) ||
+         value.instance_of?(Time::Timestamp) ||
+         value.instance_of?(Time::Timespan) ||
+         value.instance_of?(Types::PBinaryType::Binary) ||
+         value.is_a?(URI)
         push_written(value)
         @writer.write(value)
-      when value.instance_of?(Array)
+      elsif value.instance_of?(Array)
         push_written(value)
         start_array(value.size)
         value.each { |elem| write(elem) }
-      when value.instance_of?(Hash)
+      elsif value.instance_of?(Hash)
         push_written(value)
         start_map(value.size)
         value.each_pair { |key, val| write(key); write(val) }
-      when value.instance_of?(Types::PSensitiveType::Sensitive)
+      elsif value.instance_of?(Types::PSensitiveType::Sensitive)
         start_sensitive
         write(value.unwrap)
-      when value.instance_of?(Types::PTypeReferenceType)
+      elsif value.instance_of?(Types::PTypeReferenceType)
         push_written(value)
         @writer.write(value)
-      when value.is_a?(Types::PuppetObject)
+      elsif value.is_a?(Types::PuppetObject)
         value._pcore_type.write(value, self)
       else
         impl_class = value.class
         type = Loaders.implementation_registry.type_for_module(impl_class)
         raise SerializationError, _("No Puppet Type found for %{klass}") % { klass: impl_class.name } unless type.is_a?(Types::PObjectType)
+
         type.write(value, self)
       end
     end

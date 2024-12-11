@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet'
 require_relative '../../../puppet/util/plist' if Puppet.features.cfpropertylist?
 require 'base64'
@@ -5,9 +7,9 @@ require 'base64'
 Puppet::Type.type(:user).provide :directoryservice do
   desc "User management on OS X."
 
-##                   ##
-## Provider Settings ##
-##                   ##
+  ##                   ##
+  ## Provider Settings ##
+  ##                   ##
 
   # Provider command declarations
   commands :uuidgen      => '/usr/bin/uuidgen'
@@ -16,9 +18,9 @@ Puppet::Type.type(:user).provide :directoryservice do
   commands :dscacheutil  => '/usr/bin/dscacheutil'
 
   # Provider confines and defaults
-  confine    :operatingsystem => :darwin
-  confine    :feature         => :cfpropertylist
-  defaultfor :operatingsystem => :darwin
+  confine    'os.name' => :darwin
+  confine    :feature => :cfpropertylist
+  defaultfor 'os.name' => :darwin
 
   # Need this to create getter/setter methods automagically
   # This command creates methods that return @property_hash[:value]
@@ -30,29 +32,29 @@ Puppet::Type.type(:user).provide :directoryservice do
   # 10.8 Passwords use a PBKDF2 salt value
   has_features :manages_password_salt
 
-  #provider can set the user's shell
+  # provider can set the user's shell
   has_feature :manages_shell
 
-##               ##
-## Class Methods ##
-##               ##
+  ##               ##
+  ## Class Methods ##
+  ##               ##
 
   # This method exists to map the dscl values to the correct Puppet
   # properties. This stays relatively consistent, but who knows what
   # Apple will do next year...
   def self.ds_to_ns_attribute_map
     {
-      'RecordName'       => :name,
-      'PrimaryGroupID'   => :gid,
+      'RecordName' => :name,
+      'PrimaryGroupID' => :gid,
       'NFSHomeDirectory' => :home,
-      'UserShell'        => :shell,
-      'UniqueID'         => :uid,
-      'RealName'         => :comment,
-      'Password'         => :password,
-      'GeneratedUID'     => :guid,
-      'IPAddress'        => :ip_address,
-      'ENetAddress'      => :en_address,
-      'GroupMembership'  => :members,
+      'UserShell' => :shell,
+      'UniqueID' => :uid,
+      'RealName' => :comment,
+      'Password' => :password,
+      'GeneratedUID' => :guid,
+      'IPAddress' => :ip_address,
+      'ENetAddress' => :en_address,
+      'GroupMembership' => :members,
     }
   end
 
@@ -85,14 +87,14 @@ Puppet::Type.type(:user).provide :directoryservice do
   # display its output.
   def self.instances
     get_all_users.collect do |user|
-      self.new(generate_attribute_hash(user))
+      new(generate_attribute_hash(user))
     end
   end
 
   # Return an array of hashes containing information about every user on
   # the system.
   def self.get_all_users
-    Puppet::Util::Plist.parse_plist(dscl '-plist', '.', 'readall', '/Users')
+    Puppet::Util::Plist.parse_plist(dscl('-plist', '.', 'readall', '/Users'))
   end
 
   # This method accepts an individual user plist, passed as a hash, and
@@ -104,19 +106,20 @@ Puppet::Type.type(:user).provide :directoryservice do
     input_hash.each_key do |key|
       ds_attribute = key.sub("dsAttrTypeStandard:", "")
       next unless ds_to_ns_attribute_map.keys.include?(ds_attribute)
+
       ds_value = input_hash[key]
       case ds_to_ns_attribute_map[ds_attribute]
-        when :gid, :uid
-          # OS X stores objects like uid/gid as strings.
-          # Try casting to an integer for these cases to be
-          # consistent with the other providers and the group type
-          # validation
-          begin
-            ds_value = Integer(ds_value[0])
-          rescue ArgumentError
-            ds_value = ds_value[0]
-          end
-        else ds_value = ds_value[0]
+      when :gid, :uid
+        # OS X stores objects like uid/gid as strings.
+        # Try casting to an integer for these cases to be
+        # consistent with the other providers and the group type
+        # validation
+        begin
+          ds_value = Integer(ds_value[0])
+        rescue ArgumentError
+          ds_value = ds_value[0]
+        end
+      else ds_value = ds_value[0]
       end
       attribute_hash[ds_to_ns_attribute_map[ds_attribute]] = ds_value
     end
@@ -147,9 +150,9 @@ Puppet::Type.type(:user).provide :directoryservice do
     else
       embedded_binary_plist = get_embedded_binary_plist(attribute_hash[:shadowhashdata])
       if embedded_binary_plist['SALTED-SHA512-PBKDF2']
-        attribute_hash[:password]   = get_salted_sha512_pbkdf2('entropy', embedded_binary_plist)
-        attribute_hash[:salt]       = get_salted_sha512_pbkdf2('salt', embedded_binary_plist)
-        attribute_hash[:iterations] = get_salted_sha512_pbkdf2('iterations', embedded_binary_plist)
+        attribute_hash[:password]   = get_salted_sha512_pbkdf2('entropy', embedded_binary_plist, attribute_hash[:name])
+        attribute_hash[:salt]       = get_salted_sha512_pbkdf2('salt', embedded_binary_plist, attribute_hash[:name])
+        attribute_hash[:iterations] = get_salted_sha512_pbkdf2('iterations', embedded_binary_plist, attribute_hash[:name])
       elsif embedded_binary_plist['SALTED-SHA512']
         attribute_hash[:password] = get_salted_sha512(embedded_binary_plist)
       end
@@ -159,20 +162,24 @@ Puppet::Type.type(:user).provide :directoryservice do
   end
 
   def self.get_os_version
-    @os_version ||= Puppet.runtime[:facter].value(:macosx_productversion_major)
+    # rubocop:disable Naming/MemoizedInstanceVariableName
+    @os_version ||= Puppet.runtime[:facter].value('os.macosx.version.major')
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   # Use dscl to retrieve an array of hashes containing attributes about all
   # of the local groups on the machine.
   def self.get_list_of_groups
-    @groups ||= Puppet::Util::Plist.parse_plist(dscl '-plist', '.', 'readall', '/Groups')
+    # rubocop:disable Naming/MemoizedInstanceVariableName
+    @groups ||= Puppet::Util::Plist.parse_plist(dscl('-plist', '.', 'readall', '/Groups'))
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   # Perform a dscl lookup at the path specified for the specific keyname
   # value. The value returned is the first item within the array returned
   # from dscl
   def self.get_attribute_from_dscl(path, username, keyname)
-    Puppet::Util::Plist.parse_plist(dscl '-plist', '.', 'read', "/#{path}/#{username}", keyname)
+    Puppet::Util::Plist.parse_plist(dscl('-plist', '.', 'read', "/#{path}/#{username}", keyname))
   end
 
   # The plist embedded in the ShadowHashData key is a binary plist. The
@@ -198,23 +205,26 @@ Puppet::Type.type(:user).provide :directoryservice do
   # The salted-SHA512 password hash in 10.7 is stored in the 'SALTED-SHA512'
   # key as binary data. That data is extracted and converted to a hex string.
   def self.get_salted_sha512(embedded_binary_plist)
-    embedded_binary_plist['SALTED-SHA512'].unpack("H*")[0]
+    embedded_binary_plist['SALTED-SHA512'].unpack1("H*")
   end
 
   # This method reads the passed embedded_binary_plist hash and returns values
   # according to which field is passed.  Arguments passed are the hash
   # containing the value read from the 'ShadowHashData' key in the User's
   # plist, and the field to be read (one of 'entropy', 'salt', or 'iterations')
-  def self.get_salted_sha512_pbkdf2(field, embedded_binary_plist)
+  def self.get_salted_sha512_pbkdf2(field, embedded_binary_plist, user_name = "")
     case field
     when 'salt', 'entropy'
-      embedded_binary_plist['SALTED-SHA512-PBKDF2'][field].unpack('H*').first
+      value = embedded_binary_plist['SALTED-SHA512-PBKDF2'][field]
+      if value.nil?
+        raise Puppet::Error, "Invalid #{field} given for user #{user_name}"
+      end
+
+      value.unpack1('H*')
     when 'iterations'
       Integer(embedded_binary_plist['SALTED-SHA512-PBKDF2'][field])
     else
-      raise Puppet::Error, 'Puppet has tried to read an incorrect value from the ' +
-           "SALTED-SHA512-PBKDF2 hash. Acceptable fields are 'salt', " +
-           "'entropy', or 'iterations'."
+      raise Puppet::Error, "Puppet has tried to read an incorrect value from the user #{user_name} in the SALTED-SHA512-PBKDF2 hash. Acceptable fields are 'salt', 'entropy', or 'iterations'."
     end
   end
 
@@ -224,7 +234,8 @@ Puppet::Type.type(:user).provide :directoryservice do
     password_hash = nil
     password_hash_file = "#{password_hash_dir}/#{guid}"
     if Puppet::FileSystem.exist?(password_hash_file) and File.file?(password_hash_file)
-      raise Puppet::Error, "Could not read password hash file at #{password_hash_file}" if not File.readable?(password_hash_file)
+      raise Puppet::Error, "Could not read password hash file at #{password_hash_file}" unless File.readable?(password_hash_file)
+
       f = File.new(password_hash_file)
       password_hash = f.read
       f.close
@@ -232,10 +243,9 @@ Puppet::Type.type(:user).provide :directoryservice do
     password_hash
   end
 
-
-##                   ##
-## Ensurable Methods ##
-##                   ##
+  ##                   ##
+  ## Ensurable Methods ##
+  ##                   ##
 
   def exists?
     begin
@@ -262,6 +272,7 @@ Puppet::Type.type(:user).provide :directoryservice do
     # Iterate through valid User type properties
     valid_properties.each do |attribute|
       next if attribute == :ensure
+
       value = @resource.should(attribute)
 
       # Value defaults
@@ -289,22 +300,22 @@ Puppet::Type.type(:user).provide :directoryservice do
       # For the :password and :groups properties, call the setter methods
       # to enforce those values. For everything else, use dscl with the
       # ns_to_ds_attribute_map to set the appropriate values.
-      if value != "" and not value.nil?
-        case attribute
-        when :password
-          self.password = value
-        when :iterations
-          self.iterations = value
-        when :salt
-          self.salt = value
-        when :groups
-          value.split(',').each do |group|
-            merge_attribute_with_dscl('Groups', group, 'GroupMembership', @resource.name)
-            merge_attribute_with_dscl('Groups', group, 'GroupMembers', @guid)
-          end
-        else
-          create_attribute_with_dscl('Users', @resource.name, self.class.ns_to_ds_attribute_map[attribute], value)
+      next unless value != "" and !value.nil?
+
+      case attribute
+      when :password
+        self.password = value
+      when :iterations
+        self.iterations = value
+      when :salt
+        self.salt = value
+      when :groups
+        value.split(',').each do |group|
+          merge_attribute_with_dscl('Groups', group, 'GroupMembership', @resource.name)
+          merge_attribute_with_dscl('Groups', group, 'GroupMembers', @guid)
         end
+      else
+        create_attribute_with_dscl('Users', @resource.name, self.class.ns_to_ds_attribute_map[attribute], value)
       end
     end
   end
@@ -315,9 +326,9 @@ Puppet::Type.type(:user).provide :directoryservice do
     dscl '.', '-delete', "/Users/#{@resource.name}"
   end
 
-##                       ##
-## Getter/Setter Methods ##
-##                       ##
+  ##                       ##
+  ## Getter/Setter Methods ##
+  ##                       ##
 
   # In the setter method we're only going to take action on groups for which
   # the user is not currently a member.
@@ -347,7 +358,7 @@ Puppet::Type.type(:user).provide :directoryservice do
       end
     else
       if value.length != 256
-         raise Puppet::Error, "OS X versions > 10.7 require a Salted SHA512 PBKDF2 password hash of 256 characters. Please check your password and try again."
+        raise Puppet::Error, "OS X versions > 10.7 require a Salted SHA512 PBKDF2 password hash of 256 characters. Please check your password and try again."
       end
 
       assert_full_pbkdf2_password
@@ -384,7 +395,7 @@ Puppet::Type.type(:user).provide :directoryservice do
   # we have to treat the ds cache just like you would in the password=
   # method.
   def iterations=(value)
-    if (Puppet::Util::Package.versioncmp(self.class.get_os_version, '10.7') > 0)
+    if Puppet::Util::Package.versioncmp(self.class.get_os_version, '10.7') > 0
       assert_full_pbkdf2_password
 
       sleep 3
@@ -401,7 +412,12 @@ Puppet::Type.type(:user).provide :directoryservice do
   # we have to treat the ds cache just like you would in the password=
   # method.
   def salt=(value)
-    if (Puppet::Util::Package.versioncmp(self.class.get_os_version, '10.7') > 0)
+    if Puppet::Util::Package.versioncmp(self.class.get_os_version, '10.15') >= 0
+      if value.length != 64
+        self.fail "macOS versions 10.15 and higher require the salt to be 32-bytes. Since Puppet's user resource requires the value to be hex encoded, the length of the salt's string must be 64. Please check your salt and try again."
+      end
+    end
+    if Puppet::Util::Package.versioncmp(self.class.get_os_version, '10.7') > 0
       assert_full_pbkdf2_password
 
       sleep 3
@@ -432,29 +448,29 @@ Puppet::Type.type(:user).provide :directoryservice do
   # In the event that the user doesn't HAVE a value for the attribute, the
   # provider should use the -create option with dscl to add the attribute value
   # for the user record
-  ['home', 'uid', 'gid', 'comment', 'shell'].each do |setter_method|
+  %w[home uid gid comment shell].each do |setter_method|
     define_method("#{setter_method}=") do |value|
       if @property_hash[setter_method.intern]
-        if %w(home uid).include?(setter_method)
+        if %w[home uid].include?(setter_method)
           raise Puppet::Error, "OS X version #{self.class.get_os_version} does not allow changing #{setter_method} using puppet"
         end
+
         begin
           dscl '.', '-change', "/Users/#{resource.name}", self.class.ns_to_ds_attribute_map[setter_method.intern], @property_hash[setter_method.intern], value
         rescue Puppet::ExecutionFailure => e
-          raise Puppet::Error, "Cannot set the #{setter_method} value of '#{value}' for user " +
-               "#{@resource.name} due to the following error: #{e.inspect}", e.backtrace
+          raise Puppet::Error, "Cannot set the #{setter_method} value of '#{value}' for user " \
+                               "#{@resource.name} due to the following error: #{e.inspect}", e.backtrace
         end
       else
         begin
           dscl '.', '-create', "/Users/#{resource.name}", self.class.ns_to_ds_attribute_map[setter_method.intern], value
         rescue Puppet::ExecutionFailure => e
-          raise Puppet::Error, "Cannot set the #{setter_method} value of '#{value}' for user " +
-               "#{@resource.name} due to the following error: #{e.inspect}", e.backtrace
+          raise Puppet::Error, "Cannot set the #{setter_method} value of '#{value}' for user " \
+                               "#{@resource.name} due to the following error: #{e.inspect}", e.backtrace
         end
       end
     end
   end
-
 
   ##                ##
   ## Helper Methods ##
@@ -463,8 +479,8 @@ Puppet::Type.type(:user).provide :directoryservice do
   def assert_full_pbkdf2_password
     missing = [:password, :salt, :iterations].select { |parameter| @resource[parameter].nil? }
 
-    if !missing.empty?
-       raise Puppet::Error, "OS X versions > 10\.7 use PBKDF2 password hashes, which requires all three of salt, iterations, and password hash. This resource is missing: #{missing.join(', ')}."
+    unless missing.empty?
+      raise Puppet::Error, "OS X versions > 10\.7 use PBKDF2 password hashes, which requires all three of salt, iterations, and password hash. This resource is missing: #{missing.join(', ')}."
     end
   end
 
@@ -487,29 +503,27 @@ Puppet::Type.type(:user).provide :directoryservice do
   end
 
   def set_attribute_with_dscl(dscl_command, path, username, keyname, value)
-    begin
-      dscl '.', dscl_command, "/#{path}/#{username}", keyname, value
-    rescue Puppet::ExecutionFailure => detail
-      raise Puppet::Error, "Could not set the dscl #{keyname} key with value: #{value} - #{detail.inspect}", detail.backtrace
-    end
+    dscl '.', dscl_command, "/#{path}/#{username}", keyname, value
+  rescue Puppet::ExecutionFailure => detail
+    raise Puppet::Error, "Could not set the dscl #{keyname} key with value: #{value} - #{detail.inspect}", detail.backtrace
   end
 
   # Create the new user with dscl
   def create_new_user(username)
-    dscl '.', '-create',  "/Users/#{username}"
+    dscl '.', '-create', "/Users/#{username}"
   end
 
   # Get the next available uid on the system by getting a list of user ids,
   # sorting them, grabbing the last one, and adding a 1. Scientific stuff here.
-  def next_system_id(min_id=20)
+  def next_system_id(min_id = 20)
     dscl_output = dscl '.', '-list', '/Users', 'uid'
     # We're ok with throwing away negative uids here. Also, remove nil values.
     user_ids = dscl_output.split.compact.collect { |l| l.to_i if l =~ /^\d+$/ }
-    ids = user_ids.compact!.sort! { |a,b| a.to_f <=> b.to_f }
+    ids = user_ids.compact!.sort_by!(&:to_f)
     # We're just looking for an unused id in our sorted array.
     ids.each_index do |i|
       next_id = ids[i] + 1
-      return next_id if ids[i+1] != next_id and next_id >= min_id
+      return next_id if ids[i + 1] != next_id and next_id >= min_id
     end
   end
 
@@ -533,7 +547,7 @@ Puppet::Type.type(:user).provide :directoryservice do
       # variable IS a Hash and contains the 'SALTED-SHA512' key (indicating an
       # older 10.7-style password hash), it will be deleted and a newer
       # 10.8-style (PBKDF2) password hash will be generated.
-      if (shadow_hash_data.class == Hash) && (shadow_hash_data.has_key?('SALTED-SHA512'))
+      if shadow_hash_data.instance_of?(Hash) && shadow_hash_data.has_key?('SALTED-SHA512')
         shadow_hash_data.delete('SALTED-SHA512')
       end
 
@@ -563,7 +577,7 @@ Puppet::Type.type(:user).provide :directoryservice do
   # ShadowHashData key of a user's plist, or false if it doesn't exist.
   def get_shadow_hash_data(users_plist)
     if users_plist['ShadowHashData']
-      password_hash_plist  = users_plist['ShadowHashData'][0]
+      password_hash_plist = users_plist['ShadowHashData'][0]
       self.class.convert_binary_to_hash(password_hash_plist)
     else
       false
@@ -604,9 +618,9 @@ Puppet::Type.type(:user).provide :directoryservice do
   # for information regarding the dsimport syntax
   def write_and_import_shadow_hash_data(data_plist)
     Tempfile.create("dsimport_#{@resource.name}", :encoding => Encoding::ASCII) do |dsimport_file|
-      dsimport_file.write <<-DSIMPORT
-0x0A 0x5C 0x3A 0x2C dsRecTypeStandard:Users 2 dsAttrTypeStandard:RecordName base64:dsAttrTypeNative:ShadowHashData
-#{@resource.name}:#{Base64.strict_encode64(data_plist)}
+      dsimport_file.write <<~DSIMPORT
+        0x0A 0x5C 0x3A 0x2C dsRecTypeStandard:Users 2 dsAttrTypeStandard:RecordName base64:dsAttrTypeNative:ShadowHashData
+        #{@resource.name}:#{Base64.strict_encode64(data_plist)}
       DSIMPORT
       dsimport_file.flush
       # Delete the user's existing ShadowHashData, since dsimport appends, not replaces
@@ -629,7 +643,7 @@ Puppet::Type.type(:user).provide :directoryservice do
   def set_salted_sha512(users_plist, shadow_hash_data, value)
     unless shadow_hash_data
       shadow_hash_data = Hash.new
-      shadow_hash_data['SALTED-SHA512'] = ''
+      shadow_hash_data['SALTED-SHA512'] = ''.dup
     end
     shadow_hash_data['SALTED-SHA512'] = base64_decode_string(value)
     binary_plist = self.class.convert_hash_to_binary(shadow_hash_data)
@@ -645,7 +659,7 @@ Puppet::Type.type(:user).provide :directoryservice do
   # the user's plist itself, and the shadow_hash_data hash containing the
   # existing PBKDF2 values.
   def set_salted_pbkdf2(users_plist, shadow_hash_data, field, value)
-    shadow_hash_data = Hash.new unless shadow_hash_data
+    shadow_hash_data ||= Hash.new
     shadow_hash_data['SALTED-SHA512-PBKDF2'] = Hash.new unless shadow_hash_data['SALTED-SHA512-PBKDF2']
     case field
     when 'salt', 'entropy'

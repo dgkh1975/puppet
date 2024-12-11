@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows/monkey_patches/process'
 require_relative '../../../puppet/ffi/windows'
 
@@ -13,7 +15,7 @@ module Puppet::Util::Windows::Process
   # https://docs.microsoft.com/en-us/windows/desktop/ProcThread/process-security-and-access-rights
   PROCESS_QUERY_INFORMATION = 0x0400
   # https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file#maximum-path-length-limitation
-  MAX_PATH_LENGTH = 32767
+  MAX_PATH_LENGTH = 32_767
 
   def execute(command, arguments, stdin, stdout, stderr)
     create_args = {
@@ -43,15 +45,16 @@ module Puppet::Util::Windows::Process
     exit_status = -1
     FFI::MemoryPointer.new(:dword, 1) do |exit_status_ptr|
       if GetExitCodeProcess(handle, exit_status_ptr) == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(_("Failed to get child process exit code"))
+        raise Puppet::Util::Windows::Error, _("Failed to get child process exit code")
       end
+
       exit_status = exit_status_ptr.read_dword
 
       # $CHILD_STATUS is not set when calling win32/process Process.create
       # and since it's read-only, we can't set it. But we can execute a
       # a shell that simply returns the desired exit status, which has the
       # desired effect.
-      %x{#{ENV['COMSPEC']} /c exit #{exit_status}}
+      %x(#{ENV.fetch('COMSPEC', nil)} /c exit #{exit_status})
     end
 
     exit_status
@@ -70,8 +73,7 @@ module Puppet::Util::Windows::Process
     begin
       phandle = OpenProcess(desired_access, inherit, process_id)
       if phandle == FFI::Pointer::NULL_HANDLE
-        raise Puppet::Util::Windows::Error.new(
-          "OpenProcess(#{desired_access.to_s(8)}, #{inherit}, #{process_id})")
+        raise Puppet::Util::Windows::Error, "OpenProcess(#{desired_access.to_s(8)}, #{inherit}, #{process_id})"
       end
 
       yield phandle
@@ -90,8 +92,7 @@ module Puppet::Util::Windows::Process
       FFI::MemoryPointer.new(:handle, 1) do |token_handle_ptr|
         result = OpenProcessToken(handle, desired_access, token_handle_ptr)
         if result == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(
-            "OpenProcessToken(#{handle}, #{desired_access.to_s(8)}, #{token_handle_ptr})")
+          raise Puppet::Util::Windows::Error, "OpenProcessToken(#{handle}, #{desired_access.to_s(8)}, #{token_handle_ptr})"
         end
 
         yield token_handle = token_handle_ptr.read_handle
@@ -120,7 +121,7 @@ module Puppet::Util::Windows::Process
   module_function :with_process_token
 
   def get_process_image_name_by_pid(pid)
-    image_name = ""
+    image_name = ''.dup
 
     Puppet::Util::Windows::Security.with_privilege(Puppet::Util::Windows::Security::SE_DEBUG_NAME) do
       open_process(PROCESS_QUERY_INFORMATION, false, pid) do |phandle|
@@ -132,9 +133,8 @@ module Puppet::Util::Windows::Process
             use_win32_path_format = 0
             result = QueryFullProcessImageNameW(phandle, use_win32_path_format, exe_name_ptr, exe_name_length_ptr)
             if result == FFI::WIN32_FALSE
-              raise Puppet::Util::Windows::Error.new(
-                      "QueryFullProcessImageNameW(phandle, #{use_win32_path_format}, " +
-                      "exe_name_ptr, #{max_chars}")
+              raise Puppet::Util::Windows::Error, "QueryFullProcessImageNameW(phandle, #{use_win32_path_format}, " \
+                                                  "exe_name_ptr, #{max_chars}"
             end
             image_name = exe_name_ptr.read_wide_string(exe_name_length_ptr.read_dword)
           end
@@ -152,11 +152,10 @@ module Puppet::Util::Windows::Process
         wide_string(system_name),
         wide_string(name.to_s),
         luid_ptr
-        )
+      )
 
       if result == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(
-          "LookupPrivilegeValue(#{system_name}, #{name}, #{luid_ptr})")
+        raise Puppet::Util::Windows::Error, "LookupPrivilegeValue(#{system_name}, #{name}, #{luid_ptr})"
       end
 
       yield LUID.new(luid_ptr)
@@ -174,19 +173,17 @@ module Puppet::Util::Windows::Process
       return_length = return_length_ptr.read_dword
 
       if return_length <= 0
-        raise Puppet::Util::Windows::Error.new(
-          "GetTokenInformation(#{token_handle}, #{token_information}, nil, 0, #{return_length_ptr})")
+        raise Puppet::Util::Windows::Error, "GetTokenInformation(#{token_handle}, #{token_information}, nil, 0, #{return_length_ptr})"
       end
 
       # re-call API with properly sized buffer for all results
       FFI::MemoryPointer.new(return_length) do |token_information_buf|
         result = GetTokenInformation(token_handle, token_information,
-          token_information_buf, return_length, return_length_ptr)
+                                     token_information_buf, return_length, return_length_ptr)
 
         if result == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(
-            "GetTokenInformation(#{token_handle}, #{token_information}, #{token_information_buf}, " +
-              "#{return_length}, #{return_length_ptr})")
+          raise Puppet::Util::Windows::Error, "GetTokenInformation(#{token_handle}, #{token_information}, #{token_information_buf}, " \
+                                              "#{return_length}, #{return_length_ptr})"
         end
 
         yield token_information_buf
@@ -207,7 +204,7 @@ module Puppet::Util::Windows::Process
 
     # extract each instance of LUID_AND_ATTRIBUTES
     0.upto(privileges[:count] - 1) do |i|
-      privileges[:privileges] <<  LUID_AND_ATTRIBUTES.new(privilege_ptr[i])
+      privileges[:privileges] << LUID_AND_ATTRIBUTES.new(privilege_ptr[i])
     end
 
     privileges
@@ -283,7 +280,7 @@ module Puppet::Util::Windows::Process
       result = GetVersionExW(os_version_ptr)
 
       if result == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(_("GetVersionEx failed"))
+        raise Puppet::Util::Windows::Error, _("GetVersionEx failed")
       end
 
       ver = os_version[:dwMajorVersion]
@@ -306,20 +303,20 @@ module Puppet::Util::Windows::Process
     env_ptr = GetEnvironmentStringsW()
 
     # pass :invalid => :replace to the Ruby String#encode to use replacement characters
-    pairs = env_ptr.read_arbitrary_wide_string_up_to(65534, :double_null, { :invalid => :replace })
-      .split(?\x00)
-      .reject { |env_str| env_str.nil? || env_str.empty? || env_str[0] == '=' }
-      .reject do |env_str|
-        # reject any string containing the Unicode replacement character
-        if env_str.include?("\uFFFD")
-          Puppet.warning(_("Discarding environment variable %{string} which contains invalid bytes") % { string: env_str })
-          true
-        end
-      end
-      .map { |env_pair| env_pair.split('=', 2) }
-    Hash[ pairs ]
+    pairs = env_ptr.read_arbitrary_wide_string_up_to(65_534, :double_null, { :invalid => :replace })
+                   .split(?\x00)
+                   .reject { |env_str| env_str.nil? || env_str.empty? || env_str[0] == '=' }
+                   .reject do |env_str|
+                     # reject any string containing the Unicode replacement character
+                     if env_str.include?("\uFFFD")
+                       Puppet.warning(_("Discarding environment variable %{string} which contains invalid bytes") % { string: env_str })
+                       true
+                     end
+                   end
+                   .map { |env_pair| env_pair.split('=', 2) }
+    pairs.to_h
   ensure
-    if env_ptr && ! env_ptr.null?
+    if env_ptr && !env_ptr.null?
       if FreeEnvironmentStringsW(env_ptr) == FFI::WIN32_FALSE
         Puppet.debug "FreeEnvironmentStringsW memory leak"
       end
@@ -328,17 +325,17 @@ module Puppet::Util::Windows::Process
   module_function :get_environment_strings
 
   def set_environment_variable(name, val)
-    raise Puppet::Util::Windows::Error(_('environment variable name must not be nil or empty')) if ! name || name.empty?
+    raise Puppet::Util::Windows::Error(_('environment variable name must not be nil or empty')) if !name || name.empty?
 
     FFI::MemoryPointer.from_string_to_wide_string(name) do |name_ptr|
-      if (val.nil?)
+      if val.nil?
         if SetEnvironmentVariableW(name_ptr, FFI::MemoryPointer::NULL) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to remove environment variable: %{name}") % { name: name })
+          raise Puppet::Util::Windows::Error, _("Failed to remove environment variable: %{name}") % { name: name }
         end
       else
         FFI::MemoryPointer.from_string_to_wide_string(val) do |val_ptr|
           if SetEnvironmentVariableW(name_ptr, val_ptr) == FFI::WIN32_FALSE
-            raise Puppet::Util::Windows::Error.new(_("Failed to set environment variable: %{name}") % { name: name })
+            raise Puppet::Util::Windows::Error, _("Failed to set environment variable: %{name}") % { name: name }
           end
         end
       end
@@ -360,5 +357,4 @@ module Puppet::Util::Windows::Process
     windows_major_version >= 6
   end
   module_function :supports_elevated_security?
-
 end

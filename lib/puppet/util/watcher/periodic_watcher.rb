@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Monitor a given watcher for changes on a periodic interval.
 class Puppet::Util::Watcher::PeriodicWatcher
   # @param watcher [Puppet::Util::Watcher::ChangeWatcher] a watcher for the value to watch
@@ -34,4 +36,3 @@ class Puppet::Util::Watcher::PeriodicWatcher
     end
   end
 end
-

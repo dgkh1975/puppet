@@ -1,11 +1,12 @@
+# frozen_string_literal: true
+
 require 'ostruct'
 require_relative '../../../puppet/util/watched_file'
 require_relative '../../../puppet/util/network_device'
 
 class Puppet::Util::NetworkDevice::Config
-
   def self.main
-    @main ||= self.new
+    @main ||= new
   end
 
   def self.devices
@@ -46,17 +47,17 @@ class Puppet::Util::NetworkDevice::Config
           when /^\s*#/ # skip comments
             file_line_count += 1
             next
-          when /^\s*$/  # skip blank lines
+          when /^\s*$/ # skip blank lines
             file_line_count += 1
             next
           when /^\[([\w.-]+)\]\s*$/ # [device.fqdn]
-            name = $1
+            name = ::Regexp.last_match(1)
             name.chomp!
             if devices.include?(name)
               file_error_location = Puppet::Util::Errors.error_location(nil, file_line_count)
               device_error_location = Puppet::Util::Errors.error_location(nil, device.line)
               raise Puppet::Error, _("Duplicate device found at %{file_error_location}, already found at %{device_error_location}") %
-                  { file_error_location: file_error_location, device_error_location: device_error_location }
+                                   { file_error_location: file_error_location, device_error_location: device_error_location }
             end
             device = OpenStruct.new
             device.name = name
@@ -65,17 +66,17 @@ class Puppet::Util::NetworkDevice::Config
             Puppet.debug "found device: #{device.name} at #{device.line}"
             devices[name] = device
           when /^\s*(type|url|debug)(\s+(.+)\s*)*$/
-            parse_directive(device, $1, $3, file_line_count)
+            parse_directive(device, ::Regexp.last_match(1), ::Regexp.last_match(3), file_line_count)
           else
             error_location_str = Puppet::Util::Errors.error_location(nil, file_line_count)
             raise Puppet::Error, _("Invalid entry at %{error_location}: %{file_text}") %
-                { error_location: error_location_str, file_text: line }
+                                 { error_location: error_location_str, file_text: line }
           end
         end
       end
     rescue Errno::EACCES
       Puppet.err _("Configuration error: Cannot read %{file}; cannot serve") % { file: @file }
-      #raise Puppet::Error, "Cannot read #{@config}"
+      # raise Puppet::Error, "Cannot read #{@config}"
     rescue Errno::ENOENT
       Puppet.err _("Configuration error: '%{file}' does not exit; cannot serve") % { file: @file }
     end
@@ -101,5 +102,4 @@ class Puppet::Util::NetworkDevice::Config
       raise Puppet::Error, _("Invalid argument '%{var}' at %{error_location}") % { var: var, error_location: error_location_str }
     end
   end
-
 end

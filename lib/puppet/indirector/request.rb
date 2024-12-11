@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'cgi'
 require 'uri'
 require_relative '../../puppet/indirector'
@@ -24,7 +26,7 @@ class Puppet::Indirector::Request
   # Is this an authenticated request?
   def authenticated?
     # Double negative, so we just get true or false
-    ! ! authenticated
+    !!authenticated
   end
 
   def environment
@@ -35,11 +37,11 @@ class Puppet::Indirector::Request
 
   def environment=(env)
     @environment =
-    if env.is_a?(Puppet::Node::Environment)
-      env
-    else
-      Puppet.lookup(:environments).get!(env)
-    end
+      if env.is_a?(Puppet::Node::Environment)
+        env
+      else
+        Puppet.lookup(:environments).get!(env)
+      end
   end
 
   # LAK:NOTE This is a messy interface to the cache, and it's only
@@ -66,7 +68,7 @@ class Puppet::Indirector::Request
     self.indirection_name = indirection_name
     self.method = method
 
-    options = options.inject({}) { |hash, ary| hash[ary[0].to_sym] = ary[1]; hash }
+    options = options.each_with_object({}) { |ary, hash| hash[ary[0].to_sym] = ary[1]; }
 
     set_attributes(options)
 
@@ -78,14 +80,14 @@ class Puppet::Indirector::Request
       # info out in the REST class, but it seemed bad design for the REST
       # class to rewrite the key.
 
-      if key.to_s =~ /^\w+:\// and not Puppet::Util.absolute_path?(key.to_s) # it's a URI
+      if key.to_s =~ %r{^\w+:/} and !Puppet::Util.absolute_path?(key.to_s) # it's a URI
         set_uri_key(key)
       else
         @key = key
       end
     end
 
-    @key = @instance.name if ! @key and @instance
+    @key = @instance.name if !@key and @instance
   end
 
   # Look up the indirection based on the name provided.
@@ -100,6 +102,7 @@ class Puppet::Indirector::Request
   def model
     ind = indirection
     raise ArgumentError, _("Could not find indirection '%{indirection}'") % { indirection: indirection_name } unless ind
+
     ind.model
   end
 
@@ -137,11 +140,11 @@ class Puppet::Indirector::Request
   end
 
   def description
-    return(uri ? uri : "/#{indirection_name}/#{key}")
+    uri || "/#{indirection_name}/#{key}"
   end
 
   def remote?
-    self.node or self.ip
+    node or ip
   end
 
   private
@@ -189,6 +192,6 @@ class Puppet::Indirector::Request
       @protocol = uri.scheme
     end
 
-    @key = Puppet::Util.uri_unescape(uri.path.sub(/^\//, ''))
+    @key = Puppet::Util.uri_unescape(uri.path.sub(%r{^/}, ''))
   end
 end

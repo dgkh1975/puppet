@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows'
 
 module Puppet::Util::Windows
@@ -6,8 +8,10 @@ module Puppet::Util::Windows
     extend FFI::Library
 
     # missing from Windows::Error
-    ERROR_NONE_MAPPED           = 1332
-    ERROR_INVALID_SID_STRUCTURE = 1337
+    ERROR_NONE_MAPPED                  = 1332
+    ERROR_INVALID_SID_STRUCTURE        = 1337
+    ERROR_TRUSTED_DOMAIN_FAILURE       = 1788
+    ERROR_TRUSTED_RELATIONSHIP_FAILURE = 1789
 
     # Well Known SIDs
     Null                        = 'S-1-0'
@@ -82,7 +86,7 @@ module Puppet::Util::Windows
 
       raw_sid_bytes ? Principal.lookup_account_sid(raw_sid_bytes) : Principal.lookup_account_name(name)
     rescue => e
-      Puppet.debug("#{e.message}")
+      Puppet.debug(e.message.to_s)
       (allow_unresolved && raw_sid_bytes) ? unresolved_principal(name, raw_sid_bytes) : nil
     end
     module_function :name_to_principal
@@ -95,7 +99,7 @@ module Puppet::Util::Windows
     # This method returns a SID::Principal with the account, domain, SID, etc
     def octet_string_to_principal(bytes)
       if !bytes || !bytes.respond_to?('pack') || bytes.empty?
-        raise Puppet::Util::Windows::Error.new(_("Octet string must be an array of bytes"))
+        raise Puppet::Util::Windows::Error, _("Octet string must be an array of bytes")
       end
 
       Principal.lookup_account_sid(bytes)
@@ -111,9 +115,10 @@ module Puppet::Util::Windows
     # removed from the domain
     def ads_to_principal(ads_object)
       if !ads_object || !ads_object.respond_to?(:ole_respond_to?) ||
-        !ads_object.ole_respond_to?(:objectSID) || !ads_object.ole_respond_to?(:Name)
-        raise Puppet::Error.new("ads_object must be an IAdsUser or IAdsGroup instance")
+         !ads_object.ole_respond_to?(:objectSID) || !ads_object.ole_respond_to?(:Name)
+        raise Puppet::Error, "ads_object must be an IAdsUser or IAdsGroup instance"
       end
+
       octet_string_to_principal(ads_object.objectSID)
     rescue Puppet::Util::Windows::Error => e
       # if the error is not a lookup / mapping problem, immediately re-raise
@@ -121,8 +126,8 @@ module Puppet::Util::Windows
 
       # if the Name property isn't formatted like a SID, OR
       if !valid_sid?(ads_object.Name) ||
-        # if the objectSID doesn't match the Name property, also raise
-        ((converted = octet_string_to_sid_string(ads_object.objectSID)) != ads_object.Name)
+         # if the objectSID doesn't match the Name property, also raise
+         ((converted = octet_string_to_sid_string(ads_object.objectSID)) != ads_object.Name)
         raise Puppet::Error.new("ads_object Name: #{ads_object.Name} invalid or does not match objectSID: #{ads_object.objectSID} (#{converted})", e)
       end
 
@@ -134,7 +139,6 @@ module Puppet::Util::Windows
     # e.g. 'BUILTIN\Administrators'. Returns nil if an account
     # for that SID does not exist.
     def sid_to_name(value)
-
       sid_bytes = []
       begin
         string_to_sid_ptr(value) do |ptr|
@@ -155,19 +159,19 @@ module Puppet::Util::Windows
 
     # Convert a SID pointer to a SID string, e.g. "S-1-5-32-544".
     def sid_ptr_to_string(psid)
-      if ! psid.kind_of?(FFI::Pointer) || IsValidSid(psid) == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(_("Invalid SID"))
+      if !psid.is_a?(FFI::Pointer) || IsValidSid(psid) == FFI::WIN32_FALSE
+        raise Puppet::Util::Windows::Error, _("Invalid SID")
       end
 
       sid_string = nil
       FFI::MemoryPointer.new(:pointer, 1) do |buffer_ptr|
         if ConvertSidToStringSidW(psid, buffer_ptr) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to convert binary SID"))
+          raise Puppet::Util::Windows::Error, _("Failed to convert binary SID")
         end
 
         buffer_ptr.read_win32_local_pointer do |wide_string_ptr|
           if wide_string_ptr.null?
-            raise Puppet::Error.new(_("ConvertSidToStringSidW failed to allocate buffer for sid"))
+            raise Puppet::Error, _("ConvertSidToStringSidW failed to allocate buffer for sid")
           end
 
           sid_string = wide_string_ptr.read_arbitrary_wide_string_up_to(MAXIMUM_SID_STRING_LENGTH)
@@ -185,9 +189,8 @@ module Puppet::Util::Windows
     def string_to_sid_ptr(string_sid, &block)
       FFI::MemoryPointer.from_string_to_wide_string(string_sid) do |lpcwstr|
         FFI::MemoryPointer.new(:pointer, 1) do |sid_ptr_ptr|
-
           if ConvertStringSidToSidW(lpcwstr, sid_ptr_ptr) == FFI::WIN32_FALSE
-            raise Puppet::Util::Windows::Error.new(_("Failed to convert string SID: %{string_sid}") % { string_sid: string_sid })
+            raise Puppet::Util::Windows::Error, _("Failed to convert string SID: %{string_sid}") % { string_sid: string_sid }
           end
 
           sid_ptr_ptr.read_win32_local_pointer do |sid_ptr|
@@ -206,7 +209,7 @@ module Puppet::Util::Windows
       valid = false
 
       begin
-        string_to_sid_ptr(string_sid) { |ptr| valid = ! ptr.nil? && ! ptr.null? }
+        string_to_sid_ptr(string_sid) { |ptr| valid = !ptr.nil? && !ptr.null? }
       rescue Puppet::Util::Windows::Error => e
         raise if e.code != ERROR_INVALID_SID_STRUCTURE
       end
@@ -217,8 +220,8 @@ module Puppet::Util::Windows
 
     def get_length_sid(sid_ptr)
       # MSDN states IsValidSid should be called on pointer first
-      if ! sid_ptr.kind_of?(FFI::Pointer) || IsValidSid(sid_ptr) == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(_("Invalid SID"))
+      if !sid_ptr.is_a?(FFI::Pointer) || IsValidSid(sid_ptr) == FFI::WIN32_FALSE
+        raise Puppet::Util::Windows::Error, _("Invalid SID")
       end
 
       GetLengthSid(sid_ptr)
@@ -243,10 +246,11 @@ module Puppet::Util::Windows
         name, # account
         sid_bytes, # sid_bytes
         name, # sid string
-        nil, #domain
+        nil, # domain
         # https://msdn.microsoft.com/en-us/library/cc245534.aspx?f=255&MSPPError=-2147217396
         # Indicates that the type of object could not be determined. For example, no object with that SID exists.
-        :SidTypeUnknown)
+        :SidTypeUnknown
+      )
     end
 
     ffi_convention :stdcall
@@ -257,7 +261,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :IsValidSid,
-      [:pointer], :win32_bool
+                            [:pointer], :win32_bool
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/aa376399(v=vs.85).aspx
     # BOOL ConvertSidToStringSid(
@@ -266,7 +270,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :ConvertSidToStringSidW,
-      [:pointer, :pointer], :win32_bool
+                            [:pointer, :pointer], :win32_bool
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/aa376402(v=vs.85).aspx
     # BOOL WINAPI ConvertStringSidToSid(
@@ -275,7 +279,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :ConvertStringSidToSidW,
-      [:lpcwstr, :pointer], :win32_bool
+                            [:lpcwstr, :pointer], :win32_bool
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/aa446642(v=vs.85).aspx
     # DWORD WINAPI GetLengthSid(

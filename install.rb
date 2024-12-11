@@ -36,15 +36,7 @@ require 'tempfile'
 require 'optparse'
 require 'ostruct'
 
-begin
-  require 'rdoc/rdoc'
-  $haverdoc = true
-rescue LoadError
-  puts "Missing rdoc; skipping documentation"
-  $haverdoc = false
-end
-
-PREREQS = %w{openssl facter cgi hiera}
+PREREQS = %w{openssl facter cgi}
 MIN_FACTER_VERSION = 1.5
 
 InstallOptions = OpenStruct.new
@@ -92,7 +84,7 @@ def do_man(man, strip = 'man/')
     FileUtils.install(mf, omf, mode: 0644, preserve: true, verbose: true)
     # Solaris does not support gzipped man pages. When called with
     # --no-check-prereqs/without facter the default gzip behavior still applies
-    unless $operatingsystem == "Solaris"
+    unless $osname == "Solaris"
       gzip = %x{which gzip}
       gzip.chomp!
       %x{#{gzip} -f #{omf}}
@@ -140,25 +132,9 @@ def prepare_installation
   InstallOptions.check_prereqs = true
   InstallOptions.batch_files = true
 
-  # Only try to do docs if we're sure they have rdoc
-  if $haverdoc
-    InstallOptions.rdoc  = true
-    InstallOptions.ri  = true
-  else
-    InstallOptions.rdoc  = false
-    InstallOptions.ri  = false
-  end
-
-
   ARGV.options do |opts|
     opts.banner = "Usage: #{File.basename($0)} [options]"
     opts.separator ""
-    opts.on('--[no-]rdoc', 'Prevents the creation of RDoc output.', 'Default on.') do |onrdoc|
-      InstallOptions.rdoc = onrdoc
-    end
-    opts.on('--[no-]ri', 'Prevents the creation of RI output.', 'Default off on mswin32.') do |onri|
-      InstallOptions.ri = onri
-    end
     opts.on('--[no-]configs', 'Prevents the installation of config files', 'Default off.') do |ontest|
       InstallOptions.configs = ontest
     end
@@ -205,14 +181,8 @@ def prepare_installation
       InstallOptions.batch_files = false
     end
     opts.on('--quick', 'Performs a quick installation. Only the', 'installation is done.') do |quick|
-      InstallOptions.rdoc    = false
-      InstallOptions.ri      = false
       InstallOptions.configs = true
-    end
-    opts.on('--full', 'Performs a full installation. All', 'optional installation steps are run.') do |full|
-      InstallOptions.rdoc    = true
-      InstallOptions.ri      = true
-      InstallOptions.configs = true
+      warn "--quick is deprecated. Use --configs"
     end
     opts.separator("")
     opts.on_tail('--help', "Shows this help text.") do
@@ -223,9 +193,6 @@ def prepare_installation
     opts.parse!
   end
 
-  version = [RbConfig::CONFIG["MAJOR"], RbConfig::CONFIG["MINOR"]].join(".")
-  libdir = File.join(RbConfig::CONFIG["libdir"], "ruby", version)
-
   # Mac OS X 10.5 and higher declare bindir
   # /System/Library/Frameworks/Ruby.framework/Versions/1.8/usr/bin
   # which is not generally where people expect executables to be installed
@@ -234,16 +201,16 @@ def prepare_installation
     RbConfig::CONFIG['bindir'] = "/usr/bin"
   end
 
-  # Here we only set $operatingsystem if we have opted to check for prereqs.
+  # Here we only set $osname if we have opted to check for prereqs.
   # Otherwise facter won't be guaranteed to be present.
   if InstallOptions.check_prereqs
     check_prereqs
-    $operatingsystem = Facter.value :operatingsystem
+    $osname = Facter.value('os.name')
   end
 
   if not InstallOptions.configdir.nil?
     configdir = InstallOptions.configdir
-  elsif $operatingsystem == "windows"
+  elsif $osname == "windows"
     configdir = File.join(ENV['ALLUSERSPROFILE'], "PuppetLabs", "puppet", "etc")
   else
     configdir = "/etc/puppetlabs/puppet"
@@ -251,7 +218,7 @@ def prepare_installation
 
   if not InstallOptions.codedir.nil?
     codedir = InstallOptions.codedir
-  elsif $operatingsystem == "windows"
+  elsif $osname == "windows"
     codedir = File.join(ENV['ALLUSERSPROFILE'], "PuppetLabs", "code")
   else
     codedir = "/etc/puppetlabs/code"
@@ -259,7 +226,7 @@ def prepare_installation
 
   if not InstallOptions.vardir.nil?
     vardir = InstallOptions.vardir
-  elsif $operatingsystem == "windows"
+  elsif $osname == "windows"
     vardir = File.join(ENV['ALLUSERSPROFILE'], "PuppetLabs", "puppet", "cache")
   else
     vardir = "/opt/puppetlabs/puppet/cache"
@@ -267,7 +234,7 @@ def prepare_installation
 
   if not InstallOptions.publicdir.nil?
     publicdir = InstallOptions.publicdir
-  elsif $operatingsystem == "windows"
+  elsif $osname == "windows"
     publicdir = File.join(ENV['ALLUSERSPROFILE'], "PuppetLabs", "puppet", "public")
   else
     publicdir = "/opt/puppetlabs/puppet/public"
@@ -275,7 +242,7 @@ def prepare_installation
 
   if not InstallOptions.rundir.nil?
     rundir = InstallOptions.rundir
-  elsif $operatingsystem == "windows"
+  elsif $osname == "windows"
     rundir = File.join(ENV['ALLUSERSPROFILE'], "PuppetLabs", "puppet", "var", "run")
   else
     rundir = "/var/run/puppetlabs"
@@ -283,7 +250,7 @@ def prepare_installation
 
   if not InstallOptions.logdir.nil?
     logdir = InstallOptions.logdir
-  elsif $operatingsystem == "windows"
+  elsif $osname == "windows"
     logdir = File.join(ENV['ALLUSERSPROFILE'], "PuppetLabs", "puppet", "var", "log")
   else
     logdir = "/var/log/puppetlabs/puppet"
@@ -298,7 +265,7 @@ def prepare_installation
   if not InstallOptions.localedir.nil?
     localedir = InstallOptions.localedir
   else
-    if $operatingsystem == "windows"
+    if $osname == "windows"
       localedir = File.join(ENV['PROGRAMFILES'], "Puppet Labs", "Puppet", "puppet", "share", "locale")
     else
       localedir = "/opt/puppetlabs/puppet/share/locale"
@@ -312,7 +279,8 @@ def prepare_installation
     if sitelibdir.nil?
       sitelibdir = $LOAD_PATH.find { |x| x =~ /site_ruby/ }
       if sitelibdir.nil?
-        sitelibdir = File.join(libdir, "site_ruby")
+        version = [RbConfig::CONFIG["MAJOR"], RbConfig::CONFIG["MINOR"]].join(".")
+        sitelibdir = File.join(RbConfig::CONFIG["libdir"], "ruby", version, "site_ruby")
       elsif sitelibdir !~ Regexp.quote(version)
         sitelibdir = File.join(sitelibdir, version)
       end
@@ -328,10 +296,6 @@ def prepare_installation
   # This is the new way forward
   if not InstallOptions.destdir.nil?
     destdir = InstallOptions.destdir
-  # To be deprecated once people move over to using --destdir option
-  elsif not ENV['DESTDIR'].nil?
-    destdir = ENV['DESTDIR']
-    warn "DESTDIR is deprecated. Use --destdir instead."
   else
     destdir = ''
   end
@@ -362,7 +326,6 @@ def prepare_installation
   InstallOptions.codedir = codedir
   InstallOptions.config_dir = configdir
   InstallOptions.bin_dir = bindir
-  InstallOptions.lib_dir = libdir
   InstallOptions.man_dir = mandir
   InstallOptions.var_dir = vardir
   InstallOptions.public_dir = publicdir
@@ -376,39 +339,9 @@ end
 # by stripping the drive letter, but only if the basedir is not empty.
 #
 def join(basedir, dir)
-  return "#{basedir}#{dir[2..-1]}" if $operatingsystem == "windows" and basedir.length > 0 and dir.length > 2
+  return "#{basedir}#{dir[2..-1]}" if $osname == "windows" and basedir.length > 0 and dir.length > 2
 
   "#{basedir}#{dir}"
-end
-
-##
-# Build the rdoc documentation. Also, try to build the RI documentation.
-#
-def build_rdoc(files)
-  return unless $haverdoc
-  begin
-    r = RDoc::RDoc.new
-    r.document(["--main", "README", "--title", "Puppet -- Site Configuration Management", "--line-numbers"] + files)
-  rescue RDoc::RDocError => e
-    $stderr.puts e.message
-  rescue Exception => e
-    $stderr.puts "Couldn't build RDoc documentation\n#{e.message}"
-  end
-end
-
-def build_ri(files)
-  return unless $haverdoc
-  return if $operatingsystem == "windows"
-  begin
-    ri = RDoc::RDoc.new
-    #ri.document(["--ri-site", "--merge"] + files)
-    ri.document(["--ri-site"] + files)
-  rescue RDoc::RDocError => e
-    $stderr.puts e.message
-  rescue Exception => e
-    $stderr.puts "Couldn't build Ri documentation\n#{e.message}"
-    $stderr.puts "Continuing with install..."
-  end
 end
 
 ##
@@ -427,14 +360,14 @@ def install_binfile(from, op_file, target)
 
   File.open(from) do |ip|
     File.open(tmp_file.path, "w") do |op|
-      op.puts "#!#{ruby}" unless $operatingsystem == "windows"
+      op.puts "#!#{ruby}" unless $osname == "windows"
       contents = ip.readlines
       contents.shift if contents[0] =~ /^#!/
       op.write contents.join
     end
   end
 
-  if $operatingsystem == "windows" && InstallOptions.batch_files
+  if $osname == "windows" && InstallOptions.batch_files
     installed_wrapper = false
 
     unless File.extname(from) =~ /\.(cmd|bat)/
@@ -476,24 +409,20 @@ FileUtils.cd File.dirname(__FILE__) do
   # Set these values to what you want installed.
   configs = glob(%w{conf/puppet.conf conf/hiera.yaml})
   bins  = glob(%w{bin/*})
-  #rdoc  = glob(%w{bin/* lib/**/*.rb README* }).reject { |e| e=~ /\.(bat|cmd)$/ }
-  #ri    = glob(%w{bin/*.rb lib/**/*.rb}).reject { |e| e=~ /\.(bat|cmd)$/ }
   man   = glob(%w{man/man[0-9]/*})
   libs  = glob(%w{lib/**/*})
   locales = glob(%w{locales/**/*})
 
   prepare_installation
 
-  if $operatingsystem == "windows"
+  if $osname == "windows"
     windows_bins = glob(%w{ext/windows/*bat})
   end
 
-  #build_rdoc(rdoc) if InstallOptions.rdoc
-  #build_ri(ri) if InstallOptions.ri
   do_configs(configs, InstallOptions.config_dir) if InstallOptions.configs
   do_bins(bins, InstallOptions.bin_dir)
-  do_bins(windows_bins, InstallOptions.bin_dir, 'ext/windows/') if $operatingsystem == "windows" && InstallOptions.batch_files
+  do_bins(windows_bins, InstallOptions.bin_dir, 'ext/windows/') if $osname == "windows" && InstallOptions.batch_files
   do_libs(libs)
   do_locales(locales)
-  do_man(man) unless $operatingsystem == "windows"
+  do_man(man) unless $osname == "windows"
 end

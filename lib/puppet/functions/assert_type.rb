@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Returns the given value if it is of the given
 # [data type](https://puppet.com/docs/puppet/latest/lang_data.html), or
 # otherwise either raises an error or executes an optional two-parameter
@@ -67,7 +69,7 @@ Puppet::Functions.create_function(:assert_type) do
   # @param value [Object] the value to assert
   #
   def assert_type(type, value)
-    unless Puppet::Pops::Types::TypeCalculator.instance?(type,value)
+    unless Puppet::Pops::Types::TypeCalculator.instance?(type, value)
       inferred_type = Puppet::Pops::Types::TypeCalculator.infer_set(value)
       if block_given?
         # Give the inferred type to allow richer comparison in the given block (if generalized
@@ -77,7 +79,8 @@ Puppet::Functions.create_function(:assert_type) do
       else
         raise Puppet::Pops::Types::TypeAssertionError.new(
           Puppet::Pops::Types::TypeMismatchDescriber.singleton.describe_mismatch('assert_type():', type, inferred_type),
-          type, inferred_type)
+          type, inferred_type
+        )
       end
     end
     value

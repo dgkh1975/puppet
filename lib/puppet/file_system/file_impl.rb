@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 # Abstract implementation of the Puppet::FileSystem
 #
 class Puppet::FileSystem::FileImpl
-
   def pathname(path)
     path.is_a?(Pathname) ? path : Pathname.new(path)
   end
@@ -51,15 +52,15 @@ class Puppet::FileSystem::FileImpl
   def exclusive_open(path, mode, options = 'r', timeout = 300, &block)
     wait = 0.001 + (Kernel.rand / 1000)
     written = false
-    while !written
+    until written
       ::File.open(path, options, mode) do |rf|
-        if rf.flock(::File::LOCK_EX|::File::LOCK_NB)
-          Puppet.debug{ _("Locked '%{path}'") % { path: path } }
+        if rf.flock(::File::LOCK_EX | ::File::LOCK_NB)
+          Puppet.debug { _("Locked '%{path}'") % { path: path } }
           yield rf
           written = true
-          Puppet.debug{ _("Unlocked '%{path}'") % { path: path } }
+          Puppet.debug { _("Unlocked '%{path}'") % { path: path } }
         else
-          Puppet.debug{ "Failed to lock '%s' retrying in %.2f milliseconds" % [path, wait * 1000] }
+          Puppet.debug { "Failed to lock '%s' retrying in %.2f milliseconds" % [path, wait * 1000] }
           sleep wait
           timeout -= wait
           wait *= 2
@@ -130,27 +131,27 @@ class Puppet::FileSystem::FileImpl
   end
 
   def symlink?(path)
-    File.symlink?(path)
+    ::File.symlink?(path)
   end
 
   def readlink(path)
-    File.readlink(path)
+    ::File.readlink(path)
   end
 
   def unlink(*paths)
-    File.unlink(*paths)
+    ::File.unlink(*paths)
   end
 
   def stat(path)
-    File.stat(path)
+    ::File.stat(path)
   end
 
   def lstat(path)
-    File.lstat(path)
+    ::File.lstat(path)
   end
 
   def compare_stream(path, stream)
-    open(path, 0, 'rb') { |this| FileUtils.compare_stream(this, stream) }
+    ::File.open(path, 0, 'rb') { |this| FileUtils.compare_stream(this, stream) }
   end
 
   def chmod(mode, path)
@@ -159,12 +160,12 @@ class Puppet::FileSystem::FileImpl
 
   def replace_file(path, mode = nil)
     begin
-      stat = Puppet::FileSystem.lstat(path)
+      stat = lstat(path)
       gid = stat.gid
       uid = stat.uid
-      mode ||= stat.mode & 07777
+      mode ||= stat.mode & 0o7777
     rescue Errno::ENOENT
-      mode ||= 0640
+      mode ||= 0o640
     end
 
     tempfile = Puppet::FileSystem::Uniquefile.new(Puppet::FileSystem.basename_string(path), Puppet::FileSystem.dir_string(path))
@@ -180,7 +181,7 @@ class Puppet::FileSystem::FileImpl
       tempfile_path = tempfile.path
       FileUtils.chown(uid, gid, tempfile_path) if uid && gid
       chmod(mode, tempfile_path)
-      File.rename(tempfile_path, Puppet::FileSystem.path_string(path))
+      ::File.rename(tempfile_path, path_string(path))
     ensure
       tempfile.close!
     end

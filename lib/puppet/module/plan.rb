@@ -1,9 +1,12 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/logging'
 
 class Puppet::Module
   class Plan
     class Error < Puppet::Error
       attr_accessor :kind, :details
+
       def initialize(message, kind, details = nil)
         super(message)
         @details = details || {}
@@ -33,27 +36,30 @@ class Puppet::Module
 
     class InvalidPlan < Error
     end
+
     class InvalidMetadata < Error
     end
+
     class PlanNotFound < Error
       def initialize(plan_name, module_name)
         msg = _("Plan %{plan_name} not found in module %{module_name}.") %
-          {plan_name: plan_name, module_name: module_name}
+              { plan_name: plan_name, module_name: module_name }
         super(msg, 'puppet.plans/plan-not-found', { 'name' => plan_name })
       end
     end
 
-    ALLOWED_EXTENSIONS = %w{.pp .yaml}
-    RESERVED_WORDS = %w{and application attr case class consumes default else
-        elsif environment false function if import in inherits node or private
-        produces site true type undef unless}
-    RESERVED_DATA_TYPES = %w{any array boolean catalogentry class collection
-        callable data default enum float hash integer numeric optional pattern
-        resource runtime scalar string struct tuple type undef variant}
+    ALLOWED_EXTENSIONS = %w[.pp .yaml]
+    RESERVED_WORDS = %w[and application attr case class consumes default else
+                        elsif environment false function if import in inherits node or private
+                        produces site true type undef unless]
+    RESERVED_DATA_TYPES = %w[any array boolean catalogentry class collection
+                             callable data default enum float hash integer numeric optional pattern
+                             resource runtime scalar string struct tuple type undef variant]
 
     def self.is_plan_name?(name)
       return true if name =~ /^[a-z][a-z0-9_]*$/
-      return false
+
+      false
     end
 
     # Determine whether a plan file has a legal name and extension
@@ -70,7 +76,8 @@ class Puppet::Module
       if RESERVED_DATA_TYPES.include?(name)
         return [false, _("Plan name cannot be a Puppet data type, but was '%{name}'") % { name: name }]
       end
-      return [true]
+
+      [true]
     end
 
     # Executables list should contain the full path of all possible implementation files
@@ -82,7 +89,7 @@ class Puppet::Module
       implementations = plan_files.select { |impl| File.basename(impl, '.*') == basename }
 
       # Select .pp before .yaml, since .pp comes before .yaml alphabetically.
-      chosen = implementations.sort.first
+      chosen = implementations.min
 
       [{ "name" => File.basename(chosen), "path" => chosen }]
     end
@@ -95,7 +102,7 @@ class Puppet::Module
     def self.plans_in_module(pup_module)
       # Search e.g. 'modules/<pup_module>/plans' for all plans
       plan_files = Dir.glob(File.join(pup_module.plans_directory, '*'))
-        .keep_if { |f| valid, _ = is_plans_filename?(f); valid }
+                      .keep_if { |f| valid, _ = is_plans_filename?(f); valid }
 
       plans = plan_files.group_by { |f| plan_name_from_path(f) }
 
@@ -104,7 +111,7 @@ class Puppet::Module
       end
     end
 
-    attr_reader :name, :module, :metadata_file, :metadata
+    attr_reader :name, :module, :metadata_file
 
     # file paths must be relative to the modules plan directory
     def initialize(pup_module, plan_name, plan_files)
@@ -136,8 +143,8 @@ class Puppet::Module
     end
 
     def ==(other)
-      self.name == other.name &&
-      self.module == other.module
+      name == other.name &&
+        self.module == other.module
     end
 
     def environment_name
@@ -152,7 +159,7 @@ class Puppet::Module
 
     # Abstracted here so we can add support for subdirectories later
     def self.plan_name_from_path(path)
-      return File.basename(path, '.*')
+      File.basename(path, '.*')
     end
     private_class_method :plan_name_from_path
   end

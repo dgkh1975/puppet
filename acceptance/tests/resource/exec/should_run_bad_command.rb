@@ -27,14 +27,14 @@ def stop_sleep_process(targets, accept_no_pid_found = false)
     when /osx/
       command = "ps -e -o pid,comm | grep sleep | sed 's/^[^0-9]*//g' | cut -d\\  -f1"
     when /win/
-      command = "ps -efW | grep PING | sed 's/^[^0-9]*[0-9]*[^0-9]*//g' | cut -d ' ' -f1"
+      command = "cmd.exe /C WMIC path win32_process WHERE Name=\\\"PING.EXE\\\" get ProcessId | egrep -o '[0-9]+\\s*$'"
     else
       command = "ps -ef | grep 'bin/sleep ' | grep -v 'grep' | grep -v 'true' | sed 's/^[^0-9]*//g' | cut -d\\  -f1"
     end
 
     # A failed test may leave an orphaned sleep process, handle multiple matches.
     pids = nil
-    on(target, command) do |output|
+    on(target, command, accept_all_exit_codes: accept_no_pid_found) do |output|
       pids = output.stdout.chomp.split
       if pids.empty? && !accept_no_pid_found
         raise("Did not find a pid for a sleep process on #{target}")
@@ -62,9 +62,9 @@ agents.each do |agent|
   create_remote_file(agent, daemon, sleepy_daemon_script(agent))
   on(agent, "chmod +x #{daemon}")
 
-  apply_manifest_on(agent, "exec {'#{daemon}': logoutput => true}") do
+  apply_manifest_on(agent, "exec {'#{daemon}': logoutput => true}") do |result|
     fail_test "didn't seem to run the command" unless
-      stdout.include? 'executed successfully' unless agent['locale'] == 'ja'
+      result.stdout.include? 'executed successfully' unless agent['locale'] == 'ja'
   end
 end
 

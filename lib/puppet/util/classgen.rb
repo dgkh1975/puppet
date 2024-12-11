@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet
   class ConstantAlreadyDefined < Error; end
   class SubclassAlreadyDefined < Error; end
@@ -65,7 +67,7 @@ module Puppet::Util::ClassGen
   def rmclass(name, options)
     const = genconst_string(name, options)
     retval = false
-    if is_constant_defined?(const)
+    if const_defined?(const, false)
       remove_const(const)
       retval = true
     end
@@ -101,7 +103,7 @@ module Puppet::Util::ClassGen
     name = name.to_s.downcase.intern
 
     if type == Module
-      #evalmethod = :module_eval
+      # evalmethod = :module_eval
       evalmethod = :class_eval
       # Create the class, with the correct name.
       klass = Module.new do
@@ -139,25 +141,19 @@ module Puppet::Util::ClassGen
     klass
   end
 
-  # @api private
-  #
-  def is_constant_defined?(const)
-    const_defined?(const, false)
-  end
-
   # Handle the setting and/or removing of the associated constant.
   # @api private
   #
   def handleclassconst(klass, name, options)
-   const = genconst_string(name, options)
+    const = genconst_string(name, options)
 
-    if is_constant_defined?(const)
+    if const_defined?(const, false)
       if options[:overwrite]
         Puppet.info _("Redefining %{name} in %{klass}") % { name: name, klass: self }
         remove_const(const)
       else
         raise Puppet::ConstantAlreadyDefined,
-          _("Class %{const} is already defined in %{klass}") % { const: const, klass: self }
+              _("Class %{const} is already defined in %{klass}") % { const: const, klass: self }
       end
     end
     const_set(const, klass)
@@ -181,11 +177,11 @@ module Puppet::Util::ClassGen
 
     [:include, :extend].each do |method|
       set = options[method]
-      if set
-        set = [set] unless set.is_a?(Array)
-        set.each do |mod|
-          klass.send(method, mod)
-        end
+      next unless set
+
+      set = [set] unless set.is_a?(Array)
+      set.each do |mod|
+        klass.send(method, mod)
       end
     end
 
@@ -203,9 +199,9 @@ module Puppet::Util::ClassGen
   def storeclass(klass, klassname, options)
     hash = options[:hash]
     if hash
-      if hash.include? klassname and ! options[:overwrite]
+      if hash.include? klassname and !options[:overwrite]
         raise Puppet::SubclassAlreadyDefined,
-          _("Already a generated class named %{klassname}") % { klassname: klassname }
+              _("Already a generated class named %{klassname}") % { klassname: klassname }
       end
 
       hash[klassname] = klass
@@ -214,15 +210,14 @@ module Puppet::Util::ClassGen
     # If we were told to stick it in a hash, then do so
     array = options[:array]
     if array
-      if (klass.respond_to? :name and
-              array.find { |c| c.name == klassname } and
-              ! options[:overwrite])
+      if klass.respond_to? :name and
+         array.find { |c| c.name == klassname } and
+         !options[:overwrite]
         raise Puppet::SubclassAlreadyDefined,
-          _("Already a generated class named %{klassname}") % { klassname: klassname }
+              _("Already a generated class named %{klassname}") % { klassname: klassname }
       end
 
       array << klass
     end
   end
 end
-

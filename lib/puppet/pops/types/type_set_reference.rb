@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
 class TypeSetReference
@@ -48,6 +50,7 @@ class TypeSetReference
     unless @version_range.include?(@type_set.version)
       raise ArgumentError, "#{self} resolves to an incompatible version. Expected #{@version_range}, got #{type_set.version}"
     end
+
     nil
   end
 

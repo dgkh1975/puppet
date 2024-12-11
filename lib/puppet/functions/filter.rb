@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Applies a [lambda](https://puppet.com/docs/puppet/latest/lang_lambdas.html)
 # to every value in a data structure and returns an array or hash containing any elements
 # for which the lambda evaluates to a truthy value (not `false` or `undef`).
@@ -92,16 +94,16 @@ Puppet::Functions.create_function(:filter) do
   end
 
   def filter_Hash_1(hash)
-    result = hash.select {|x, y| yield([x, y]) }
+    result = hash.select { |x, y| yield([x, y]) }
     # Ruby 1.8.7 returns Array
-    result = Hash[result] unless result.is_a? Hash
+    result = result.to_h unless result.is_a? Hash
     result
   end
 
   def filter_Hash_2(hash)
-    result = hash.select {|x, y| yield(x, y) }
+    result = hash.select { |x, y| yield(x, y) }
     # Ruby 1.8.7 returns Array
-    result = Hash[result] unless result.is_a? Hash
+    result = result.to_h unless result.is_a? Hash
     result
   end
 
@@ -109,11 +111,8 @@ Puppet::Functions.create_function(:filter) do
     result = []
     enum = Puppet::Pops::Types::Iterable.asserted_iterable(self, enumerable)
     begin
-      loop do
-        it = enum.next
-        if yield(it)
-          result << it
-        end
+      enum.each do |value|
+        result << value if yield(value)
       end
     rescue StopIteration
     end
@@ -125,21 +124,15 @@ Puppet::Functions.create_function(:filter) do
     if enum.hash_style?
       result = {}
       enum.each { |k, v| result[k] = v if yield(k, v) }
-      result
     else
       result = []
       begin
-        index = 0
-        loop do
-          it = enum.next
-          if yield(index, it)
-            result << it
-          end
-          index += 1
+        enum.each_with_index do |value, index|
+          result << value if yield(index, value)
         end
       rescue StopIteration
       end
-      result
     end
+    result
   end
 end

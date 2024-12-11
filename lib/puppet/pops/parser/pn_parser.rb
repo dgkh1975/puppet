@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Parser
-
 class PNParser
-  LIT_TRUE = 'true'.freeze
-  LIT_FALSE = 'false'.freeze
-  LIT_NIL = 'nil'.freeze
+  LIT_TRUE = 'true'
+  LIT_FALSE = 'false'
+  LIT_NIL = 'nil'
 
   TOKEN_END = 0
   TOKEN_BOOL = 1
@@ -139,7 +140,7 @@ class PNParser
     while @token != end_token && @token != TOKEN_END
       elements << parse_next
     end
-    parse_error(_("missing '%{token}' to end list") % { token: end_token.chr(Encoding::UTF_8) } ) unless @token == end_token
+    parse_error(_("missing '%{token}' to end list") % { token: end_token.chr(Encoding::UTF_8) }) unless @token == end_token
     next_token
     elements
   end
@@ -195,7 +196,7 @@ class PNParser
   end
 
   def consume_identifier(s)
-    while @char_types[peek_cp] >= TYPE_IDENTIFIER do
+    while @char_types[peek_cp] >= TYPE_IDENTIFIER
       @pos += 1
     end
     id = @text[s...@pos]
@@ -217,7 +218,7 @@ class PNParser
 
   def consume_string
     s = @pos
-    b = ''
+    b = ''.dup
     loop do
       c = next_cp
       case c
@@ -286,7 +287,7 @@ class PNParser
       c = peek_cp
     end
 
-    while @char_types[c] == TYPE_DIGIT do
+    while @char_types[c] == TYPE_DIGIT
       @pos += 1
       c = peek_cp
       count += 1
@@ -295,7 +296,7 @@ class PNParser
   end
 
   def skip_white
-    while @char_types[peek_cp] == TYPE_WS do
+    while @char_types[peek_cp] == TYPE_WS
       @pos += 1
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/checksums'
 require_relative '../../../puppet/type/file/data_sync'
 
@@ -7,7 +9,7 @@ module Puppet
     include Puppet::DataSync
 
     desc "The checksum of the source contents. Only md5, sha256, sha224, sha384 and sha512
-      are supported when specifying this parameter. If this parameter is set, 
+      are supported when specifying this parameter. If this parameter is set,
       source_permissions will be assumed to be false, and ownership and permissions
       will not be read from source."
 
@@ -18,12 +20,13 @@ module Puppet
         return true
       end
 
-      checksum_insync?(resource.parameter(:source), is, true) {|_is| super(_is)}
+      checksum_insync?(resource.parameter(:source), is, true) { |inner| super(inner) }
     end
 
     def property_matches?(current, desired)
       return true if super(current, desired)
-      return date_matches?(resource.parameter(:checksum).value, current, desired)
+
+      date_matches?(resource.parameter(:checksum).value, current, desired)
     end
 
     def retrieve
@@ -49,6 +52,5 @@ module Puppet
       # so instruct the resource to write its contents.
       contents_sync(resource.parameter(:source))
     end
-
   end
 end

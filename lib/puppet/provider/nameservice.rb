@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 
 # This is the parent class of all NSS classes.  They're very different in
@@ -26,7 +28,7 @@ class Puppet::Provider::NameService < Puppet::Provider
       objects = []
       begin
         method = Puppet::Etc.method(:"get#{section}ent")
-        while ent = method.call #rubocop:disable Lint/AssignmentInCondition
+        while ent = method.call # rubocop:disable Lint/AssignmentInCondition
           objects << new(:name => ent.name, :canonical_name => ent.canonical_name, :ensure => :present)
         end
       ensure
@@ -44,6 +46,7 @@ class Puppet::Provider::NameService < Puppet::Provider
       unless resource_type.valid_parameter?(name)
         raise Puppet::DevError, _("%{name} is not a valid attribute for %{resource_type}") % { name: name, resource_type: resource_type.name }
       end
+
       @options ||= {}
       @options[name] ||= {}
 
@@ -58,7 +61,8 @@ class Puppet::Provider::NameService < Puppet::Provider
       super
       @resource_type.validproperties.each do |prop|
         next if prop == :ensure
-        define_method(prop) { get(prop) || :absent} unless public_method_defined?(prop)
+
+        define_method(prop) { get(prop) || :absent } unless public_method_defined?(prop)
         define_method(prop.to_s + "=") { |*vals| set(prop, *vals) } unless public_method_defined?(prop.to_s + "=")
       end
     end
@@ -68,7 +72,7 @@ class Puppet::Provider::NameService < Puppet::Provider
     def section
       unless resource_type
         raise Puppet::DevError,
-          "Cannot determine Etc section without a resource type"
+              "Cannot determine Etc section without a resource type"
       end
 
       if @resource_type.name == :group
@@ -88,13 +92,13 @@ class Puppet::Provider::NameService < Puppet::Provider
 
     def verify(name, error, &block)
       name = name.intern if name.is_a? String
-      @checks[name] = {:error => error, :block => block}
+      @checks[name] = { :error => error, :block => block }
     end
 
     private
 
     def op(property)
-      @ops[property.name] || ("-#{property.name}")
+      @ops[property.name] || "-#{property.name}"
     end
   end
 
@@ -102,17 +106,17 @@ class Puppet::Provider::NameService < Puppet::Provider
   # with DirectoryServices
   def autogen(field)
     field = field.intern
-    id_generators = {:user => :uid, :group => :gid}
+    id_generators = { :user => :uid, :group => :gid }
     if id_generators[@resource.class.name] == field
-      return self.class.autogen_id(field, @resource.class.name)
+      self.class.autogen_id(field, @resource.class.name)
     else
       value = self.class.autogen_default(field)
       if value
-        return value
+        value
       elsif respond_to?("autogen_#{field}")
-        return send("autogen_#{field}")
+        send("autogen_#{field}")
       else
-        return nil
+        nil
       end
     end
   end
@@ -126,7 +130,7 @@ class Puppet::Provider::NameService < Puppet::Provider
     when :user;   database = :passwd;  method = :uid
     when :group;  database = :group;   method = :gid
     else
-      #TRANSLATORS "autogen_id()" is a method name and should not be translated
+      # TRANSLATORS "autogen_id()" is a method name and should not be translated
       raise Puppet::DevError, _("autogen_id() does not support auto generation of id for resource type %{resource_type}") % { resource_type: resource_type }
     end
 
@@ -137,8 +141,8 @@ class Puppet::Provider::NameService < Puppet::Provider
       # other, more convenient enumerator for these, so we fake one with this
       # loop.  Thanks, Ruby, for your awesome abstractions. --daniel 2012-03-23
       highest = []
-      Puppet::Etc.send(database) {|entry| highest << entry.send(method) }
-      highest = highest.reject {|x| x > 65000 }.max
+      Puppet::Etc.send(database) { |entry| highest << entry.send(method) }
+      highest = highest.reject { |x| x > 65_000 }.max
 
       @prevauto = highest || 1000
     end
@@ -156,9 +160,9 @@ class Puppet::Provider::NameService < Puppet::Provider
 
     begin
       sensitive = has_sensitive_data?
-      execute(self.addcmd, {:failonfail => true, :combine => true, :custom_environment => @custom_environment, :sensitive => sensitive})
+      execute(addcmd, { :failonfail => true, :combine => true, :custom_environment => @custom_environment, :sensitive => sensitive })
       if feature?(:manages_password_age) && (cmd = passcmd)
-        execute(cmd, {:failonfail => true, :combine => true, :custom_environment => @custom_environment, :sensitive => sensitive})
+        execute(cmd, { :failonfail => true, :combine => true, :custom_environment => @custom_environment, :sensitive => sensitive })
       end
     rescue Puppet::ExecutionFailure => detail
       raise Puppet::Error, _("Could not create %{resource} %{name}: %{detail}") % { resource: @resource.class.name, name: @resource.name, detail: detail }, detail.backtrace
@@ -173,7 +177,7 @@ class Puppet::Provider::NameService < Puppet::Provider
     end
 
     begin
-      execute(self.deletecmd, {:failonfail => true, :combine => true, :custom_environment => @custom_environment})
+      execute(deletecmd, { :failonfail => true, :combine => true, :custom_environment => @custom_environment })
     rescue Puppet::ExecutionFailure => detail
       raise Puppet::Error, _("Could not delete %{resource} %{name}: %{detail}") % { resource: @resource.class.name, name: @resource.name, detail: detail }, detail.backtrace
     end
@@ -262,15 +266,16 @@ class Puppet::Provider::NameService < Puppet::Provider
     self.class.validate(param, value)
     cmd = modifycmd(param, munge(param, value))
     raise Puppet::DevError, _("Nameservice command must be an array") unless cmd.is_a?(Array)
+
     sensitive = has_sensitive_data?(param)
     begin
-      execute(cmd, {:failonfail => true, :combine => true, :custom_environment => @custom_environment, :sensitive => sensitive})
+      execute(cmd, { :failonfail => true, :combine => true, :custom_environment => @custom_environment, :sensitive => sensitive })
     rescue Puppet::ExecutionFailure => detail
       raise Puppet::Error, _("Could not set %{param} on %{resource}[%{name}]: %{detail}") % { param: param, resource: @resource.class.name, name: @resource.name, detail: detail }, detail.backtrace
     end
   end
 
-  #Derived classes can override to declare sensitive data so a flag can be passed to execute
+  # Derived classes can override to declare sensitive data so a flag can be passed to execute
   def has_sensitive_data?(property = nil)
     false
   end
@@ -290,4 +295,3 @@ class Puppet::Provider::NameService < Puppet::Provider
     current == desired.force_encoding(current.encoding)
   end
 end
-

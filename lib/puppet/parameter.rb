@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/util/logging'
 require_relative '../puppet/util/docs'
 
@@ -70,7 +72,7 @@ class Puppet::Parameter
     # @overload defaultto(value)
     #   Defines the default value with a literal value
     #   @param value [Object] the literal value to use as the default value
-    # @overload defaultto({|| ... })
+    # @overload defaultto({ ... })
     #   Defines that the default value is produced by the given block. The given block
     #   should produce the default value.
     # @raise [Puppet::DevError] if value is nil, and no block is given.
@@ -85,12 +87,13 @@ class Puppet::Parameter
       else
         if value.nil?
           raise Puppet::DevError,
-            "Either a default value or block must be provided"
+                "Either a default value or block must be provided"
         end
         define_method(:default) do value end
       end
     end
 
+    # rubocop:disable Naming/PredicateName
     def sensitive(value = nil, &block)
       if block
         define_method(:is_sensitive, &block)
@@ -98,6 +101,7 @@ class Puppet::Parameter
         define_method(:is_sensitive) do value end
       end
     end
+    # rubocop:enable Naming/PredicateName
 
     # Produces a documentation string.
     # If an enumeration of _valid values_ has been defined, it is appended to the documentation
@@ -115,9 +119,9 @@ class Puppet::Parameter
           @doc << "\n\n#{vals}"
         end
 
-        features = self.required_features
+        features = required_features
         if features
-          @doc << "\n\nRequires features #{features.flatten.collect { |f| f.to_s }.join(" ")}."
+          @doc << "\n\nRequires features #{features.flatten.collect(&:to_s).join(' ')}."
         end
         @addeddocvals = true
       end
@@ -160,7 +164,7 @@ class Puppet::Parameter
       @value_collection = ValueCollection.new
     end
 
-    # @overload munge {|| ... }
+    # @overload munge { ... }
     # Defines an optional method used to convert the parameter value from DSL/string form to an internal form.
     # If a munge method is not defined, the DSL/string value is used as is.
     # @note This adds a method with the name `unsafe_munge` in the created parameter class. Later this method is
@@ -176,16 +180,16 @@ class Puppet::Parameter
       define_method(:unsafe_munge, &block)
     end
 
-    # @overload unmunge {|| ... }
-    # Defines an optional method used to convert the parameter value to DSL/string form from an internal form.
+    # @overload unmunge { ... }
+    # Defines an optional method used to convert the parameter value from internal form to DSL/string form.
     # If an `unmunge` method is not defined, the internal form is used.
     # @see munge
-    # @note This adds a method with the name `unmunge` in the created parameter class.
+    # @note This adds a method with the name `unsafe_unmunge` in the created parameter class.
     # @dsl type
     # @api public
     #
     def unmunge(&block)
-      define_method(:unmunge, &block)
+      define_method(:unsafe_unmunge, &block)
     end
 
     # Sets a marker indicating that this parameter is the _namevar_ (unique identifier) of the type
@@ -236,7 +240,7 @@ class Puppet::Parameter
       @required
     end
 
-    # @overload validate {|| ... }
+    # @overload validate { ... }
     # Defines an optional method that is used to validate the parameter's DSL/string value.
     # Validation should raise appropriate exceptions, the return value of the given block is ignored.
     # The easiest way to raise an appropriate exception is to call the method {Puppet::Util::Errors.fail} with
@@ -329,7 +333,6 @@ class Puppet::Parameter
     resource.version
   end
 
-
   # Initializes the parameter with a required resource reference and optional attribute settings.
   # The option `:resource` must be specified or an exception is raised. Any additional options passed
   # are used to initialize the attributes of this parameter by treating each key in the `options` hash as
@@ -382,9 +385,7 @@ class Puppet::Parameter
   #
   def noop
     @noop ||= false
-    tmp = @noop || self.resource.noop || Puppet[:noop] || false
-    #debug "noop is #{tmp}"
-    tmp
+    @noop || resource.noop || Puppet[:noop] || false
   end
 
   # Returns an array of strings representing the containment hierarchy
@@ -394,9 +395,9 @@ class Puppet::Parameter
   # @api private
   def pathbuilder
     if @resource
-      return [@resource.pathbuilder, self.name]
+      [@resource.pathbuilder, name]
     else
-      return [self.name]
+      [name]
     end
   end
 
@@ -415,10 +416,21 @@ class Puppet::Parameter
   # @return [Object] the unmunged value
   #
   def unmunge(value)
+    return value if value.is_a?(Puppet::Pops::Evaluator::DeferredValue)
+
+    unsafe_unmunge(value)
+  end
+
+  # This is the default implementation of `unmunge` that simply produces the value (if it is valid).
+  # The DSL method {unmunge} should be used to define an overriding method if unmunging is required.
+  #
+  # @api private
+  #
+  def unsafe_unmunge(value)
     value
   end
 
-  # Munges the value to internal form.
+  # Munges the value from DSL form to internal form.
   # This implementation of `munge` provides exception handling around the specified munging of this parameter.
   # @note This method should not be overridden. Use the DSL method {munge} to define a munging method
   #   if required.
@@ -426,13 +438,15 @@ class Puppet::Parameter
   # @return [Object] the munged (internal) value
   #
   def munge(value)
+    return value if value.is_a?(Puppet::Pops::Evaluator::DeferredValue)
+
     begin
       ret = unsafe_munge(value)
     rescue Puppet::Error => detail
       Puppet.debug { "Reraising #{detail}" }
       raise
     rescue => detail
-      raise Puppet::DevError, _("Munging failed for value %{value} in class %{class_name}: %{detail}") % { value: value.inspect, class_name: self.name, detail: detail }, detail.backtrace
+      raise Puppet::DevError, _("Munging failed for value %{value} in class %{class_name}: %{detail}") % { value: value.inspect, class_name: name, detail: detail }, detail.backtrace
     end
     ret
   end
@@ -459,6 +473,8 @@ class Puppet::Parameter
   # @api public
   #
   def validate(value)
+    return if value.is_a?(Puppet::Pops::Evaluator::DeferredValue)
+
     begin
       unsafe_validate(value)
     rescue ArgumentError => detail
@@ -466,7 +482,7 @@ class Puppet::Parameter
     rescue Puppet::Error, TypeError
       raise
     rescue => detail
-      raise Puppet::DevError, _("Validate method failed for class %{class_name}: %{detail}") % { class_name: self.name, detail: detail }, detail.backtrace
+      raise Puppet::DevError, _("Validate method failed for class %{class_name}: %{detail}") % { class_name: name, detail: detail }, detail.backtrace
     end
   end
 
@@ -523,7 +539,7 @@ class Puppet::Parameter
       @tags = []
       # This might not be true in testing
       @tags = @resource.tags if @resource.respond_to? :tags
-      @tags << self.name.to_s
+      @tags << name.to_s
     end
     @tags
   end

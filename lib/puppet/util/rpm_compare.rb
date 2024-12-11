@@ -1,11 +1,13 @@
-module Puppet::Util::RpmCompare
+# frozen_string_literal: true
 
-  ARCH_LIST = %w(
+require 'English'
+module Puppet::Util::RpmCompare
+  ARCH_LIST = %w[
     noarch i386 i686 ppc ppc64 armv3l armv4b armv4l armv4tl armv5tel
     armv5tejl armv6l armv7l m68kmint s390 s390x ia64 x86_64 sh3 sh4
-  ).freeze
+  ].freeze
 
-  ARCH_REGEX = Regexp.new(ARCH_LIST.join('|\.'))
+  ARCH_REGEX = Regexp.new(ARCH_LIST.map { |arch| "\\.#{arch}" }.join('|'))
 
   # This is an attempt at implementing RPM's
   # lib/rpmvercmp.c rpmvercmp(a, b) in Ruby.
@@ -35,8 +37,8 @@ module Puppet::Util::RpmCompare
       # "handle the tilde separator, it sorts before everything else"
       if str1 =~ /^~/ && str2 =~ /^~/
         # if they both have ~, strip it
-        str1 = str1[1..-1]
-        str2 = str2[1..-1]
+        str1 = str1[1..]
+        str2 = str2[1..]
         next
       elsif str1 =~ /^~/
         return -1
@@ -51,14 +53,14 @@ module Puppet::Util::RpmCompare
       # if the first char of str1 is a digit, grab the chunk of continuous digits from each string
       if str1 =~ /^[0-9]+/
         if str1 =~ /^[0-9]+/
-          segment1 = $~.to_s
-          str1 = $~.post_match
+          segment1 = $LAST_MATCH_INFO.to_s
+          str1 = $LAST_MATCH_INFO.post_match
         else
           segment1 = ''
         end
         if str2 =~ /^[0-9]+/
-          segment2 = $~.to_s
-          str2 = $~.post_match
+          segment2 = $LAST_MATCH_INFO.to_s
+          str2 = $LAST_MATCH_INFO.post_match
         else
           segment2 = ''
         end
@@ -66,14 +68,14 @@ module Puppet::Util::RpmCompare
       # else grab the chunk of continuous alphas from each string (which may be '')
       else
         if str1 =~ /^[A-Za-z]+/
-          segment1 = $~.to_s
-          str1 = $~.post_match
+          segment1 = $LAST_MATCH_INFO.to_s
+          str1 = $LAST_MATCH_INFO.post_match
         else
           segment1 = ''
         end
         if str2 =~ /^[A-Za-z]+/
-          segment2 = $~.to_s
-          str2 = $~.post_match
+          segment2 = $LAST_MATCH_INFO.to_s
+          str2 = $LAST_MATCH_INFO.post_match
         else
           segment2 = ''
         end
@@ -83,6 +85,7 @@ module Puppet::Util::RpmCompare
       # where alpha also includes ''; "numeric segments are always newer than alpha segments"
       if segment2.length == 0
         return 1 if isnum
+
         return -1
       end
 
@@ -100,11 +103,12 @@ module Puppet::Util::RpmCompare
       # be more segments to compare"
       rc = segment1 <=> segment2
       return rc if rc != 0
-    end #end while loop
+    end # end while loop
 
     # if we haven't returned anything yet, "whichever version still has characters left over wins"
     return 1 if str1.length > str2.length
     return -1 if str1.length < str2.length
+
     0
   end
 
@@ -114,8 +118,8 @@ module Puppet::Util::RpmCompare
   def rpm_parse_evr(full_version)
     epoch_index = full_version.index(':')
     if epoch_index
-      epoch = full_version[0,epoch_index]
-      full_version = full_version[epoch_index+1,full_version.length]
+      epoch = full_version[0, epoch_index]
+      full_version = full_version[epoch_index + 1, full_version.length]
     else
       epoch = nil
     end
@@ -127,8 +131,8 @@ module Puppet::Util::RpmCompare
     end
     release_index = full_version.index('-')
     if release_index
-      version = full_version[0,release_index]
-      release = full_version[release_index+1,full_version.length]
+      version = full_version[0, release_index]
+      release = full_version[release_index + 1, full_version.length]
       arch = release.scan(ARCH_REGEX)[0]
       if arch
         architecture = arch.delete('.')
@@ -138,7 +142,7 @@ module Puppet::Util::RpmCompare
       version = full_version
       release = nil
     end
-    return { :epoch => epoch, :version => version, :release => release, :arch => architecture }
+    { :epoch => epoch, :version => version, :release => release, :arch => architecture }
   end
 
   # this method is a native implementation of the
@@ -146,9 +150,10 @@ module Puppet::Util::RpmCompare
   # found in python/header-py.c, as used by rpm.
   def compare_values(s1, s2)
     return 0 if s1.nil? && s2.nil?
-    return 1 if ( not s1.nil? ) && s2.nil?
-    return -1 if s1.nil? && (not s2.nil?)
-    return rpmvercmp(s1, s2)
+    return 1 if !s1.nil? && s2.nil?
+    return -1 if s1.nil? && !s2.nil?
+
+    rpmvercmp(s1, s2)
   end
 
   # how rpm compares two package versions:
@@ -164,12 +169,12 @@ module Puppet::Util::RpmCompare
   # return 1: a is newer than b
   #        0: a and b are the same version
   #       -1: b is newer than a
-  def rpm_compareEVR(should, is)
+  def rpm_compare_evr(should, is)
     # pass on to rpm labelCompare
     should_hash = rpm_parse_evr(should)
     is_hash = rpm_parse_evr(is)
 
-    if !should_hash[:epoch].nil?
+    unless should_hash[:epoch].nil?
       rc = compare_values(should_hash[:epoch], is_hash[:epoch])
       return rc unless rc == 0
     end
@@ -186,8 +191,6 @@ module Puppet::Util::RpmCompare
     # This should NOT be triggered if we're trying to ensure latest.
     return 0 if should_hash[:release].nil?
 
-    rc = compare_values(should_hash[:release], is_hash[:release])
-
-    return rc
+    compare_values(should_hash[:release], is_hash[:release])
   end
 end

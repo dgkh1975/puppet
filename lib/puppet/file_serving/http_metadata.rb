@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/file_serving/metadata'
 
 # Simplified metadata representation, suitable for the information
 # that is available from HTTP headers.
 class Puppet::FileServing::HttpMetadata < Puppet::FileServing::Metadata
-
   def initialize(http_response, path = '/dev/null')
     super(path)
 
@@ -19,7 +20,7 @@ class Puppet::FileServing::HttpMetadata < Puppet::FileServing::Metadata
     checksum = http_response['content-md5']
     if checksum
       # convert base64 digest to hex
-      checksum = checksum.unpack("m").first.unpack("H*").first
+      checksum = checksum.unpack1("m").unpack1("H*")
       @checksums[:md5] = "{md5}#{checksum}"
     end
 
@@ -41,8 +42,6 @@ class Puppet::FileServing::HttpMetadata < Puppet::FileServing::Metadata
     end
 
     @ftype = 'file'
-
-    self
   end
 
   # Override of the parent class method. Does not call super!
@@ -51,7 +50,9 @@ class Puppet::FileServing::HttpMetadata < Puppet::FileServing::Metadata
   def collect
     # Prefer the checksum_type from the indirector request options
     # but fall back to the alternative otherwise
-    [ @checksum_type, :sha256, :sha1, :md5, :mtime ].each do |type|
+    [@checksum_type, :sha256, :sha1, :md5, :mtime].each do |type|
+      next if type == :md5 && Puppet::Util::Platform.fips_enabled?
+
       @checksum_type = type
       @checksum = @checksums[type]
       break if @checksum

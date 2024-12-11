@@ -118,33 +118,45 @@ describe Puppet::Application::Resource do
       @resource_app.main
     end
 
+    before :each do
+      allow(@res).to receive(:ref).and_return("type/name")
+    end
+
     it "should add given parameters to the object" do
       allow(@resource_app.command_line).to receive(:args).and_return(['type','name','param=temp'])
 
       expect(Puppet::Resource.indirection).to receive(:save).with(@res, 'type/name').and_return([@res, @report])
-      expect(Puppet::Resource).to receive(:new).with('type', 'name', :parameters => {'param' => 'temp'}).and_return(@res)
+      expect(Puppet::Resource).to receive(:new).with('type', 'name', {:parameters => {'param' => 'temp'}}).and_return(@res)
 
+      resource_status = instance_double('Puppet::Resource::Status')
+      allow(@report).to receive(:resource_statuses).and_return({'type/name' => resource_status})
+      allow(resource_status).to receive(:failed?).and_return(false)
       @resource_app.main
     end
   end
 
   describe "when printing output" do
-    it "should not emit puppet class tags when printing yaml" do
-      Puppet::Type.newtype(:stringify) do
-        ensurable
-        newparam(:name, isnamevar: true)
-        newproperty(:string)
+    Puppet::Type.newtype(:stringify) do
+      ensurable
+      newparam(:name, isnamevar: true)
+      newproperty(:string)
+    end
+
+    Puppet::Type.type(:stringify).provide(:stringify) do
+      def exists?
+        true
       end
 
-      Puppet::Type.type(:stringify).provide(:stringify) do
-        def exists?
-          true
-        end
-
-        def string
-          Puppet::Util::Execution::ProcessOutput.new('test', 0)
-        end
+      def string=(value)
       end
+
+      def string
+        Puppet::Util::Execution::ProcessOutput.new('test', 0)
+      end
+    end
+    
+    it "should not emit puppet class tags when printing yaml when strict mode is off" do
+      Puppet[:strict] = :warning
 
       @resource_app.options[:to_yaml] = true
       allow(@resource_app.command_line).to receive(:args).and_return(['stringify', 'hello', 'ensure=present', 'string=asd'])

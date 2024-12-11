@@ -1,19 +1,19 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
-
 # @api public
 class PInitType < PTypeWithContainedType
   def self.register_ptype(loader, ir)
     create_ptype(loader, ir, 'AnyType',
-      'type' => {
-        KEY_TYPE => POptionalType.new(PTypeType::DEFAULT),
-        KEY_VALUE => nil
-      },
-      'init_args' => {
-        KEY_TYPE => PArrayType::DEFAULT,
-        KEY_VALUE => EMPTY_ARRAY
-      }
-    )
+                 'type' => {
+                   KEY_TYPE => POptionalType.new(PTypeType::DEFAULT),
+                   KEY_VALUE => nil
+                 },
+                 'init_args' => {
+                   KEY_TYPE => PArrayType::DEFAULT,
+                   KEY_VALUE => EMPTY_ARRAY
+                 })
   end
 
   attr_reader :init_args
@@ -24,6 +24,7 @@ class PInitType < PTypeWithContainedType
 
     if type.nil?
       raise ArgumentError, _('Init cannot be parameterized with an undefined type and additional arguments') unless @init_args.empty?
+
       @initialized = true
     else
       @initialized = false
@@ -70,6 +71,7 @@ class PInitType < PTypeWithContainedType
 
   def new_function
     return super if type.nil?
+
     assert_initialized
 
     target_type = type
@@ -150,8 +152,9 @@ class PInitType < PTypeWithContainedType
       # The Optional is the same as Variant[T,Undef].
       # The NotUndef is not meaningful to create instances of
       if @type.instance_of?(PInitType) || @type.instance_of?(POptionalType) || @type.instance_of?(PNotUndefType)
-        raise ArgumentError.new
+        raise ArgumentError
       end
+
       new_func = @type.new_function
     rescue ArgumentError
       raise ArgumentError, _("Creation of new instance of type '%{type_name}' is not supported") % { type_name: @type.to_s }
@@ -182,7 +185,7 @@ class PInitType < PTypeWithContainedType
       end
       if param_tuples.empty?
         raise ArgumentError, _("The type '%{type}' does not represent a valid set of parameters for %{subject}.new()") %
-          { type: to_s, subject: @type.generalize.name }
+                             { type: to_s, subject: @type.generalize.name }
       end
       single_types.concat(param_tuples.map { |tuple| tuple.types[0] })
       other_tuples = EMPTY_ARRAY

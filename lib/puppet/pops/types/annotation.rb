@@ -1,14 +1,16 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
   # Pcore variant of the Adaptable::Adapter. Uses a Pcore Object type instead of a Class
   class Annotation < Adaptable::Adapter
     include Types::PuppetObject
 
-    CLEAR = 'clear'.freeze
+    CLEAR = 'clear'
 
     # Register the Annotation type. This is the type that all custom Annotations will inherit from.
     def self.register_ptype(loader, ir)
-      @type = Pcore::create_object_type(loader, ir, self, 'Annotation', nil, EMPTY_HASH)
+      @type = Pcore.create_object_type(loader, ir, self, 'Annotation', nil, EMPTY_HASH)
     end
 
     def self._pcore_type
@@ -30,8 +32,8 @@ module Types
         if o.is_a?(Annotatable)
           init_hash = o.annotations[_pcore_type]
           init_hash = yield if init_hash.nil? && block_given?
-        else
-          init_hash = yield if block_given?
+        elsif block_given?
+          init_hash = yield
         end
         adapter = associate_adapter(_pcore_type.from_hash(init_hash), o) unless init_hash.nil?
       end

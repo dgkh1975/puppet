@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # This module is an integral part of the Lexer.
 # It defines interpolation support
 # PERFORMANCE NOTE: There are 4 very similar methods in this module that are designed to be as
@@ -5,8 +7,7 @@
 # of passing parameters and evaluating conditional logic has a negative impact on performance.
 #
 module Puppet::Pops::Parser::InterpolationSupport
-
-  PATTERN_VARIABLE       = %r{(::)?(\w+::)*\w+}
+  PATTERN_VARIABLE = /(::)?(\w+::)*\w+/
 
   # This is the starting point for a double quoted string with possible interpolation
   # The structure mimics that of the grammar.
@@ -20,19 +21,19 @@ module Puppet::Pops::Parser::InterpolationSupport
     before = scn.pos
     # skip the leading " by doing a scan since the slurp_dqstring uses last matched when there is an error
     scn.scan(/"/)
-    value,terminator = slurp_dqstring()
+    value, terminator = slurp_dqstring()
     text = value
     after = scn.pos
     loop do
       case terminator
       when '"'
         # simple case, there was no interpolation, return directly
-        return emit_completed([:STRING, text, scn.pos-before], before)
+        return emit_completed([:STRING, text, scn.pos - before], before)
       when '${'
         count = ctx[:brace_count]
         ctx[:brace_count] += 1
         # The ${ terminator is counted towards the string part
-        enqueue_completed([:DQPRE, text, scn.pos-before], before)
+        enqueue_completed([:DQPRE, text, scn.pos - before], before)
         # Lex expression tokens until a closing (balanced) brace count is reached
         enqueue_until count
         break
@@ -40,13 +41,13 @@ module Puppet::Pops::Parser::InterpolationSupport
         varname = scn.scan(PATTERN_VARIABLE)
         if varname
           # The $ is counted towards the variable
-          enqueue_completed([:DQPRE, text, after-before-1], before)
+          enqueue_completed([:DQPRE, text, after - before - 1], before)
           enqueue_completed([:VARIABLE, varname, scn.pos - after + 1], after - 1)
           break
         else
           # false $ variable start
           text += terminator
-          value,terminator = slurp_dqstring()
+          value, terminator = slurp_dqstring()
           text += value
           after = scn.pos
         end
@@ -61,20 +62,20 @@ module Puppet::Pops::Parser::InterpolationSupport
     scn = @scanner
     ctx = @lexing_context
     before = scn.pos
-    value,terminator = slurp_dqstring
+    value, terminator = slurp_dqstring
     text = value
     after = scn.pos
     loop do
       case terminator
       when '"'
         # simple case, there was no further interpolation, return directly
-        enqueue_completed([:DQPOST, text, scn.pos-before], before)
+        enqueue_completed([:DQPOST, text, scn.pos - before], before)
         return
       when '${'
         count = ctx[:brace_count]
         ctx[:brace_count] += 1
         # The ${ terminator is counted towards the string part
-        enqueue_completed([:DQMID, text, scn.pos-before], before)
+        enqueue_completed([:DQMID, text, scn.pos - before], before)
         # Lex expression tokens until a closing (balanced) brace count is reached
         enqueue_until count
         break
@@ -82,13 +83,13 @@ module Puppet::Pops::Parser::InterpolationSupport
         varname = scn.scan(PATTERN_VARIABLE)
         if varname
           # The $ is counted towards the variable
-          enqueue_completed([:DQMID, text, after-before-1], before)
+          enqueue_completed([:DQMID, text, after - before - 1], before)
           enqueue_completed([:VARIABLE, varname, scn.pos - after + 1], after - 1)
           break
         else
           # false $ variable start
           text += terminator
-          value,terminator = slurp_dqstring
+          value, terminator = slurp_dqstring
           text += value
           after = scn.pos
         end
@@ -106,20 +107,20 @@ module Puppet::Pops::Parser::InterpolationSupport
     scn = @scanner
     ctx = @lexing_context
     before = scn.pos
-    value,terminator = slurp_uqstring()
+    value, terminator = slurp_uqstring()
     text = value
     after = scn.pos
     loop do
       case terminator
       when ''
         # simple case, there was no interpolation, return directly
-        enqueue_completed([:STRING, text, scn.pos-before], before)
+        enqueue_completed([:STRING, text, scn.pos - before], before)
         return
       when '${'
         count = ctx[:brace_count]
         ctx[:brace_count] += 1
         # The ${ terminator is counted towards the string part
-        enqueue_completed([:DQPRE, text, scn.pos-before], before)
+        enqueue_completed([:DQPRE, text, scn.pos - before], before)
         # Lex expression tokens until a closing (balanced) brace count is reached
         enqueue_until count
         break
@@ -127,13 +128,13 @@ module Puppet::Pops::Parser::InterpolationSupport
         varname = scn.scan(PATTERN_VARIABLE)
         if varname
           # The $ is counted towards the variable
-          enqueue_completed([:DQPRE, text, after-before-1], before)
+          enqueue_completed([:DQPRE, text, after - before - 1], before)
           enqueue_completed([:VARIABLE, varname, scn.pos - after + 1], after - 1)
           break
         else
           # false $ variable start
           text += terminator
-          value,terminator = slurp_uqstring()
+          value, terminator = slurp_uqstring()
           text += value
           after = scn.pos
         end
@@ -147,20 +148,20 @@ module Puppet::Pops::Parser::InterpolationSupport
     scn = @scanner
     ctx = @lexing_context
     before = scn.pos
-    value,terminator = slurp_uqstring
+    value, terminator = slurp_uqstring
     text = value
     after = scn.pos
     loop do
       case terminator
       when ''
         # simple case, there was no further interpolation, return directly
-        enqueue_completed([:DQPOST, text, scn.pos-before], before)
+        enqueue_completed([:DQPOST, text, scn.pos - before], before)
         return
       when '${'
         count = ctx[:brace_count]
         ctx[:brace_count] += 1
         # The ${ terminator is counted towards the string part
-        enqueue_completed([:DQMID, text, scn.pos-before], before)
+        enqueue_completed([:DQMID, text, scn.pos - before], before)
         # Lex expression tokens until a closing (balanced) brace count is reached
         enqueue_until count
         break
@@ -168,13 +169,13 @@ module Puppet::Pops::Parser::InterpolationSupport
         varname = scn.scan(PATTERN_VARIABLE)
         if varname
           # The $ is counted towards the variable
-          enqueue_completed([:DQMID, text, after-before-1], before)
+          enqueue_completed([:DQMID, text, after - before - 1], before)
           enqueue_completed([:VARIABLE, varname, scn.pos - after + 1], after - 1)
           break
         else
           # false $ variable start
           text += terminator
-          value,terminator = slurp_uqstring
+          value, terminator = slurp_uqstring
           text += value
           after = scn.pos
         end
@@ -193,7 +194,7 @@ module Puppet::Pops::Parser::InterpolationSupport
 
     scn.skip(self.class::PATTERN_WS)
     queue_size = queue.size
-    until scn.eos? do
+    until scn.eos?
       token = lex_token
       if token
         if token.equal?(queue_base)
@@ -241,9 +242,8 @@ module Puppet::Pops::Parser::InterpolationSupport
   def interpolate_uq_to(lexer)
     interpolate_uq
     queue = @token_queue
-    until queue.empty? do
+    until queue.empty?
       lexer.enqueue(queue.shift)
     end
   end
-
 end

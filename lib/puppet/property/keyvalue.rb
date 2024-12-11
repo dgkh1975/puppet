@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/property'
 
 module Puppet
@@ -32,7 +34,7 @@ module Puppet
         hash_to_key_value_s(should_value)
       end
 
-      def is_to_s(current_value)
+      def is_to_s(current_value) # rubocop:disable Naming/PredicateName
         hash_to_key_value_s(current_value)
       end
 
@@ -49,22 +51,21 @@ module Puppet
         # passed in a hash for our property's should value, the should_value
         # parameter will be a single element array so we just extract our value
         # directly.
-        if ! @should.empty? && @should.first.is_a?(Hash)
+        if !@should.empty? && @should.first.is_a?(Hash)
           return @should.first
         end
 
         # Here, should is an array of key/value pairs.
-        @should.inject({}) do |hash, key_value|
+        @should.each_with_object({}) do |key_value, hash|
           tmp = key_value.split(separator)
           hash[tmp[0].strip.intern] = tmp[1]
-          hash
         end
       end
 
       def process_current_hash(current)
         return {} if current == :absent
 
-        #inclusive means we are managing everything so if it isn't in should, its gone
+        # inclusive means we are managing everything so if it isn't in should, its gone
         current.each_key { |key| current[key] = nil } if inclusive?
         current
       end
@@ -75,7 +76,7 @@ module Puppet
         members = hashify_should
         current = process_current_hash(retrieve)
 
-        #shared keys will get overwritten by members
+        # shared keys will get overwritten by members
         should_value = current.merge(members)
 
         # Figure out the keys that will actually change in our Puppet run.
@@ -86,7 +87,7 @@ module Puppet
         # changed_or_new_keys once (since this property will only be synced once).
         #
         @changed_or_new_keys ||= should_value.keys.select do |key|
-          ! current.key?(key) || current[key] != should_value[key]
+          !current.key?(key) || current[key] != should_value[key]
         end
 
         should_value
@@ -106,12 +107,12 @@ module Puppet
       # @return [Hash] the hash from the provider, or `:absent`
       #
       def retrieve
-        #ok, some 'convention' if the keyvalue property is named properties, provider should implement a properties method
+        # ok, some 'convention' if the keyvalue property is named properties, provider should implement a properties method
         key_hash = provider.send(name) if provider
         if key_hash && key_hash != :absent
-          return key_hash
+          key_hash
         else
-          return :absent
+          :absent
         end
       end
 
@@ -120,7 +121,7 @@ module Puppet
       def insync?(is)
         return true unless is
 
-        (is == self.should)
+        (is == should)
       end
 
       # We only accept an array of key/value pairs (strings), a single
@@ -134,8 +135,8 @@ module Puppet
 
         next if value.is_a?(Hash)
 
-        unless value.include?("#{separator}")
-          raise ArgumentError, _("Key/value pairs must be separated by '%{separator}'") % {separator: separator}
+        unless value.include?(separator.to_s)
+          raise ArgumentError, _("Key/value pairs must be separated by '%{separator}'") % { separator: separator }
         end
       end
 
@@ -151,7 +152,7 @@ module Puppet
           [hash_key.to_s.strip.to_sym, hash_value.to_s]
         end
 
-        Hash[munged_value]
+        munged_value.to_h
       end
     end
   end

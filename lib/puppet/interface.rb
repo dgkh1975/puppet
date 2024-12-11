@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet'
 require_relative '../puppet/util/autoload'
 require 'prettyprint'
@@ -14,7 +16,6 @@ class Puppet::Interface
   require_relative 'interface/option'
   require_relative 'interface/option_builder'
   require_relative 'interface/option_manager'
-
 
   include FullDocs
 
@@ -50,14 +51,14 @@ class Puppet::Interface
     # @param name [Symbol] the name of the face
     # @param version [String] the version of the face (this should
     #   conform to {http://semver.org/ Semantic Versioning})
-    # @overload define(name, version, {|| ... })
+    # @overload define(name, version, { ... })
     # @return [Puppet::Interface] The created face
     # @api public
     # @dsl Faces
     def define(name, version, &block)
       face = Puppet::Interface::FaceCollection[name, version]
       if face.nil? then
-        face = self.new(name, version)
+        face = new(name, version)
         Puppet::Interface::FaceCollection.register(face)
         # REVISIT: Shouldn't this be delayed until *after* we evaluate the
         # current block, not done before? --daniel 2011-04-07
@@ -66,7 +67,7 @@ class Puppet::Interface
 
       face.instance_eval(&block) if block_given?
 
-      return face
+      face
     end
 
     # Retrieves a face by name and version. Use `:current` for the
@@ -120,15 +121,13 @@ class Puppet::Interface
   # splits out this should merge into a module that both the action and face
   # include. --daniel 2011-04-17
 
-
   # Returns the synopsis for the face. This shows basic usage and global
   # options.
   # @return [String] usage synopsis
   # @api private
   def synopsis
-    build_synopsis self.name, '<action>'
+    build_synopsis name, '<action>'
   end
-
 
   ########################################################################
 
@@ -200,7 +199,9 @@ class Puppet::Interface
   # to be unrecognizable in the final outcome.  At which point we will throw
   # all this away, replace it with something nice, and work out if we should
   # be making this visible to the outside world... --daniel 2011-04-14
+
   private
+
   # @return [void]
   # @api private
   def __invoke_decorations(type, action, passed_args = [], passed_options = {})
@@ -218,7 +219,7 @@ class Puppet::Interface
     # Exceptions here should propagate up; this implements a hook we can use
     # reasonably for option validation.
     methods.each do |hook|
-      respond_to? hook and self.__send__(hook, action, passed_args, passed_options)
+      respond_to? hook and __send__(hook, action, passed_args, passed_options)
     end
   end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A file.
 class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
   class SettingError < StandardError; end
@@ -47,7 +49,8 @@ class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
       end
     end
 
-  private
+    private
+
     def safe_to_use_settings_value?
       @settings[:mkusers] or @settings.send(@available_method)
     end
@@ -123,7 +126,7 @@ class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
     type = self.type
     return nil unless type
 
-    path = self.value
+    path = value
 
     return nil unless path.is_a?(String)
 
@@ -131,12 +134,12 @@ class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
     path = File.expand_path(path)
 
     return nil unless type == :directory || Puppet::FileSystem.exist?(path)
-    return nil if path =~ /^\/dev/ || path =~ /^[A-Z]:\/dev/i
+    return nil if path =~ %r{^/dev} || path =~ %r{^[A-Z]:/dev}i
 
     resource = Puppet::Resource.new(:file, path)
 
     if Puppet[:manage_internal_file_permissions]
-      if self.mode
+      if mode
         # This ends up mimicking the munge method of the mode
         # parameter to make sure that we're always passing the string
         # version of the octal number.  If we were setting the
@@ -153,8 +156,8 @@ class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
 
       # REMIND fails on Windows because chown/chgrp functionality not supported yet
       if Puppet.features.root? and !Puppet::Util::Platform.windows?
-        resource[:owner] = self.owner if self.owner
-        resource[:group] = self.group if self.group
+        resource[:owner] = owner if owner
+        resource[:group] = group if group
       end
     end
 
@@ -163,21 +166,9 @@ class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
     resource[:links] = :follow
     resource[:backup] = false
 
-    resource.tag(self.section, self.name, "settings")
+    resource.tag(section, name, "settings")
 
     resource
-  end
-
-  # Make sure any provided variables look up to something.
-  def validate(value)
-    return true unless value.is_a? String
-    value.scan(/\$(\w+)/) { |name|
-      name = $1
-      unless @settings.include?(name)
-        raise ArgumentError,
-          _("Settings parameter '%{name}' is undefined") % { name: name }
-      end
-    }
   end
 
   # @api private
@@ -224,14 +215,14 @@ class Puppet::Settings::FileSetting < Puppet::Settings::StringSetting
 
     Puppet::Util::SUIDManager.asuser(*chown) do
       # Update the umask to make non-executable files
-      Puppet::Util.withumask(File.umask ^ 0111) do
-        yielded_value = case self.mode
+      Puppet::Util.withumask(File.umask ^ 0o111) do
+        yielded_value = case mode
                         when String
-                          self.mode.to_i(8)
+                          mode.to_i(8)
                         when NilClass
-                          0640
+                          0o640
                         else
-                          self.mode
+                          mode
                         end
 
         yield yielded_value

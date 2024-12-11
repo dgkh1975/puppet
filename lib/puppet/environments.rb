@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/concurrent/synchronized'
 
 # @api private
 module Puppet::Environments
-
   class EnvironmentNotFound < Puppet::Error
     def initialize(environment_name, original = nil)
       environmentpath = Puppet[:environmentpath]
@@ -34,11 +35,7 @@ module Puppet::Environments
     # @!macro loader_get_or_fail
     def get!(name)
       environment = get(name)
-      if environment
-        environment
-      else
-        raise EnvironmentNotFound, name
-      end
+      environment || raise(EnvironmentNotFound, name)
     end
 
     def clear_all
@@ -138,7 +135,6 @@ module Puppet::Environments
   #
   # @api private
   class StaticPrivate < Static
-
     # Unlisted
     #
     # @!macro loader_list
@@ -159,6 +155,7 @@ module Puppet::Environments
     # @!macro loader_get_conf
     def get_conf(name)
       return nil unless name.intern == @env_name
+
       Puppet::Settings::EnvironmentConf.load_from(@env_dir, [])
     end
   end
@@ -197,7 +194,7 @@ module Puppet::Environments
       if Puppet::FileSystem.symlink?(dir) && Puppet[:versioned_environment_dirs]
         dir = Pathname.new Puppet::FileSystem.expand_path(Puppet::FileSystem.readlink(dir))
       end
-      return dir
+      dir
     end
 
     # @!macro loader_search_paths
@@ -243,6 +240,15 @@ module Puppet::Environments
         setting_values.interpolate(:manifest),
         setting_values.interpolate(:config_version)
       )
+
+      configured_path = File.join(@environment_dir, name.to_s)
+      env.configured_path = configured_path
+      if Puppet.settings[:report_configured_environmentpath]
+        env.resolved_path = validated_directory(configured_path)
+      else
+        env.resolved_path = configured_path
+      end
+
       env
     end
 
@@ -258,9 +264,10 @@ module Puppet::Environments
 
     def valid_environment_names
       return [] unless Puppet::FileSystem.directory?(@environment_dir)
-      Puppet::FileSystem.children(@environment_dir).map do |child|
+
+      Puppet::FileSystem.children(@environment_dir).filter_map do |child|
         Puppet::FileSystem.basename_string(child).intern if validated_directory(child)
-      end.compact
+      end
     end
   end
 
@@ -306,7 +313,7 @@ module Puppet::Environments
     end
 
     def clear_all
-      @loaders.each {|loader| loader.clear_all}
+      @loaders.each(&:clear_all)
     end
   end
 
@@ -361,7 +368,7 @@ module Puppet::Environments
       removed_envs = cached_envs - loader_envs
 
       removed_envs.each do |env_name|
-        Puppet.debug { "Environment no longer exists '#{env_name}'"}
+        Puppet.debug { "Environment no longer exists '#{env_name}'" }
         clear(env_name)
       end
 
@@ -398,7 +405,7 @@ module Puppet::Environments
       name = name.to_sym
       entry = @cache[name]
       if entry
-        Puppet.debug {"Found in cache #{name.inspect} #{entry.label}"}
+        Puppet.debug { "Found in cache #{name.inspect} #{entry.label}" }
         # found in cache
         entry.touch
       elsif (env = @loader.get(name))
@@ -412,7 +419,7 @@ module Puppet::Environments
 
     # Adds a cache entry to the cache
     def add_entry(name, cache_entry)
-      Puppet.debug {"Caching environment #{name.inspect} #{cache_entry.label}"}
+      Puppet.debug { "Caching environment #{name.inspect} #{cache_entry.label}" }
       @cache[name] = cache_entry
       @cache_expiration_service.created(cache_entry.value)
     end
@@ -420,7 +427,7 @@ module Puppet::Environments
 
     def clear_entry(name, entry)
       @cache.delete(name)
-      Puppet.debug {"Evicting cache entry for environment #{name.inspect}"}
+      Puppet.debug { "Evicting cache entry for environment #{name.inspect}" }
       @cache_expiration_service.evicted(name.to_sym)
       Puppet::GettextConfig.delete_text_domain(name)
       Puppet.settings.clear_environment_settings(name)

@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 class IssueReporter
-
   # @param acceptor [Validation::Acceptor] the acceptor containing reported issues
   # @option options [String] :message (nil) A message text to use as prefix in
   #   a single Error message
@@ -47,8 +48,9 @@ class IssueReporter
     errors = acceptor.errors
     if errors.size > 0
       unless emit_errors
-        raise emit_exception.new(emit_message)
+        raise emit_exception, emit_message
       end
+
       formatter = Validation::DiagnosticFormatterPuppetStyle.new
       if errors.size == 1 || max_errors <= 1
         # raise immediately
@@ -68,12 +70,12 @@ class IssueReporter
         emitted += 1
         break if emitted >= max_errors
       end
-      giving_up_message = if (emit_warnings && warnings.size > 0)
+      giving_up_message = if emit_warnings && warnings.size > 0
                             _("Language validation logged %{error_count} errors, and %{warning_count} warnings. Giving up") %
-                                { error_count: errors.size, warning_count: warnings.size }
+                              { error_count: errors.size, warning_count: warnings.size }
                           else
                             _("Language validation logged %{error_count} errors. Giving up") %
-                                { error_count: errors.size }
+                              { error_count: errors.size }
                           end
       exception = emit_exception.new(giving_up_message)
       exception.file = errors[0].file
@@ -83,19 +85,20 @@ class IssueReporter
 
   def self.format_with_prefix(prefix, message)
     return message unless prefix
+
     [prefix, message].join(' ')
   end
 
   def self.warning(semantic, issue, args)
     Puppet::Util::Log.create({
-      :level => :warning,
-      :message => issue.format(args),
-      :arguments => args,
-      :issue_code => issue.issue_code,
-      :file => semantic.file,
-      :line => semantic.line,
-      :pos => semantic.pos,
-    })
+                               :level => :warning,
+                               :message => issue.format(args),
+                               :arguments => args,
+                               :issue_code => issue.issue_code,
+                               :file => semantic.file,
+                               :line => semantic.line,
+                               :pos => semantic.pos,
+                             })
   end
 
   def self.error(exception_class, semantic, issue, args)
@@ -123,14 +126,14 @@ class IssueReporter
       pos = diagnostic.source_pos.pos
     end
     Puppet::Util::Log.create({
-        :level => severity,
-        :message => formatter.format_message(diagnostic),
-        :arguments => diagnostic.arguments,
-        :issue_code => diagnostic.issue.issue_code,
-        :file => file,
-        :line => line,
-        :pos => pos,
-      })
+                               :level => severity,
+                               :message => formatter.format_message(diagnostic),
+                               :arguments => diagnostic.arguments,
+                               :issue_code => diagnostic.issue.issue_code,
+                               :file => file,
+                               :line => line,
+                               :pos => pos,
+                             })
   end
   private_class_method :log_message
 end

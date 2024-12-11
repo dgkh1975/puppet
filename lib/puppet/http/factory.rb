@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl/openssl_loader'
 require 'net/http'
 require_relative '../../puppet/http'
@@ -15,7 +17,7 @@ class Puppet::HTTP::Factory
 
   def initialize
     # PUP-1411, make sure that openssl is initialized before we try to connect
-    if ! @@openssl_initialized
+    unless @@openssl_initialized
       OpenSSL::SSL::SSLContext.new
       @@openssl_initialized = true
     end

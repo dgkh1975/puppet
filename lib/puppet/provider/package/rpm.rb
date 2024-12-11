@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require_relative '../../../puppet/util/rpm_compare'
 
@@ -22,13 +24,16 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
   # Note: self:: is required here to keep these constants in the context of what will
   # eventually become this Puppet::Type::Package::ProviderRpm class.
   # The query format by which we identify installed packages
-  self::NEVRA_FORMAT = %Q{%{NAME} %|EPOCH?{%{EPOCH}}:{0}| %{VERSION} %{RELEASE} %{ARCH}\\n}
-  self::NEVRA_REGEX  = %r{^'?(\S+) (\S+) (\S+) (\S+) (\S+)$}
+  self::NEVRA_FORMAT = '%{NAME} %|EPOCH?{%{EPOCH}}:{0}| %{VERSION} %{RELEASE} %{ARCH}\\n'
+  self::NEVRA_REGEX  = /^'?(\S+) (\S+) (\S+) (\S+) (\S+)$/
   self::NEVRA_FIELDS = [:name, :epoch, :version, :release, :arch]
   self::MULTIVERSION_SEPARATOR = "; "
 
   commands :rpm => "rpm"
 
+  # Mixing confine statements, control expressions, and exception handling
+  # confuses Rubocop's Layout cops, so we disable them entirely.
+  # rubocop:disable Layout
   if command('rpm')
     confine :true => begin
       rpm('--version')
@@ -38,9 +43,11 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
         true
       end
   end
+  # rubocop:enable Layout
 
   def self.current_version
     return @current_version unless @current_version.nil?
+
     output = rpm "--version"
     @current_version = output.gsub('RPM version ', '').strip
   end
@@ -64,8 +71,8 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
         # now turn each returned line into a package object
         nevra_to_multiversion_hash(process).each { |hash| packages << new(hash) }
       }
-    rescue Puppet::ExecutionFailure
-      raise Puppet::Error, _("Failed to list packages"), $!.backtrace
+    rescue Puppet::ExecutionFailure => e
+      raise Puppet::Error, _("Failed to list packages"), e.backtrace
     end
 
     packages
@@ -75,10 +82,10 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
   # a hash with entries :instance => fully versioned package name, and
   # :ensure => version-release
   def query
-    #NOTE: Prior to a fix for issue 1243, this method potentially returned a cached value
-    #IF YOU CALL THIS METHOD, IT WILL CALL RPM
-    #Use get(:property) to check if cached values are available
-    cmd = ["-q",  @resource[:name], "#{self.class.nosignature}", "#{self.class.nodigest}", "--qf", "#{self.class::NEVRA_FORMAT}"]
+    # NOTE: Prior to a fix for issue 1243, this method potentially returned a cached value
+    # IF YOU CALL THIS METHOD, IT WILL CALL RPM
+    # Use get(:property) to check if cached values are available
+    cmd = ["-q", @resource[:name], self.class.nosignature.to_s, self.class.nodigest.to_s, "--qf", self.class::NEVRA_FORMAT.to_s]
 
     begin
       output = rpm(*cmd)
@@ -107,7 +114,7 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
       @resource.fail _("RPMs must specify a package source")
     end
 
-    cmd = [command(:rpm), "-q", "--qf", "#{self.class::NEVRA_FORMAT}", "-p", source]
+    cmd = [command(:rpm), "-q", "--qf", self.class::NEVRA_FORMAT.to_s, "-p", source]
     h = self.class.nevra_to_multiversion_hash(execute(cmd))
     h[:ensure]
   rescue Puppet::ExecutionFailure => e
@@ -120,7 +127,7 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
       @resource.fail _("RPMs must specify a package source")
     end
 
-    version =  @property_hash[:ensure]
+    version = @property_hash[:ensure]
 
     # RPM gets upset if you try to install an already installed package
     return if @resource.should(:ensure) == version || (@resource.should(:ensure) == :latest && version == latest)
@@ -142,16 +149,12 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
     nvr = "#{nav}-#{release}"
     if @resource[:name].start_with? nvr
       identifier = nvr
+    elsif @resource[:name].start_with? nav
+      identifier = nav
+    elsif @resource[:install_only]
+      identifier = get(:ensure).split(self.class::MULTIVERSION_SEPARATOR).map { |ver| "#{name}-#{ver}" }
     else
-      if @resource[:name].start_with? nav
-        identifier = nav
-      else
-        if @resource[:install_only]
-          identifier = get(:ensure).split(self.class::MULTIVERSION_SEPARATOR).map { |ver| "#{name}-#{ver}" }
-        else
-          identifier = name
-        end
-      end
+      identifier = name
     end
     # If an arch is specified in the resource, uninstall that arch,
     # otherwise uninstall the arch returned by query.
@@ -172,7 +175,7 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
   end
 
   def update
-    self.install
+    install
   end
 
   def install_options
@@ -189,11 +192,12 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
 
     should = resource[:ensure]
     is.split(self.class::MULTIVERSION_SEPARATOR).any? do |version|
-      0 == rpm_compareEVR(should, version)
+      0 == rpm_compare_evr(should, version)
     end
   end
 
   private
+
   # @param line [String] one line of rpm package query information
   # @return [Hash] of NEVRA_FIELDS strings parsed from package info
   # or an empty hash if we failed to parse
@@ -205,14 +209,14 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
     match = self::NEVRA_REGEX.match(line)
     if match
       self::NEVRA_FIELDS.zip(match.captures) { |f, v| hash[f] = v }
-      hash[:provider] = self.name
+      hash[:provider] = name
       hash[:ensure] = "#{hash[:version]}-#{hash[:release]}"
       hash[:ensure].prepend("#{hash[:epoch]}:") if hash[:epoch] != '0'
     else
       Puppet.debug("Failed to match rpm line #{line}")
     end
 
-    return hash
+    hash
   end
 
   # @param line [String] multiple lines of rpm package query information
@@ -223,28 +227,29 @@ Puppet::Type.type(:package).provide :rpm, :source => :rpm, :parent => Puppet::Pr
     list = []
     multiversion_hash = {}
     multiline.each_line do |line|
-      hash = self.nevra_to_hash(line)
-      if !hash.empty?
-        if multiversion_hash.empty?
-          multiversion_hash = hash.dup
-          next
-        end
+      hash = nevra_to_hash(line)
+      next if hash.empty?
 
-        if multiversion_hash[:name] != hash[:name]
-          list << multiversion_hash
-          multiversion_hash = hash.dup
-          next
-        end
+      if multiversion_hash.empty?
+        multiversion_hash = hash.dup
+        next
+      end
 
-        if !multiversion_hash[:ensure].include?(hash[:ensure])
-          multiversion_hash[:ensure].concat("#{self::MULTIVERSION_SEPARATOR}#{hash[:ensure]}")
-        end
+      if multiversion_hash[:name] != hash[:name]
+        list << multiversion_hash
+        multiversion_hash = hash.dup
+        next
+      end
+
+      unless multiversion_hash[:ensure].include?(hash[:ensure])
+        multiversion_hash[:ensure].concat("#{self::MULTIVERSION_SEPARATOR}#{hash[:ensure]}")
       end
     end
     list << multiversion_hash if multiversion_hash
     if list.size == 1
       return list[0]
     end
-    return list
+
+    list
   end
 end

@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 # Manage file modes.  This state should support different formats
 # for specification (e.g., u+rwx, or -0011), but for now only supports
 # specifying the full mode.
-
 
 module Puppet
   Puppet::Type.type(:file).newproperty(:mode) do
@@ -75,7 +76,7 @@ module Puppet
     EOT
 
     validate do |value|
-      if !value.is_a?(String)
+      unless value.is_a?(String)
         raise Puppet::Error, "The file mode specification must be a string, not '#{value.class.name}'"
       end
       unless value.nil? or valid_symbolic_mode?(value)
@@ -110,9 +111,9 @@ module Puppet
     def dirmask(value)
       if FileTest.directory?(resource[:path]) and value =~ /^\d+$/ then
         value = value.to_i(8)
-        value |= 0100 if value & 0400 != 0
-        value |= 010 if value & 040 != 0
-        value |= 01 if value & 04 != 0
+        value |= 0o100 if value & 0o400 != 0
+        value |= 0o10 if value & 0o40 != 0
+        value |= 0o1 if value & 0o4 != 0
         value = value.to_s(8)
       end
 
@@ -125,19 +126,21 @@ module Puppet
       if provider.respond_to?(:munge_windows_system_group)
         munged_mode = provider.munge_windows_system_group(currentvalue, @should)
         return false if munged_mode.nil?
+
         currentvalue = munged_mode
       end
       stat = @resource.stat
       if stat && stat.ftype == "link" && @resource[:links] != :follow
-        self.debug _("Not managing symlink mode")
-        return true
+        debug _("Not managing symlink mode")
+        true
       else
-        return super(currentvalue)
+        super(currentvalue)
       end
     end
 
     def property_matches?(current, desired)
       return false unless current
+
       current_bits = normalize_symbolic_mode(current)
       desired_bits = desired_mode_from_current(desired, current).to_s(8)
       current_bits == desired_bits
@@ -150,7 +153,7 @@ module Puppet
     # been synced.
     def retrieve
       if @resource.stat
-        @should &&= @should.collect { |s| self.dirmask(s) }
+        @should &&= @should.collect { |s| dirmask(s) }
       end
 
       super
@@ -160,7 +163,7 @@ module Puppet
     # don't have access to the calculated "desired" value here, or the
     # "current" value, only the "should" value we need to retrieve again.
     def sync
-      current = @resource.stat ? @resource.stat.mode : 0644
+      current = @resource.stat ? @resource.stat.mode : 0o644
       set(desired_mode_from_current(@should[0], current).to_s(8))
     end
 
@@ -176,7 +179,7 @@ module Puppet
       "'#{should_value.rjust(4, '0')}'"
     end
 
-    def is_to_s(currentvalue)
+    def is_to_s(currentvalue) # rubocop:disable Naming/PredicateName
       if currentvalue == :absent
         # This can occur during audits---if a file is transitioning from
         # present to absent the mode will have a value of `:absent`.

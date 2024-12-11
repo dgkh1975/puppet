@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/concurrent/synchronized'
 
 module Puppet
@@ -26,5 +28,4 @@ module Puppet
       require_relative '../puppet/pops/loader/puppet_plan_instantiator'
     end
   end
-
 end

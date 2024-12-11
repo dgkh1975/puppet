@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/indirector'
 
@@ -38,6 +40,7 @@ class Puppet::Transaction::Report
   include Puppet::Util::PsychSupport
   extend Puppet::Indirector
 
+  STATES_FOR_EXCLUSION_FROM_REPORT = [:failed, :failed_to_restart, :out_of_sync, :skipped].freeze
   indirects :report, :terminus_class => :processor
 
   # The version of the configuration
@@ -138,10 +141,10 @@ class Puppet::Transaction::Report
   #
   attr_accessor :transaction_completed
 
-  TOTAL = "total".freeze
+  TOTAL = "total"
 
   def self.from_data_hash(data)
-    obj = self.allocate
+    obj = allocate
     obj.initialize_from_hash(data)
     obj
   end
@@ -203,7 +206,7 @@ class Puppet::Transaction::Report
 
   # @api private
   def prune_internal_data
-    resource_statuses.delete_if {|name,res| res.resource_type == 'Whit'}
+    resource_statuses.delete_if { |_name, res| res.resource_type == 'Whit' }
   end
 
   # @api private
@@ -214,14 +217,14 @@ class Puppet::Transaction::Report
     resource_metrics = add_metric(:resources, calculate_resource_metrics)
     add_metric(:time, calculate_time_metrics)
     change_metric = calculate_change_metric
-    add_metric(:changes, {TOTAL => change_metric})
+    add_metric(:changes, { TOTAL => change_metric })
     add_metric(:events, calculate_event_metrics)
     @status = compute_status(resource_metrics, change_metric)
-    @noop_pending = @resource_statuses.any? { |name,res| has_noop_events?(res) }
+    @noop_pending = @resource_statuses.any? { |_name, res| has_noop_events?(res) }
   end
 
   # @api private
-  def initialize(configuration_version=nil, environment=nil, transaction_uuid=nil, job_id=nil, start_time=Time.now)
+  def initialize(configuration_version = nil, environment = nil, transaction_uuid = nil, job_id = nil, start_time = Time.now)
     @metrics = {}
     @logs = []
     @resource_statuses = {}
@@ -299,13 +302,33 @@ class Puppet::Transaction::Report
 
     @resource_statuses = {}
     data['resource_statuses'].map do |key, rs|
-      @resource_statuses[key] = if rs == Puppet::Resource::EMPTY_HASH
-        nil
-      else
-        # Older versions contain tags that causes Psych to create instances directly
-        rs.is_a?(Puppet::Resource::Status) ? rs : Puppet::Resource::Status.from_data_hash(rs)
-      end
+      @resource_statuses[key] =
+        if rs == Puppet::Resource::EMPTY_HASH
+          nil
+        elsif rs.is_a?(Puppet::Resource::Status)
+          # Older versions contain tags that causes Psych to create instances
+          # directly
+          rs
+        else
+          Puppet::Resource::Status.from_data_hash(rs)
+        end
     end
+  end
+
+  def resource_unchanged?(rs)
+    STATES_FOR_EXCLUSION_FROM_REPORT.each do |state|
+      return false if rs.send(state)
+    end
+    true
+  end
+
+  def calculate_resource_statuses
+    resource_statuses = if Puppet[:exclude_unchanged_resources]
+                          @resource_statuses.reject { |_key, rs| resource_unchanged?(rs) }
+                        else
+                          @resource_statuses
+                        end
+    resource_statuses.transform_values { |rs| rs.nil? ? nil : rs.to_data_hash }
   end
 
   def to_data_hash
@@ -321,9 +344,9 @@ class Puppet::Transaction::Report
       'noop' => @noop,
       'noop_pending' => @noop_pending,
       'environment' => @environment,
-      'logs' => @logs.map { |log| log.to_data_hash },
-      'metrics' => Hash[@metrics.map { |key, metric| [key, metric.to_data_hash] }],
-      'resource_statuses' => Hash[@resource_statuses.map { |key, rs| [key, rs.nil? ? nil : rs.to_data_hash] }],
+      'logs' => @logs.map(&:to_data_hash),
+      'metrics' => @metrics.transform_values(&:to_data_hash),
+      'resource_statuses' => calculate_resource_statuses,
       'corrective_change' => @corrective_change,
     }
 
@@ -351,11 +374,11 @@ class Puppet::Transaction::Report
   def summary
     report = raw_summary
 
-    ret = ""
+    ret = ''.dup
     report.keys.sort_by(&:to_s).each do |key|
       ret += "#{Puppet::Util::Metric.labelize(key)}:\n"
 
-      report[key].keys.sort { |a,b|
+      report[key].keys.sort { |a, b|
         # sort by label
         if a == TOTAL
           1
@@ -367,6 +390,7 @@ class Puppet::Transaction::Report
       }.each do |label|
         value = report[key][label]
         next if value == 0
+
         value = "%0.2f" % value if value.is_a?(Float)
         ret += "   %15s %s\n" % [Puppet::Util::Metric.labelize(label) + ":", value]
       end
@@ -391,10 +415,10 @@ class Puppet::Transaction::Report
       }
     }
 
-    @metrics.each do |name, metric|
+    @metrics.each do |_name, metric|
       key = metric.name.to_s
       report[key] = {}
-      metric.values.each do |metric_name, label, value|
+      metric.values.each do |metric_name, _label, value|
         report[key][metric_name.to_s] = value
       end
       report[key][TOTAL] = 0 unless key == "time" or report[key].include?(TOTAL)
@@ -416,8 +440,8 @@ class Puppet::Transaction::Report
   def exit_status
     status = 0
     if @metrics["changes"] && @metrics["changes"][TOTAL] &&
-        @metrics["resources"] && @metrics["resources"]["failed"] &&
-        @metrics["resources"]["failed_to_restart"]
+       @metrics["resources"] && @metrics["resources"]["failed"] &&
+       @metrics["resources"]["failed_to_restart"]
       status |= 2 if @metrics["changes"][TOTAL] > 0
       status |= 4 if @metrics["resources"]["failed"] > 0
       status |= 4 if @metrics["resources"]["failed_to_restart"] > 0
@@ -431,19 +455,19 @@ class Puppet::Transaction::Report
 
   # Mark the report as corrective, if there are any resource_status marked corrective.
   def calculate_report_corrective_change
-    @corrective_change = resource_statuses.any? do |name, status|
+    @corrective_change = resource_statuses.any? do |_name, status|
       status.corrective_change
     end
   end
 
   def calculate_change_metric
-    resource_statuses.map { |name, status| status.change_count || 0 }.inject(0) { |a,b| a+b }
+    resource_statuses.map { |_name, status| status.change_count || 0 }.inject(0) { |a, b| a + b }
   end
 
   def calculate_event_metrics
     metrics = Hash.new(0)
-    %w{total failure success}.each { |m| metrics[m] = 0 }
-    resource_statuses.each do |name, status|
+    %w[total failure success].each { |m| metrics[m] = 0 }
+    resource_statuses.each do |_name, status|
       metrics[TOTAL] += status.events.length
       status.events.each do |event|
         metrics[event.status] += 1
@@ -463,7 +487,7 @@ class Puppet::Transaction::Report
       metrics[state.to_s] = 0
     end
 
-    resource_statuses.each do |name, status|
+    resource_statuses.each do |_name, status|
       Puppet::Resource::Status::STATES.each do |state|
         metrics[state.to_s] += 1 if status.send(state)
       end
@@ -474,7 +498,7 @@ class Puppet::Transaction::Report
 
   def calculate_time_metrics
     metrics = Hash.new(0)
-    resource_statuses.each do |name, status|
+    resource_statuses.each do |_name, status|
       metrics[status.resource_type.downcase] += status.evaluation_time if status.evaluation_time
     end
 

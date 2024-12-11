@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/parser/ast/top_level_construct'
 
 class Puppet::Parser::AST::Hostclass < Puppet::Parser::AST::TopLevelConstruct
@@ -18,10 +20,10 @@ class Puppet::Parser::AST::Hostclass < Puppet::Parser::AST::TopLevelConstruct
         end
       end
     end
-    return all_types
+    all_types
   end
 
-  def code()
+  def code
     @context[:code]
   end
 end

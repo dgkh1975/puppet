@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Joins the values of an Array into a string with elements separated by a delimiter.
 #
 # Supports up to two arguments
@@ -28,7 +30,7 @@
 # be made.
 #
 # @example Joining the result of a reverse_each converted to an array
-# 
+#
 # ```puppet
 # [1,2,3].reverse_each.convert_to(Array).join(', ')
 # # would result in: "3, 2, 1"
@@ -51,6 +53,6 @@ Puppet::Functions.create_function(:join) do
   end
 
   def join(arg, delimiter = '', puppet_formatting = false)
-      arg.join(delimiter)
+    arg.join(delimiter)
   end
 end

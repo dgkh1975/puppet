@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # This class is not actually public API, but the method
 # {Puppet::Interface::ActionManager#action action} is public when used
 # as part of the Faces DSL (i.e. from within a
@@ -11,13 +13,13 @@ module Puppet::Interface::ActionManager
   # the methods on {Puppet::Interface::ActionBuilder}.
   # @param name [Symbol] The name that will be used to invoke the
   #   action
-  # @overload action(name, {|| block})
+  # @overload action(name, { block })
   # @return [void]
   # @api public
   # @dsl Faces
   def action(name, &block)
     @actions ||= {}
-    Puppet.warning _("Redefining action %{name} for %{self}") % { name: name, self: self } if action?(name)
+    Puppet.debug _("Redefining action %{name} for %{self}") % { name: name, self: self } if action?(name)
 
     action = Puppet::Interface::ActionBuilder.build(self, name, &block)
 
@@ -37,7 +39,7 @@ module Puppet::Interface::ActionManager
     @actions ||= {}
     result = @actions.keys
 
-    if self.is_a?(Class) and superclass.respond_to?(:actions)
+    if is_a?(Class) and superclass.respond_to?(:actions)
       result += superclass.actions
     elsif self.class.respond_to?(:actions)
       result += self.class.actions
@@ -56,7 +58,7 @@ module Puppet::Interface::ActionManager
     @actions ||= {}
     result = @actions[name.to_sym]
     if result.nil?
-      if self.is_a?(Class) and superclass.respond_to?(:get_action)
+      if is_a?(Class) and superclass.respond_to?(:get_action)
         found = superclass.get_action(name)
       elsif self.class.respond_to?(:get_action)
         found = self.class.get_action(name)
@@ -69,17 +71,18 @@ module Puppet::Interface::ActionManager
         result = @actions[name.to_sym] = found.__dup_and_rebind_to(self)
       end
     end
-    return result
+    result
   end
 
   # Retrieves the default action for the face
   # @return [Puppet::Interface::Action]
   # @api private
   def get_default_action
-    default = actions.map {|x| get_action(x) }.select {|x| x.default }
+    default = actions.map { |x| get_action(x) }.select(&:default)
     if default.length > 1
-      raise "The actions #{default.map(&:name).join(", ")} cannot all be default"
+      raise "The actions #{default.map(&:name).join(', ')} cannot all be default"
     end
+
     default.first
   end
 

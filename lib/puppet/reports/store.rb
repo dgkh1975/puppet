@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require 'fileutils'
 require_relative '../../puppet/util'
@@ -17,14 +19,14 @@ Puppet::Reports.register_report(:store) do
 
     dir = File.join(Puppet[:reportdir], host)
 
-    if ! Puppet::FileSystem.exist?(dir)
+    unless Puppet::FileSystem.exist?(dir)
       FileUtils.mkdir_p(dir)
-      FileUtils.chmod_R(0750, dir)
+      FileUtils.chmod_R(0o750, dir)
     end
 
     # Now store the report.
     now = Time.now.gmtime
-    name = %w{year month day hour min}.collect do |method|
+    name = %w[year month day hour min].collect do |method|
       # Make sure we're at least two digits everywhere
       "%02d" % now.send(method).to_s
     end.join("") + ".yaml"
@@ -32,11 +34,11 @@ Puppet::Reports.register_report(:store) do
     file = File.join(dir, name)
 
     begin
-      Puppet::FileSystem.replace_file(file, 0640) do |fh|
+      Puppet::FileSystem.replace_file(file, 0o640) do |fh|
         fh.print to_yaml
       end
     rescue => detail
-       Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
+      Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
     end
 
     # Only testing cares about the return value
@@ -51,7 +53,8 @@ Puppet::Reports.register_report(:store) do
 
     if Puppet::FileSystem.exist?(dir)
       Dir.entries(dir).each do |file|
-        next if ['.','..'].include?(file)
+        next if ['.', '..'].include?(file)
+
         file = File.join(dir, file)
         Puppet::FileSystem.unlink(file) if File.file?(file)
       end

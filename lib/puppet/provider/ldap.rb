@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/provider'
 
 # The base class for LDAP providers.
@@ -79,9 +81,10 @@ class Puppet::Provider::Ldap < Puppet::Provider
   def initialize(*args)
     raise(Puppet::DevError, _("No LDAP Configuration defined for %{class_name}") % { class_name: self.class }) unless self.class.manager
     raise(Puppet::DevError, _("Invalid LDAP Configuration defined for %{class_name}") % { class_name: self.class }) unless self.class.manager.valid?
+
     super
 
-    @property_hash = @property_hash.inject({}) do |result, ary|
+    @property_hash = @property_hash.each_with_object({}) do |ary, result|
       param, values = ary
 
       # Skip any attributes we don't manage.
@@ -101,7 +104,6 @@ class Puppet::Provider::Ldap < Puppet::Provider
       else
         result[param] = values
       end
-      result
     end
 
     # Make a duplicate, so that we have a copy for comparison
@@ -117,7 +119,7 @@ class Puppet::Provider::Ldap < Puppet::Provider
   # Return (and look up if necessary) the desired state.
   def properties
     if @property_hash.empty?
-      @property_hash = query || {:ensure => :absent}
+      @property_hash = query || { :ensure => :absent }
       @property_hash[:ensure] = :absent if @property_hash.empty?
     end
     @property_hash.dup

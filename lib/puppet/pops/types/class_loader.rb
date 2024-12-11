@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
 # The ClassLoader provides a Class instance given a class name or a meta-type.
@@ -35,7 +37,8 @@ class ClassLoader
   def self.provide_from_type(type)
     case type
     when PRuntimeType
-      raise ArgumentError.new("Only Runtime type 'ruby' is supported, got #{type.runtime}") unless type.runtime == :ruby
+      raise ArgumentError, "Only Runtime type 'ruby' is supported, got #{type.runtime}" unless type.runtime == :ruby
+
       provide_from_string(type.runtime_type_name)
 
     when PBooleanType
@@ -53,7 +56,7 @@ class ClassLoader
 
     # Although not expected to be the first choice for getting a concrete class for these
     # types, these are of value if the calling logic just has a reference to type.
-    #
+    # rubocop:disable Layout/SpaceBeforeSemicolon
     when PArrayType    ; Array
     when PTupleType    ; Array
     when PHashType     ; Hash
@@ -66,6 +69,7 @@ class ClassLoader
     when PFloatType    ; Float
     when PUndefType    ; NilClass
     when PCallableType ; Proc
+    # rubocop:enable Layout/SpaceBeforeSemicolon
     else
       nil
     end
@@ -86,7 +90,7 @@ class ClassLoader
     unless result.is_a?(Module)
       # Attempt to load it using the auto loader
       loaded_path = nil
-      if paths_for_name(name_path).find {|path| loaded_path = path; @autoloader.load(path, Puppet.lookup(:current_environment)) }
+      if paths_for_name(name_path).find { |path| loaded_path = path; @autoloader.load(path, Puppet.lookup(:current_environment)) }
         result = find_class(name_path)
         unless result.is_a?(Module)
           raise RuntimeError, "Loading of #{name} using relative path: '#{loaded_path}' did not create expected class"
@@ -94,17 +98,16 @@ class ClassLoader
       end
     end
     return nil unless result.is_a?(Module)
+
     result
   end
   private_class_method :provide_from_string
 
   def self.find_class(name_path)
     name_path.reduce(Object) do |ns, name|
-      begin
-        ns.const_get(name, false) # don't search ancestors
-      rescue NameError
-        return nil
-      end
+      ns.const_get(name, false) # don't search ancestors
+    rescue NameError
+      return nil
     end
   end
   private_class_method :find_class
@@ -114,19 +117,18 @@ class ClassLoader
     # TODO:this is not perfect - it will not produce the correct mix if a mix of styles are used
     # The alternative is to test many additional paths.
     #
-    [fq_named_parts.map {|part| de_camel(part)}.join('/'), fq_named_parts.join('/').downcase ]
+    [fq_named_parts.map { |part| de_camel(part) }.join('/'), fq_named_parts.join('/').downcase]
   end
   private_class_method :paths_for_name
 
   def self.de_camel(fq_name)
-    fq_name.to_s.gsub(/::/, '/').
-    gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
-    gsub(/([a-z\d])([A-Z])/,'\1_\2').
-    tr("-", "_").
-    downcase
+    fq_name.to_s.gsub(/::/, '/')
+           .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+           .tr("-", "_")
+           .downcase
   end
   private_class_method :de_camel
-
 end
 end
 end

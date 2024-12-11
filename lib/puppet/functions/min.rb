@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Returns the lowest value among a variable number of arguments.
 # Takes at least one argument.
 #
@@ -81,8 +83,35 @@ Puppet::Functions.create_function(:min) do
     repeated_param 'String', :values
   end
 
+  dispatch :on_semver do
+    repeated_param 'Semver', :values
+  end
+
+  dispatch :on_timespan do
+    repeated_param 'Timespan', :values
+  end
+
+  dispatch :on_timestamp do
+    repeated_param 'Timestamp', :values
+  end
+
   dispatch :on_single_numeric_array do
     param 'Array[Numeric]', :values
+    optional_block_param 'Callable[2,2]', :block
+  end
+
+  dispatch :on_single_semver_array do
+    param 'Array[Semver]', :values
+    optional_block_param 'Callable[2,2]', :block
+  end
+
+  dispatch :on_single_timespan_array do
+    param 'Array[Timespan]', :values
+    optional_block_param 'Callable[2,2]', :block
+  end
+
+  dispatch :on_single_timestamp_array do
+    param 'Array[Timestamp]', :values
     optional_block_param 'Callable[2,2]', :block
   end
 
@@ -105,7 +134,6 @@ Puppet::Functions.create_function(:min) do
     repeated_param 'Any', :values
   end
 
-
   # All are Numeric - ok now, will be ok later
   def on_numeric(*args)
     assert_arg_count(args)
@@ -116,10 +144,10 @@ Puppet::Functions.create_function(:min) do
   def on_string(*args)
     assert_arg_count(args)
 
-    args.min do|a,b|
-      if a.to_s =~ %r{\A^-?\d+([._eE]\d+)?\z} && b.to_s =~ %r{\A-?\d+([._eE]\d+)?\z}
+    args.min do |a, b|
+      if a.to_s =~ /\A^-?\d+([._eE]\d+)?\z/ && b.to_s =~ /\A-?\d+([._eE]\d+)?\z/
         Puppet.warn_once('deprecations', 'min_function_numeric_coerce_string',
-          _("The min() function's auto conversion of String to Numeric is deprecated - change to convert input before calling, or use lambda"))
+                         _("The min() function's auto conversion of String to Numeric is deprecated - change to convert input before calling, or use lambda"))
         a.to_f <=> b.to_f
       else
         # case sensitive as in the stdlib function
@@ -128,8 +156,23 @@ Puppet::Functions.create_function(:min) do
     end
   end
 
+  def on_semver(*args)
+    assert_arg_count(args)
+    args.min
+  end
+
+  def on_timespan(*args)
+    assert_arg_count(args)
+    args.min
+  end
+
+  def on_timestamp(*args)
+    assert_arg_count(args)
+    args.min
+  end
+
   def on_any_with_block(*args, &block)
-    args.min {|x,y| block.call(x,y) }
+    args.min { |x, y| block.call(x, y) }
   end
 
   def on_single_numeric_array(array, &block)
@@ -145,6 +188,30 @@ Puppet::Functions.create_function(:min) do
       on_any_with_block(*array, &block)
     else
       on_string(*array)
+    end
+  end
+
+  def on_single_semver_array(array, &block)
+    if block_given?
+      on_any_with_block(*array, &block)
+    else
+      on_semver(*array)
+    end
+  end
+
+  def on_single_timespan_array(array, &block)
+    if block_given?
+      on_any_with_block(*array, &block)
+    else
+      on_timespan(*array)
+    end
+  end
+
+  def on_single_timestamp_array(array, &block)
+    if block_given?
+      on_any_with_block(*array, &block)
+    else
+      on_timestamp(*array)
     end
   end
 
@@ -164,13 +231,13 @@ Puppet::Functions.create_function(:min) do
     args.min do |a, b|
       as = a.to_s
       bs = b.to_s
-      if as =~ %r{\A^-?\d+([._eE]\d+)?\z} && bs =~ %r{\A-?\d+([._eE]\d+)?\z}
+      if as =~ /\A^-?\d+([._eE]\d+)?\z/ && bs =~ /\A-?\d+([._eE]\d+)?\z/
         Puppet.warn_once('deprecations', 'min_function_numeric_coerce_string',
-          _("The min() function's auto conversion of String to Numeric is deprecated - change to convert input before calling, or use lambda"))
+                         _("The min() function's auto conversion of String to Numeric is deprecated - change to convert input before calling, or use lambda"))
         a.to_f <=> b.to_f
       else
         Puppet.warn_once('deprecations', 'min_function_string_coerce_any',
-          _("The min() function's auto conversion of Any to String is deprecated - change to convert input before calling, or use lambda"))
+                         _("The min() function's auto conversion of Any to String is deprecated - change to convert input before calling, or use lambda"))
         as <=> bs
       end
     end

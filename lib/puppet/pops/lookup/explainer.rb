@@ -1,12 +1,13 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Lookup
-
-# The ExplainNode contains information of a specific node in a tree traversed during
-# lookup. The tree can be traversed using the `parent` and `branches` attributes of
-# each node.
-#
-# Each leaf node contains information about what happened when the leaf of the branch
-# was traversed.
+  # The ExplainNode contains information of a specific node in a tree traversed during
+  # lookup. The tree can be traversed using the `parent` and `branches` attributes of
+  # each node.
+  #
+  # Each leaf node contains information about what happened when the leaf of the branch
+  # was traversed.
   class ExplainNode
     def branches
       @branches ||= []
@@ -14,12 +15,12 @@ module Lookup
 
     def to_hash
       hash = {}
-      hash[:branches] = @branches.map {|b| b.to_hash} unless @branches.nil? || @branches.empty?
+      hash[:branches] = @branches.map(&:to_hash) unless @branches.nil? || @branches.empty?
       hash
     end
 
     def explain
-      io = ''
+      io = ''.dup
       dump_on(io, '', '')
       io
     end
@@ -169,7 +170,7 @@ module Lookup
     def dump_on(io, indent, first_indent)
       io << first_indent << 'Searching for "' << key << "\"\n"
       indent = increase_indent(indent)
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
     end
   end
 
@@ -245,7 +246,7 @@ module Lookup
     def dump_on(io, indent, first_indent)
       io << first_indent << 'Interpolation on "' << @expression << "\"\n"
       indent = increase_indent(indent)
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
     end
 
     def to_hash
@@ -279,7 +280,7 @@ module Lookup
         dump_value(io, indent, options)
         io << "\n"
       end
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
       if @event == :result
         io << indent << 'Merged result: '
         dump_value(io, indent, @value)
@@ -289,6 +290,7 @@ module Lookup
 
     def to_hash
       return branches[0].to_hash if branches.size == 1
+
       hash = super
       hash[:merge] = @merge.class.key
       options = options_wo_strategy
@@ -319,7 +321,7 @@ module Lookup
     def dump_on(io, indent, first_indent)
       io << first_indent << 'Data Binding "' << @binding_terminus.to_s << "\"\n"
       indent = increase_indent(indent)
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
       dump_outcome(io, indent)
     end
 
@@ -347,7 +349,7 @@ module Lookup
         path = @provider.config_path
         io << indent << 'Using configuration "' << path.to_s << "\"\n" unless path.nil?
       end
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
       dump_outcome(io, indent)
     end
 
@@ -379,7 +381,7 @@ module Lookup
       io << indent << type_name << ' "' << location.to_s << "\"\n"
       indent = increase_indent(indent)
       io << indent << 'Original ' << type_name.downcase << ': "' << @location.original_location << "\"\n"
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
       io << indent << type_name << " not found\n" if @event == :location_not_found
       dump_outcome(io, indent)
     end
@@ -411,7 +413,7 @@ module Lookup
     def dump_on(io, indent, first_indent)
       io << indent << 'Sub key: "' << @sub_key.join('.') << "\"\n"
       indent = increase_indent(indent)
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
       dump_outcome(io, indent)
     end
 
@@ -444,7 +446,7 @@ module Lookup
     def dump_on(io, indent, first_indent)
       io << indent << @name << "\n"
       indent = increase_indent(indent)
-      branches.each {|b| b.dump_on(io, indent, indent)}
+      branches.each { |b| b.dump_on(io, indent, indent) }
       dump_outcome(io, indent)
     end
 
@@ -467,33 +469,33 @@ module Lookup
     end
 
     def push(qualifier_type, qualifier)
-      node = case (qualifier_type)
-        when :global
-         ExplainGlobal.new(@current, qualifier)
-        when :location
-          ExplainLocation.new(@current, qualifier)
-        when :interpolate
-          ExplainInterpolate.new(@current, qualifier)
-        when :data_provider
-          ExplainDataProvider.new(@current, qualifier)
-        when :merge
-          ExplainMerge.new(@current, qualifier)
-        when :module
-          ExplainModule.new(@current, qualifier)
-        when :scope
-          ExplainScope.new(@current, qualifier)
-        when :sub_lookup
-          ExplainSubLookup.new(@current, qualifier)
-        when :segment
-          ExplainKeySegment.new(@current, qualifier)
-        when :meta, :data
-          ExplainTop.new(@current, qualifier_type, qualifier)
-        when :invalid_key
-          ExplainInvalidKey.new(@current, qualifier)
-        else
-          #TRANSLATORS 'Explain' is referring to the 'Explainer' class and should not be translated
-          raise ArgumentError, _("Unknown Explain type %{qualifier_type}") % { qualifier_type: qualifier_type }
-        end
+      node = case qualifier_type
+             when :global
+               ExplainGlobal.new(@current, qualifier)
+             when :location
+               ExplainLocation.new(@current, qualifier)
+             when :interpolate
+               ExplainInterpolate.new(@current, qualifier)
+             when :data_provider
+               ExplainDataProvider.new(@current, qualifier)
+             when :merge
+               ExplainMerge.new(@current, qualifier)
+             when :module
+               ExplainModule.new(@current, qualifier)
+             when :scope
+               ExplainScope.new(@current, qualifier)
+             when :sub_lookup
+               ExplainSubLookup.new(@current, qualifier)
+             when :segment
+               ExplainKeySegment.new(@current, qualifier)
+             when :meta, :data
+               ExplainTop.new(@current, qualifier_type, qualifier)
+             when :invalid_key
+               ExplainInvalidKey.new(@current, qualifier)
+             else
+               # TRANSLATORS 'Explain' is referring to the 'Explainer' class and should not be translated
+               raise ArgumentError, _("Unknown Explain type %{qualifier_type}") % { qualifier_type: qualifier_type }
+             end
       @current.branches << node
       @current = node
     end
@@ -585,7 +587,7 @@ module Lookup
     end
 
     def emit_debug_info(preamble)
-      io = ''
+      io = String.new
       io << preamble << "\n"
       dump_on(io, '  ', '  ')
       Puppet.debug(io.chomp!)

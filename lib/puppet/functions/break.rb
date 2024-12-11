@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Breaks an innermost iteration as if it encountered an end of input.
 # This function does not return to the caller.
 #
@@ -24,7 +26,7 @@
 # }
 # $data = [1,2,3]
 # notice $data.map |$x| { break_if_even($x); $x*10 }
-#```
+# ```
 # Would notice the value `[10]`
 #
 # * Also see functions `next` and `return`
@@ -35,7 +37,7 @@ Puppet::Functions.create_function(:break) do
   dispatch :break_impl do
   end
 
-  def break_impl()
+  def break_impl
     # get file, line if available, else they are set to nil
     file, line = Puppet::Pops::PuppetStack.top_of_stack
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/confine_collection'
 
 # The Confiner module contains methods for managing a Provider's confinement (suitability under given
@@ -16,7 +18,7 @@ module Puppet::Confiner
   # * `:any` => an array of expressions that will be ORed together
   #
   # @example
-  #   confine :operatingsystem => [:redhat, :fedora]
+  #   confine 'os.name' => [:redhat, :fedora]
   #   confine :true { ... }
   #
   # @param hash [Hash<{Symbol => Object}>] hash of confines
@@ -31,7 +33,7 @@ module Puppet::Confiner
   # @api private
   #
   def confine_collection
-    @confine_collection ||= Puppet::ConfineCollection.new(self.to_s)
+    @confine_collection ||= Puppet::ConfineCollection.new(to_s)
   end
 
   # Checks whether this implementation is suitable for the current platform (or returns a summary
@@ -41,6 +43,6 @@ module Puppet::Confiner
   # @api public
   #
   def suitable?(short = true)
-    return(short ? confine_collection.valid? : confine_collection.summary)
+    (short ? confine_collection.valid? : confine_collection.summary)
   end
 end

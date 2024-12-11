@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Windows Access Control List
 #
 # Represents a list of access control entries (ACEs).
@@ -25,7 +27,7 @@ class Puppet::Util::Windows::AccessControlList
   #
   # @yieldparam ace [Hash] the ace
   def each
-    @aces.each {|ace| yield ace}
+    @aces.each { |ace| yield ace }
   end
 
   # Allow the +sid+ to access a resource with the specified access +mask+.
@@ -69,8 +71,8 @@ class Puppet::Util::Windows::AccessControlList
           # flags except those affecting inheritance of the
           # ACE we're creating.
           inherit_mask = Puppet::Util::Windows::AccessControlEntry::CONTAINER_INHERIT_ACE |
-            Puppet::Util::Windows::AccessControlEntry::OBJECT_INHERIT_ACE |
-            Puppet::Util::Windows::AccessControlEntry::INHERIT_ONLY_ACE
+                         Puppet::Util::Windows::AccessControlEntry::OBJECT_INHERIT_ACE |
+                         Puppet::Util::Windows::AccessControlEntry::INHERIT_ONLY_ACE
           explicit_ace = Puppet::Util::Windows::AccessControlEntry.new(new_sid, ace.mask, ace.flags & inherit_mask, ace.type)
           aces_to_prepend << explicit_ace
         else
@@ -87,8 +89,9 @@ class Puppet::Util::Windows::AccessControlList
     if prepend_needed
       mask = Puppet::Util::Windows::File::STANDARD_RIGHTS_ALL | Puppet::Util::Windows::File::SPECIFIC_RIGHTS_ALL
       ace = Puppet::Util::Windows::AccessControlEntry.new(
-              Puppet::Util::Windows::SID::LocalSystem,
-              mask)
+        Puppet::Util::Windows::SID::LocalSystem,
+        mask
+      )
       @aces << ace
     end
 
@@ -97,7 +100,7 @@ class Puppet::Util::Windows::AccessControlList
   end
 
   def inspect
-    str = ""
+    str = ''.dup
     @aces.each do |ace|
       str << "  #{ace.inspect}\n"
     end
@@ -106,7 +109,7 @@ class Puppet::Util::Windows::AccessControlList
 
   def ==(other)
     self.class == other.class &&
-      self.to_a == other.to_a
+      to_a == other.to_a
   end
 
   alias eql? ==

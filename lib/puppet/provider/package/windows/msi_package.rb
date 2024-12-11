@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../../puppet/provider/package/windows/package'
 
 class Puppet::Provider::Package::Windows
@@ -11,9 +13,9 @@ class Puppet::Provider::Package::Windows
     # registry values to load under each product entry in
     # HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
     # for this provider
-    REG_VALUE_NAMES = [
-      'DisplayVersion',
-      'WindowsInstaller'
+    REG_VALUE_NAMES = %w[
+      DisplayVersion
+      WindowsInstaller
     ]
 
     # Get the COM installer object, it's in a separate method for testing

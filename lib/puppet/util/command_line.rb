@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 # Bundler and rubygems maintain a set of directories from which to
 # load gems. If Bundler is loaded, let it determine what can be
 # loaded. If it's not loaded, then use rubygems. But do this before
 # loading any puppet code, so that our gem loading system is sane.
-if not defined? ::Bundler
+unless defined? ::Bundler
   begin
     require 'rubygems'
   rescue LoadError
@@ -29,7 +31,7 @@ module Puppet
       # @param zero [String] the name of the executable
       # @param argv [Array<String>] the arguments passed on the command line
       # @param stdin [IO] (unused)
-      def initialize(zero = $0, argv = ARGV, stdin = STDIN)
+      def initialize(zero = $PROGRAM_NAME, argv = ARGV, stdin = STDIN)
         @command = File.basename(zero, '.rb')
         @argv = argv
       end
@@ -54,7 +56,7 @@ module Puppet
         if subcommand_name.nil?
           @argv
         else
-          @argv[1..-1]
+          @argv[1..]
         end
       end
 

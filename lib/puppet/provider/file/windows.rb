@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:file).provide :windows do
   desc "Uses Microsoft Windows functionality to manage file ownership and permissions."
 
-  confine :operatingsystem => :windows
+  confine 'os.name' => :windows
   has_feature :manages_symlinks if Puppet.features.manages_symlinks?
 
   include Puppet::Util::Warnings
@@ -36,28 +38,26 @@ Puppet::Type.type(:file).provide :windows do
 
   def owner
     return :absent unless resource.stat
+
     get_owner(resource[:path])
   end
 
   def owner=(should)
-    begin
-      set_owner(should, resolved_path)
-    rescue => detail
-      raise Puppet::Error, _("Failed to set owner to '%{should}': %{detail}") % { should: should, detail: detail }, detail.backtrace
-    end
+    set_owner(should, resolved_path)
+  rescue => detail
+    raise Puppet::Error, _("Failed to set owner to '%{should}': %{detail}") % { should: should, detail: detail }, detail.backtrace
   end
 
   def group
     return :absent unless resource.stat
+
     get_group(resource[:path])
   end
 
   def group=(should)
-    begin
-      set_group(should, resolved_path)
-    rescue => detail
-      raise Puppet::Error, _("Failed to set group to '%{should}': %{detail}") % { should: should, detail: detail }, detail.backtrace
-    end
+    set_group(should, resolved_path)
+  rescue => detail
+    raise Puppet::Error, _("Failed to set group to '%{should}': %{detail}") % { should: should, detail: detail }, detail.backtrace
   end
 
   def mode
@@ -70,20 +70,17 @@ Puppet::Type.type(:file).provide :windows do
   end
 
   def mode=(value)
-    begin
-      managing_owner = !resource[:owner].nil?
-      managing_group = !resource[:group].nil?
-      set_mode(value.to_i(8), resource[:path], true, managing_owner, managing_group)
-    rescue => detail
-      error = Puppet::Error.new(_("failed to set mode %{mode} on %{path}: %{message}") % { mode: mode, path: resource[:path], message: detail.message })
-      error.set_backtrace detail.backtrace
-      raise error
-    end
-    :file_changed
+    managing_owner = !resource[:owner].nil?
+    managing_group = !resource[:group].nil?
+    set_mode(value.to_i(8), resource[:path], true, managing_owner, managing_group)
+  rescue => detail
+    error = Puppet::Error.new(_("failed to set mode %{mode} on %{path}: %{message}") % { mode: mode, path: resource[:path], message: detail.message })
+    error.set_backtrace detail.backtrace
+    raise error
   end
 
   def validate
-    if [:owner, :group, :mode].any?{|p| resource[p]} and !supports_acl?(resource[:path])
+    if [:owner, :group, :mode].any? { |p| resource[p] } and !supports_acl?(resource[:path])
       resource.fail(_("Can only manage owner, group, and mode on filesystems that support Windows ACLs, such as NTFS"))
     end
   end
@@ -100,16 +97,16 @@ Puppet::Type.type(:file).provide :windows do
   def munge_windows_system_group(current, should)
     [
       {
-        'type'        => 'group',
-        'resource'    => resource[:group],
+        'type' => 'group',
+        'resource' => resource[:group],
         'set_to_user' => group,
         'fullcontrol' => "070".to_i(8),
         'remove_mask' => "707".to_i(8),
         'should_mask' => (should[0].to_i(8) & "070".to_i(8)),
       },
       {
-        'type'        => 'owner',
-        'resource'    => resource[:owner],
+        'type' => 'owner',
+        'resource' => resource[:owner],
         'set_to_user' => owner,
         'fullcontrol' => "700".to_i(8),
         'remove_mask' => "077".to_i(8),
@@ -121,12 +118,12 @@ Puppet::Type.type(:file).provide :windows do
           # Since the group is LocalSystem, and the permissions are FullControl,
           # replace the value returned with the value expected. This will treat
           # this specific situation as "insync"
-          current = ( (current.to_i(8) & mode_part['remove_mask']) | mode_part['should_mask'] ).to_s(8).rjust(4, '0')
+          current = ((current.to_i(8) & mode_part['remove_mask']) | mode_part['should_mask']).to_s(8).rjust(4, '0')
         else
           # If the SYSTEM account does _not_ have FullControl in this scenario, we should
           # force the resource out of sync no matter what.
-          #TRANSLATORS 'SYSTEM' is a Windows name and should not be translated
-          Puppet.debug { _("%{resource_name}: %{mode_part_type} set to SYSTEM. SYSTEM permissions cannot be set below FullControl ('7')") % { resource_name: resource[:name], mode_part_type: mode_part['type']} }
+          # TRANSLATORS 'SYSTEM' is a Windows name and should not be translated
+          Puppet.debug { _("%{resource_name}: %{mode_part_type} set to SYSTEM. SYSTEM permissions cannot be set below FullControl ('7')") % { resource_name: resource[:name], mode_part_type: mode_part['type'] } }
           return nil
         end
       end
@@ -135,7 +132,9 @@ Puppet::Type.type(:file).provide :windows do
   end
 
   attr_reader :file
+
   private
+
   def file
     @file ||= Puppet::FileSystem.pathname(resource[:path])
   end

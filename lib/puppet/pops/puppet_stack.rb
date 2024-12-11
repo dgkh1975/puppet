@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/thread_local'
 
 module Puppet
@@ -30,7 +32,7 @@ module Puppet
       @stack = Puppet::ThreadLocal.new { Array.new }
 
       def self.stack(file, line, obj, message, args, &block)
-        file = 'unknown' if (file.nil? || file == '')
+        file = 'unknown' if file.nil? || file == ''
         line = 0 if line.nil?
 
         result = nil

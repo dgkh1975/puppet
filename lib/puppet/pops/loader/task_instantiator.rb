@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The TypeDefinitionInstantiator instantiates a type alias or a type definition
 #
 require_relative '../../../puppet/module/task'
@@ -34,8 +36,8 @@ class TaskInstantiator
   end
 
   def self.convert_types(args)
-    args.each_with_object({}) do |(k, v), hsh|
-      hsh[k] = v['type'].nil? ? Types::TypeFactory.data : Types::TypeParser.singleton.parse(v['type'])
+    args.transform_values do |v|
+      v['type'].nil? ? Types::TypeFactory.data : Types::TypeParser.singleton.parse(v['type'])
     end if args
   end
   private_class_method :convert_types

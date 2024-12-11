@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Formats timestamp or timespan according to the directives in the given format string. The directives begins with a percent (%) character.
 # Any text not listed as a directive will be passed through to the output string.
 #
@@ -176,7 +178,7 @@
 # ```
 #
 # - Since 4.8.0
-# 
+#
 Puppet::Functions.create_function(:strftime) do
   dispatch :format_timespan do
     param 'Timespan', :time_object
@@ -205,8 +207,8 @@ Puppet::Functions.create_function(:strftime) do
   def legacy_strftime(format, timezone = nil)
     file, line = Puppet::Pops::PuppetStack.top_of_stack
     Puppet.warn_once('deprecations', 'legacy#strftime',
-      _('The argument signature (String format, [String timezone]) is deprecated for #strftime. See #strftime documentation and Timespan type for more info'),
-      file, line)
+                     _('The argument signature (String format, [String timezone]) is deprecated for #strftime. See #strftime documentation and Timespan type for more info'),
+                     file, line)
     Puppet::Pops::Time::Timestamp.format_time(format, Time.now.utc, timezone)
   end
 end

@@ -4,7 +4,7 @@ require 'spec_helper'
 module Puppet::Util::Plist
 end
 
-describe Puppet::Type.type(:user).provider(:directoryservice) do
+describe Puppet::Type.type(:user).provider(:directoryservice), :if => Puppet.features.cfpropertylist? do 
   let(:username) { 'nonexistent_user' }
   let(:user_path) { "/Users/#{username}" }
   let(:resource) do
@@ -840,7 +840,7 @@ end
         expect(provider.class.get_salted_sha512_pbkdf2('iterations', pbkdf2_embedded_bplist_hash)).to be_a(Integer)
     end
     it "should raise an error if a field other than 'entropy', 'salt', or 'iterations' is passed" do
-      expect { provider.class.get_salted_sha512_pbkdf2('othervalue', pbkdf2_embedded_bplist_hash) }.to raise_error(Puppet::Error, /Puppet has tried to read an incorrect value from the SALTED-SHA512-PBKDF2 hash. Acceptable fields are 'salt', 'entropy', or 'iterations'/)
+      expect { provider.class.get_salted_sha512_pbkdf2('othervalue', pbkdf2_embedded_bplist_hash, 'test_user') }.to raise_error(Puppet::Error, /Puppet has tried to read an incorrect value from the user test_user in the SALTED-SHA512-PBKDF2 hash. Acceptable fields are 'salt', 'entropy', or 'iterations'/)
     end
   end
 
@@ -1142,9 +1142,9 @@ end
       provider.class.instance_variable_set(:@os_version, nil) if provider.class.instance_variable_defined? :@os_version
     end
 
-    it 'should call Puppet.runtime[:facter].value(:macosx_productversion_major) ONLY ONCE no matter how ' +
+    it 'should call Puppet.runtime[:facter].value(os.macosx.version.major) ONLY ONCE no matter how ' +
        'many times get_os_version() is called' do
-      expect(Facter).to receive(:value).with(:macosx_productversion_major).once.and_return('10.8')
+      expect(Facter).to receive(:value).with('os.macosx.version.major').once.and_return('10.8')
       expect(provider.class.get_os_version).to eq('10.8')
       expect(provider.class.get_os_version).to eq('10.8')
       expect(provider.class.get_os_version).to eq('10.8')

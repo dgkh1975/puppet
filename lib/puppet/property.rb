@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The virtual base class for properties, which are the self-contained building
 # blocks for actually doing work on the system.
 
@@ -95,8 +97,9 @@ class Puppet::Property < Puppet::Parameter
     #
     def array_matching=(value)
       value = value.intern if value.is_a?(String)
-      #TRANSLATORS 'Property#array_matching', 'first', and 'all' should not be translated
+      # TRANSLATORS 'Property#array_matching', 'first', and 'all' should not be translated
       raise ArgumentError, _("Supported values for Property#array_matching are 'first' and 'all'") unless [:first, :all].include?(value)
+
       @array_matching = value
     end
 
@@ -168,6 +171,7 @@ class Puppet::Property < Puppet::Parameter
         if instance_methods(false).include?(method)
           raise ArgumentError, _("Attempt to redefine method %{method} with block") % { method: method }
         end
+
         define_method(method, &value.block)
       else
         # Let the method be an alias for calling the providers setter unless we already have this method
@@ -199,21 +203,19 @@ class Puppet::Property < Puppet::Parameter
   # @raise [Puppet::DevError] if there were issues formatting the message
   #
   def change_to_s(current_value, newvalue)
-    begin
-      if current_value == :absent
-        return "defined '#{name}' as #{should_to_s(newvalue)}"
-      elsif newvalue == :absent or newvalue == [:absent]
-        return "undefined '#{name}' from #{is_to_s(current_value)}"
-      else
-        return "#{name} changed #{is_to_s(current_value)} to #{should_to_s(newvalue)}"
-      end
-    rescue Puppet::Error
-      raise
-    rescue => detail
-      message = _("Could not convert change '%{name}' to string: %{detail}") % { name: name, detail: detail }
-      Puppet.log_exception(detail, message)
-      raise Puppet::DevError, message, detail.backtrace
+    if current_value == :absent
+      "defined '#{name}' as #{should_to_s(newvalue)}"
+    elsif newvalue == :absent or newvalue == [:absent]
+      "undefined '#{name}' from #{is_to_s(current_value)}"
+    else
+      "#{name} changed #{is_to_s(current_value)} to #{should_to_s(newvalue)}"
     end
+  rescue Puppet::Error
+    raise
+  rescue => detail
+    message = _("Could not convert change '%{name}' to string: %{detail}") % { name: name, detail: detail }
+    Puppet.log_exception(detail, message)
+    raise Puppet::DevError, message, detail.backtrace
   end
 
   # Produces the name of the event to use to describe a change of this property's value.
@@ -223,18 +225,17 @@ class Puppet::Property < Puppet::Parameter
   # @return [String] the name of the event that describes the change
   #
   def event_name
-    value = self.should
+    value = should
 
     event_name = self.class.value_option(value, :event) and return event_name
 
     name == :ensure or return (name.to_s + "_changed").to_sym
 
-    return (resource.type.to_s + case value
-    when :present; "_created"
-    when :absent; "_removed"
-    else
-      "_changed"
-    end).to_sym
+    (resource.type.to_s + case value
+                          when :present; "_created"
+                          when :absent;  "_removed"
+                          else "_changed"
+                          end).to_sym
   end
 
   # Produces an event describing a change of this property.
@@ -254,8 +255,8 @@ class Puppet::Property < Puppet::Parameter
   def event(options = {})
     attrs = { :name => event_name, :desired_value => should, :property => self, :source_description => path }.merge(options)
     value = self.class.value_collection.match?(should) if should
-    
-    attrs[:invalidate_refreshes] = true if value && value.invalidate_refreshes 
+
+    attrs[:invalidate_refreshes] = true if value && value.invalidate_refreshes
     attrs[:redacted] = @sensitive
     resource.event attrs
   end
@@ -305,7 +306,7 @@ class Puppet::Property < Puppet::Parameter
   # @api public
   #
   def insync?(is)
-    self.devfail "#{self.class.name}'s should is not array" unless @should.is_a?(Array)
+    devfail "#{self.class.name}'s should is not array" unless @should.is_a?(Array)
 
     # an empty array is analogous to no should values
     return true if @should.empty?
@@ -330,14 +331,14 @@ class Puppet::Property < Puppet::Parameter
       #
       # This does mean that property equality is not commutative, and will not
       # work unless the `is` value is carefully arranged to match the should.
-      return (is == @should or is == @should.map(&:to_s))
+      (is == @should or is == @should.map(&:to_s))
 
       # When we stop being idiots about this, and actually have meaningful
       # semantics, this version is the thing we actually want to do.
       #
       # return is.zip(@should).all? {|a, b| property_matches?(a, b) }
     else
-      return @should.any? {|want| property_matches?(is, want) }
+      @should.any? { |want| property_matches?(is, want) }
     end
   end
 
@@ -366,9 +367,9 @@ class Puppet::Property < Puppet::Parameter
     rescue
       # Certain operations may fail, but we don't want to fail the transaction if we can
       # avoid it
-      #TRANSLATORS 'insync_values?' should not be translated
+      # TRANSLATORS 'insync_values?' should not be translated
       msg = _("Unknown failure using insync_values? on type: %{type} / property: %{name} to compare values %{should} and %{is}") %
-          { type: self.resource.ref, name: self.name, should: should, is: is }
+            { type: resource.ref, name: name, should: should, is: is }
       Puppet.info(msg)
 
       # Return nil, ie. unknown
@@ -402,7 +403,7 @@ class Puppet::Property < Puppet::Parameter
   # are not already in suitable form.
   # @param value [Object] the value to format as a string
   # @return [String] a pretty printing string
-  def is_to_s(value)
+  def is_to_s(value) # rubocop:disable Naming/PredicateName
     self.class.format_value_for_display(value)
   end
 
@@ -413,9 +414,9 @@ class Puppet::Property < Puppet::Parameter
   #
   def log(msg)
     Puppet::Util::Log.create(
-      :level   => resource[:loglevel],
+      :level => resource[:loglevel],
       :message => msg,
-      :source  => self
+      :source => self
     )
   end
 
@@ -449,12 +450,10 @@ class Puppet::Property < Puppet::Parameter
     # This is only here to make testing easier.
     if @resource.respond_to?(:noop?)
       @resource.noop?
+    elsif defined?(@noop)
+      @noop
     else
-      if defined?(@noop)
-        @noop
-      else
-        Puppet[:noop]
-      end
+      Puppet[:noop]
     end
   end
 
@@ -485,9 +484,9 @@ class Puppet::Property < Puppet::Parameter
     # Set a name for looking up associated options like the event.
     name = self.class.value_name(value)
     method = self.class.value_option(name, :method)
-    if method && self.respond_to?(method)
+    if method && respond_to?(method)
       begin
-        self.send(method)
+        send(method)
       rescue Puppet::Error
         raise
       rescue => detail
@@ -502,7 +501,7 @@ class Puppet::Property < Puppet::Parameter
       if block
         # FIXME It'd be better here to define a method, so that
         # the blocks could return values.
-        self.instance_eval(&block)
+        instance_eval(&block)
       else
         call_provider(value)
       end
@@ -525,12 +524,12 @@ class Puppet::Property < Puppet::Parameter
   def should
     return nil unless defined?(@should)
 
-    self.devfail "should for #{self.class.name} on #{resource.name} is not an array" unless @should.is_a?(Array)
+    devfail "should for #{self.class.name} on #{resource.name} is not an array" unless @should.is_a?(Array)
 
     if match_all?
-      return @should.collect { |val| self.unmunge(val) }
+      @should.collect { |val| unmunge(val) }
     else
-      return self.unmunge(@should[0])
+      unmunge(@should[0])
     end
   end
 
@@ -548,7 +547,7 @@ class Puppet::Property < Puppet::Parameter
     @shouldorig = values
 
     values.each { |val| validate(val) }
-    @should = values.collect { |val| self.munge(val) }
+    @should = values.collect { |val| munge(val) }
   end
 
   # Produces a pretty printing string for the given value.
@@ -590,18 +589,18 @@ class Puppet::Property < Puppet::Parameter
     features = self.class.value_option(self.class.value_name(value), :required_features)
     if features
       features = Array(features)
-      needed_features = features.collect { |f| f.to_s }.join(", ")
+      needed_features = features.collect(&:to_s).join(", ")
       unless provider.satisfies?(features)
-        #TRANSLATORS 'Provider' refers to a Puppet provider class
+        # TRANSLATORS 'Provider' refers to a Puppet provider class
         raise ArgumentError, _("Provider %{provider} must have features '%{needed_features}' to set '%{property}' to '%{value}'") %
-            { provider: provider.class.name, needed_features: needed_features, property: self.class.name, value: value }
+                             { provider: provider.class.name, needed_features: needed_features, property: self.class.name, value: value }
       end
     end
   end
 
   # @return [Object, nil] Returns the wanted _(should)_ value of this property.
   def value
-    self.should
+    should
   end
 
   # (see #should=)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/property'
 
 module Puppet
@@ -6,8 +8,7 @@ module Puppet
     # For an ordered list see {Puppet::Property::OrderedList}.
     #
     class List < Property
-
-      def is_to_s(currentvalue)
+      def is_to_s(currentvalue) # rubocop:disable Naming/PredicateName
         currentvalue == :absent ? super(currentvalue) : currentvalue.join(delimiter)
       end
 
@@ -24,7 +25,7 @@ module Puppet
         @resource[membership] == :inclusive
       end
 
-      #dearrayify was motivated because to simplify the implementation of the OrderedList property
+      # dearrayify was motivated because to simplify the implementation of the OrderedList property
       def dearrayify(array)
         array.sort.join(delimiter)
       end
@@ -33,8 +34,8 @@ module Puppet
         return nil unless @should
 
         members = @should
-        #inclusive means we are managing everything so if it isn't in should, its gone
-        members = add_should_with_current(members, retrieve) if ! inclusive?
+        # inclusive means we are managing everything so if it isn't in should, its gone
+        members = add_should_with_current(members, retrieve) unless inclusive?
 
         dearrayify(members)
       end
@@ -44,12 +45,12 @@ module Puppet
       end
 
       def retrieve
-        #ok, some 'convention' if the list property is named groups, provider should implement a groups method
+        # ok, some 'convention' if the list property is named groups, provider should implement a groups method
         tmp = provider.send(name) if provider
         if tmp && tmp != :absent
-          return tmp.instance_of?(Array) ? tmp : tmp.split(delimiter)
+          tmp.instance_of?(Array) ? tmp : tmp.split(delimiter)
         else
-          return :absent
+          :absent
         end
       end
 
@@ -63,7 +64,7 @@ module Puppet
       def insync?(is)
         return true unless is
 
-        (prepare_is_for_comparison(is) == self.should)
+        (prepare_is_for_comparison(is) == should)
       end
     end
   end

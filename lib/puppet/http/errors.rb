@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::HTTP
   # A base class for puppet http errors
   # @api public
@@ -34,7 +36,7 @@ module Puppet::HTTP
   # @api public
   class TooManyRedirects < HTTPError
     def initialize(addr)
-      super(_("Too many HTTP redirections for %{addr}") % { addr: addr})
+      super(_("Too many HTTP redirections for %{addr}") % { addr: addr })
     end
   end
 
@@ -42,7 +44,7 @@ module Puppet::HTTP
   # @api public
   class TooManyRetryAfters < HTTPError
     def initialize(addr)
-      super(_("Too many HTTP retries for %{addr}") % { addr: addr})
+      super(_("Too many HTTP retries for %{addr}") % { addr: addr })
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows'
 require_relative '../../../puppet/ssl/openssl_loader'
 require 'ffi'
@@ -17,13 +19,13 @@ class Puppet::Util::Windows::RootCerts
   # @yieldparam cert [OpenSSL::X509::Certificate] each root certificate
   # @api public
   def each
-    @roots.each {|cert| yield cert}
+    @roots.each { |cert| yield cert }
   end
 
   # Returns a new instance.
   # @return [Puppet::Util::Windows::RootCerts] object constructed from current root certificates
   def self.instance
-    new(self.load_certs)
+    new(load_certs)
   end
 
   # Returns an array of root certificates.
@@ -38,7 +40,7 @@ class Puppet::Util::Windows::RootCerts
     ptr = FFI::Pointer::NULL
     store = CertOpenSystemStoreA(nil, "ROOT")
     begin
-      while (ptr = CertEnumCertificatesInStore(store, ptr)) and not ptr.null?
+      while (ptr = CertEnumCertificatesInStore(store, ptr)) and !ptr.null?
         context = CERT_CONTEXT.new(ptr)
         cert_buf = context[:pbCertEncoded].read_bytes(context[:cbCertEncoded])
         begin

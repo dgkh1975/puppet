@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A Provider is an implementation of the actions that manage resources (of some type) on a system.
 # This class is the base class for all implementation of a Puppet Provider.
 #
@@ -125,7 +127,7 @@ class Puppet::Provider
   def self.command(name)
     name = name.intern
 
-    command = @commands[name] if defined?(@commands)    
+    command = @commands[name] if defined?(@commands)
     command = superclass.command(name) if !command && superclass.respond_to?(:command)
 
     unless command
@@ -193,11 +195,11 @@ class Puppet::Provider
   # @param name [Symbol] The name of the command (will become the name of the generated method that executes the command)
   # @param path [String] The path to the executable for the command
   # @yield [ ] A block that configures the command (see {Puppet::Provider::Command})
-  # @comment a yield [ ] produces {|| ...} in the signature, do not remove the space.
+  # @comment a yield [ ] produces { ... } in the signature, do not remove the space.
   # @note the name ´has_command´ looks odd in an API context, but makes more sense when seen in the internal
   #   DSL context where a Provider is declaratively defined.
   # @api public
-  #
+  # rubocop:disable Naming/PredicateName
   def self.has_command(name, path, &block)
     name = name.intern
     command = CommandDefiner.define(name, path, self, &block)
@@ -209,6 +211,7 @@ class Puppet::Provider
       return command.execute(*args)
     end
   end
+  # rubocop:enable Naming/PredicateName
 
   # Internal helper class when creating commands - undocumented.
   # @api private
@@ -229,7 +232,7 @@ class Puppet::Provider
       @custom_environment = {}
     end
 
-    def is_optional
+    def is_optional # rubocop:disable Naming/PredicateName
       @optional = true
     end
 
@@ -238,7 +241,7 @@ class Puppet::Provider
     end
 
     def command
-      if not @optional
+      unless @optional
         @confiner.confine :exists => @path, :for_binary => true
       end
 
@@ -265,18 +268,14 @@ class Puppet::Provider
   # @api private
   def self.default_match
     return nil if some_default_match(@notdefaults) # Blacklist means this provider cannot be a default
+
     some_default_match(@defaults)
   end
 
   def self.some_default_match(defaultlist)
     defaultlist.find do |default|
       default.all? do |key, values|
-        case key
-          when :feature
-            feature_match(values)
-          else
-            fact_match(key, values)
-        end
+        key == :feature ? feature_match(values) : fact_match(key, values)
       end
     end
   end
@@ -291,7 +290,7 @@ class Puppet::Provider
   def self.fact_match(fact, values)
     fact_val = Puppet.runtime[:facter].value(fact).to_s.downcase
     if fact_val.empty?
-      return false
+      false
     else
       values = [values] unless values.is_a?(Array)
       values.any? do |value|
@@ -381,7 +380,7 @@ class Puppet::Provider
   # @raise [Puppet::DevError] Error indicating that the method should have been implemented by subclass.
   # @see prefetch
   def self.instances
-    raise Puppet::DevError, _("To support listing resources of this type the '%{provider}' provider needs to implement an 'instances' class method returning the current set of resources. We recommend porting your module to the simpler Resource API instead: https://puppet.com/search/docs?keys=resource+api") % { provider: self.name }
+    raise Puppet::DevError, _("To support listing resources of this type the '%{provider}' provider needs to implement an 'instances' class method returning the current set of resources. We recommend porting your module to the simpler Resource API instead: https://puppet.com/search/docs?keys=resource+api") % { provider: name }
   end
 
   # Creates getter- and setter- methods for each property supported by the resource type.
@@ -401,6 +400,7 @@ class Puppet::Provider
     [resource_type.validproperties, resource_type.parameters].flatten.each do |attr|
       attr = attr.intern
       next if attr == :name
+
       define_method(attr) do
         if @property_hash[attr].nil?
           :absent
@@ -415,7 +415,7 @@ class Puppet::Provider
     end
   end
 
-  self.initvars
+  initvars
 
   # This method is used to generate a method for a command.
   # @return [void]
@@ -437,7 +437,7 @@ class Puppet::Provider
   # @return [String] Returns the data source, which is the provider name if no other source has been set.
   # @todo Unclear what "the source" is used for?
   def self.source
-    @source ||= self.name
+    @source ||= name
   end
 
   # Returns true if the given attribute/parameter is supported by the provider.
@@ -475,7 +475,7 @@ class Puppet::Provider
 
   dochook(:commands) do
     if @commands.length > 0
-      return "Required binaries: " + @commands.collect do |n, c|
+      return "Required binaries: " + @commands.collect do |_n, c|
         "`#{c}`"
       end.sort.join(", ") + "."
     end
@@ -536,8 +536,8 @@ class Puppet::Provider
   def name
     n = @property_hash[:name]
     if n
-      return n
-    elsif self.resource
+      n
+    elsif resource
       resource.name
     else
       raise Puppet::DevError, _("No resource and no name in property hash in %{class_name} instance") % { class_name: self.class.name }
@@ -577,8 +577,9 @@ class Puppet::Provider
   def <=>(other)
     # We can only have ordering against other providers.
     return nil unless other.is_a? Puppet::Provider
+
     # Otherwise, order by the providers class name.
-    return self.class.name <=> other.class.name
+    self.class.name <=> other.class.name
   end
 
   # @comment Document prefetch here as it does not exist anywhere else (called from transaction if implemented)

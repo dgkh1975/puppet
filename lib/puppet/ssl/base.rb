@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl/openssl_loader'
 require_relative '../../puppet/ssl'
 require_relative '../../puppet/ssl/digest'
@@ -15,7 +17,7 @@ class Puppet::SSL::Base
   end
 
   def self.to_multiple_s(instances)
-    instances.collect { |inst| inst.to_s }.join(SEPARATOR)
+    instances.collect(&:to_s).join(SEPARATOR)
   end
 
   def self.wraps(klass)
@@ -24,6 +26,7 @@ class Puppet::SSL::Base
 
   def self.wrapped_class
     raise(Puppet::DevError, _("%{name} has not declared what class it wraps") % { name: self }) unless defined?(@wrapped_class)
+
     @wrapped_class
   end
 
@@ -62,7 +65,7 @@ class Puppet::SSL::Base
   def self.from_instance(instance, name = nil)
     unless instance.is_a?(wrapped_class)
       raise ArgumentError, _("Object must be an instance of %{class_name}, %{actual_class} given") %
-          { class_name: wrapped_class, actual_class: instance.class }
+                           { class_name: wrapped_class, actual_class: instance.class }
     end
     if name.nil? and !instance.respond_to?(:subject)
       raise ArgumentError, _("Name must be supplied if it cannot be determined from the instance")
@@ -95,6 +98,7 @@ class Puppet::SSL::Base
   # Convert our thing to pem.
   def to_s
     return "" unless content
+
     content.to_pem
   end
 
@@ -105,6 +109,7 @@ class Puppet::SSL::Base
   # Provide the full text of the thing we're dealing with.
   def to_text
     return "" unless content
+
     content.to_text
   end
 
@@ -113,10 +118,8 @@ class Puppet::SSL::Base
     digest(mds).to_hex
   end
 
-  def digest(algorithm=nil)
-    unless algorithm
-      algorithm = digest_algorithm
-    end
+  def digest(algorithm = nil)
+    algorithm ||= digest_algorithm
 
     Puppet::SSL::Digest.new(algorithm, content.to_der)
   end

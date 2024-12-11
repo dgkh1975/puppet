@@ -1,27 +1,9 @@
-# Rakefile for Puppet -*- ruby -*-
-RAKE_ROOT = File.dirname(__FILE__)
+# frozen_string_literal: true
 
-# We need access to the Puppet.version method
-$LOAD_PATH.unshift(File.expand_path("lib"))
-require 'puppet/version'
-
-$LOAD_PATH << File.join(RAKE_ROOT, 'tasks')
-
-begin
-  require 'rubygems'
-  require 'rubygems/package_task'
-rescue LoadError
-  # Users of older versions of Rake (0.8.7 for example) will not necessarily
-  # have rubygems installed, or the newer rubygems package_task for that
-  # matter.
-  require 'rake/packagetask'
-  require 'rake/gempackagetask'
-end
-
-require 'rake'
 require 'open3'
-
-Dir['tasks/**/*.rake'].each { |t| load t }
+require 'rake'
+require 'rubygems'
+require 'rubygems/package_task'
 
 if Rake.application.top_level_tasks.grep(/^(pl:|package:)/).any?
   begin
@@ -45,6 +27,47 @@ task :default do
   sh %{rake -T}
 end
 
+namespace :pl_ci do
+  desc 'Build puppet gems'
+  task :gem_build, [:gemspec] do |t, args|
+    args.with_defaults(gemspec: 'puppet.gemspec')
+    stdout, stderr, status = Open3.capture3(<<~END)
+      gem build #{args.gemspec} --platform x86-mingw32 && \
+      gem build #{args.gemspec} --platform x64-mingw32 && \
+      gem build #{args.gemspec} --platform universal-darwin && \
+      gem build #{args.gemspec}
+    END
+    if !status.exitstatus.zero?
+      puts "Error building #{args.gemspec}\n#{stdout} \n#{stderr}"
+      exit(1)
+    else
+      puts stdout
+    end
+  end
+
+  desc 'build the nightly puppet gems'
+  task :nightly_gem_build do
+    # this is taken from `rake package:nightly_gem`
+    extended_dot_version = %x{git describe --tags --dirty --abbrev=7}.chomp.tr('-', '.')
+
+    # we must create tempfile in the same directory as puppetg.gemspec, since
+    # it uses __dir__ to determine which files to include
+    require 'tempfile'
+    Tempfile.create('gemspec', __dir__) do |dst|
+      File.open('puppet.gemspec', 'r') do |src|
+        src.readlines.each do |line|
+          if line.match?(/version\s*=\s*['"][0-9.]+['"]/)
+            line = "spec.version = '#{extended_dot_version}'"
+          end
+          dst.puts line
+        end
+      end
+      dst.flush
+      Rake::Task['pl_ci:gem_build'].invoke(dst.path)
+    end
+  end
+end
+
 task :spec do
   ENV["LOG_SPEC_ORDER"] = "true"
   sh %{rspec #{ENV['TEST'] || ENV['TESTS'] || 'spec'}}
@@ -56,33 +79,6 @@ task(:rubocop) do
   cli = RuboCop::CLI.new
   exit_code = cli.run(%w(--display-cop-names --format simple))
   raise "RuboCop detected offenses" if exit_code != 0
-end
-
-desc "verify that commit messages match CONTRIBUTING.md requirements"
-task(:commits) do
-  # This rake task looks at the summary from every commit from this branch not
-  # in the branch targeted for a PR.
-  commit_range = 'HEAD^..HEAD'
-  puts "Checking commits #{commit_range}"
-  %x{git log --no-merges --pretty=%s #{commit_range}}.each_line do |commit_summary|
-    # This regex tests for the currently supported commit summary tokens: maint, doc, packaging, or pup-<number>.
-    # The exception tries to explain it in more full.
-    if /^\((maint|doc|docs|packaging|l10n|pup-\d+)\)|revert/i.match(commit_summary).nil?
-      raise "\n\n\n\tThis commit summary didn't match CONTRIBUTING.md guidelines:\n" \
-        "\n\t\t#{commit_summary}\n" \
-        "\tThe commit summary (i.e. the first line of the commit message) should start with one of:\n"  \
-        "\t\t(PUP-<digits>) # this is most common and should be a ticket at tickets.puppet.com\n" \
-        "\t\t(docs)\n" \
-        "\t\t(docs)(DOCUMENT-<digits>)\n" \
-        "\t\t(maint)\n" \
-        "\t\t(packaging)\n" \
-        "\t\t(L10n)\n" \
-        "\n\tThis test for the commit summary is case-insensitive.\n\n\n"
-    else
-      puts "#{commit_summary}"
-    end
-    puts "...passed"
-  end
 end
 
 desc "verify that changed files are clean of Ruby warnings"

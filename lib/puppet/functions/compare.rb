@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Compares two values and returns -1, 0 or 1 if first value is smaller, equal or larger than the second value.
 # The compare function accepts arguments of the data types `String`, `Numeric`, `Timespan`, `Timestamp`, and `Semver`,
 # such that:
@@ -96,14 +98,14 @@ Puppet::Functions.create_function(:compare) do
   end
 
   def on_error(a, b, *ignore_case)
-    if !ignore_case.empty?
+    unless ignore_case.empty?
       unless a.is_a?(String) && b.is_a?(String)
         # TRANSLATORS 'compare' is a name
         return _("compare(): The third argument (ignore case) can only be used when comparing strings")
       end
       unless ignore_case.size == 1
         # TRANSLATORS 'compare' is a name
-        return _("compare(): Accepts at most 3 arguments, got %{actual_number}") % {actual_number: 2 + ignore_case.size}
+        return _("compare(): Accepts at most 3 arguments, got %{actual_number}") % { actual_number: 2 + ignore_case.size }
       end
       unless ignore_case[0].is_a?(Boolean)
         # TRANSLATORS 'compare' is a name
@@ -113,7 +115,7 @@ Puppet::Functions.create_function(:compare) do
 
     if a.class != b.class
       # TRANSLATORS 'compare' is a name
-      return _("compare(): Can only compare values of the same type (or for Timestamp/Timespan also against Numeric). Got %{type_a} and %{type_b}") % {
+      _("compare(): Can only compare values of the same type (or for Timestamp/Timespan also against Numeric). Got %{type_a} and %{type_b}") % {
         type_a: type_label(a), type_b: type_label(b)
       }
     end

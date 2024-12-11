@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module PN
   KEY_PATTERN = /^[A-Za-z_-][0-9A-Za-z_-]*$/
@@ -19,7 +21,7 @@ module PN
   end
 
   def to_s
-    s = ''
+    s = ''.dup
     format(nil, s)
     s
   end
@@ -68,6 +70,7 @@ module PN
 
   class Indent
     attr_reader :current
+
     def initialize(indent = '  ', current = '')
       @indent = indent
       @current = current
@@ -113,12 +116,13 @@ module PN
     end
 
     def to_data
-      { '^' => [@name] + @elements.map { |e| e.to_data } }
+      { '^' => [@name] + @elements.map(&:to_data) }
     end
   end
 
   class Entry
     attr_reader :key, :value
+
     def initialize(key, value)
       @key = key
       @value = value
@@ -162,7 +166,7 @@ module PN
     end
 
     def to_data
-      @elements.map { |e| e.to_data }
+      @elements.map(&:to_data)
     end
   end
 
@@ -209,7 +213,7 @@ module PN
     def format(indent, b)
       local_indent = indent ? indent.increase : nil
       b << '{'
-      @entries.each_with_index do |e,i|
+      @entries.each_with_index do |e, i|
         if indent
           b << "\n" << local_indent.current
         elsif i > 0
@@ -233,4 +237,3 @@ end
 
 require_relative 'model/pn_transformer'
 require_relative 'parser/pn_parser'
-

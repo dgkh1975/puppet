@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/network/http_pool'
 require 'uri'
 
 Puppet::Reports.register_report(:http) do
-
   desc <<-DESC
     Send reports via HTTP or HTTPS. This report processor submits reports as
     POST requests to the address in the `reporturl` setting. When a HTTPS URL
@@ -35,7 +36,7 @@ Puppet::Reports.register_report(:http) do
     end
 
     client = Puppet.runtime[:http]
-    client.post(url, self.to_yaml, headers: headers, options: options) do |response|
+    client.post(url, to_yaml, headers: headers, options: options) do |response|
       unless response.success?
         Puppet.err _("Unable to submit report to %{url} [%{code}] %{message}") % { url: Puppet[:reporturl].to_s, code: response.code, message: response.reason }
       end

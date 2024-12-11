@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/platform'
 
 module Puppet::Util::MonkeyPatches
@@ -12,10 +14,10 @@ rescue NotImplementedError
 end
 
 module RDoc
-  def self.caller(skip=nil)
+  def self.caller(skip = nil)
     in_gem_wrapper = false
     Kernel.caller.reject { |call|
-      in_gem_wrapper ||= call =~ /#{Regexp.escape $0}:\d+:in `load'/
+      in_gem_wrapper ||= call =~ /#{Regexp.escape $PROGRAM_NAME}:\d+:in `load'/
     }
   end
 end
@@ -29,39 +31,31 @@ class Object
   end
 end
 
-if RUBY_VERSION.to_f < 3.0
-  # absolute/relative were optimized to avoid chop_basename in ruby 3
-  # see https://github.com/ruby/ruby/commit/39312cf4d6c2ab3f07d688ad1a467c8f84b58db0
-  require 'pathname'
-  class Pathname
-    if File.dirname('A:') == 'A:.' # DOSish drive letter
-      ABSOLUTE_PATH = /\A(?:[A-Za-z]:|#{SEPARATOR_PAT})/o
-    else
-      ABSOLUTE_PATH = /\A#{SEPARATOR_PAT}/o
-    end
-    private_constant :ABSOLUTE_PATH
-
-    def absolute?
-      ABSOLUTE_PATH.match? @path
-    end
-
-    def relative?
-      !absolute?
+unless Dir.singleton_methods.include?(:exists?)
+  class Dir
+    def self.exists?(file_name)
+      warn("Dir.exists?('#{file_name}') is deprecated, use Dir.exist? instead") if $VERBOSE
+      Dir.exist?(file_name)
     end
   end
 end
 
-# (#19151) Reject all SSLv2 ciphers and handshakes
+unless File.singleton_methods.include?(:exists?)
+  class File
+    def self.exists?(file_name)
+      warn("File.exists?('#{file_name}') is deprecated, use File.exist? instead") if $VERBOSE
+      File.exist?(file_name)
+    end
+  end
+end
+
 require_relative '../../puppet/ssl/openssl_loader'
 unless Puppet::Util::Platform.jruby_fips?
   class OpenSSL::SSL::SSLContext
     if DEFAULT_PARAMS[:options]
-      DEFAULT_PARAMS[:options] |= OpenSSL::SSL::OP_NO_SSLv2 | OpenSSL::SSL::OP_NO_SSLv3
+      DEFAULT_PARAMS[:options] |= OpenSSL::SSL::OP_NO_SSLv3
     else
-      DEFAULT_PARAMS[:options] = OpenSSL::SSL::OP_NO_SSLv2 | OpenSSL::SSL::OP_NO_SSLv3
-    end
-    if DEFAULT_PARAMS[:ciphers]
-      DEFAULT_PARAMS[:ciphers] << ':!SSLv2'
+      DEFAULT_PARAMS[:options] = OpenSSL::SSL::OP_NO_SSLv3
     end
 
     alias __original_initialize initialize
@@ -79,8 +73,6 @@ unless Puppet::Util::Platform.jruby_fips?
 end
 
 if Puppet::Util::Platform.windows?
-  require_relative '../../puppet/util/windows'
-
   class OpenSSL::X509::Store
     @puppet_certs_loaded = false
     alias __original_set_default_paths set_default_paths
@@ -90,12 +82,10 @@ if Puppet::Util::Platform.windows?
       unless @puppet_certs_loaded
         @puppet_certs_loaded = true
 
-        Puppet::Util::Windows::RootCerts.instance.to_a.uniq { |cert| cert.to_der }.each do |x509|
-          begin
-            add_cert(x509)
-          rescue OpenSSL::X509::StoreError
-            warn "Failed to add #{x509.subject.to_utf8}"
-          end
+        Puppet::Util::Windows::RootCerts.instance.to_a.uniq(&:to_der).each do |x509|
+          add_cert(x509)
+        rescue OpenSSL::X509::StoreError
+          warn "Failed to add #{x509.subject.to_utf8}"
         end
       end
 
@@ -105,8 +95,10 @@ if Puppet::Util::Platform.windows?
 end
 
 unless Puppet::Util::Platform.jruby_fips?
-  unless OpenSSL::X509.const_defined?(:V_ERR_HOSTNAME_MISMATCH)
-    OpenSSL::X509.const_set(:V_ERR_HOSTNAME_MISMATCH, 62)
+  unless defined?(OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH)
+    module OpenSSL::X509
+      OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH = 0x3E
+    end
   end
 
   # jruby-openssl doesn't support this

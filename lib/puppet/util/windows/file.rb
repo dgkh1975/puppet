@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/ffi/windows'
 
 module Puppet::Util::Windows::File
@@ -27,7 +29,8 @@ module Puppet::Util::Windows::File
     )
 
     return true if result != FFI::WIN32_FALSE
-    raise Puppet::Util::Windows::Error.new("ReplaceFile(#{target}, #{source})")
+
+    raise Puppet::Util::Windows::Error, "ReplaceFile(#{target}, #{source})"
   end
   module_function :replace_file
 
@@ -37,18 +40,18 @@ module Puppet::Util::Windows::File
                          flags)
 
     return true if result != FFI::WIN32_FALSE
-    raise Puppet::Util::Windows::Error.
-      new("MoveFileEx(#{source}, #{target}, #{flags.to_s(8)})")
+
+    raise Puppet::Util::Windows::Error, "MoveFileEx(#{source}, #{target}, #{flags.to_s(8)})"
   end
   module_function :move_file_ex
 
   def symlink(target, symlink)
     flags = File.directory?(target) ? 0x1 : 0x0
     result = CreateSymbolicLinkW(wide_string(symlink.to_s),
-      wide_string(target.to_s), flags)
+                                 wide_string(target.to_s), flags)
     return true if result != FFI::WIN32_FALSE
-    raise Puppet::Util::Windows::Error.new(
-      "CreateSymbolicLink(#{symlink}, #{target}, #{flags.to_s(8)})")
+
+    raise Puppet::Util::Windows::Error, "CreateSymbolicLink(#{symlink}, #{target}, #{flags.to_s(8)})"
   end
   module_function :symlink
 
@@ -58,11 +61,11 @@ module Puppet::Util::Windows::File
 
     seen_paths = []
     # follow up to 64 symlinks before giving up
-    0.upto(64) do |depth|
+    0.upto(64) do |_depth|
       # return false if this path has been seen before.  This is protection against circular symlinks
       return false if seen_paths.include?(path.downcase)
 
-      result = get_attributes(path,false)
+      result = get_attributes(path, false)
 
       # return false for path not found
       return false if result == INVALID_FILE_ATTRIBUTES
@@ -87,7 +90,7 @@ module Puppet::Util::Windows::File
   def get_attributes(file_name, raise_on_invalid = true)
     result = GetFileAttributesW(wide_string(file_name.to_s))
     if raise_on_invalid && result == INVALID_FILE_ATTRIBUTES
-      raise Puppet::Util::Windows::Error.new("GetFileAttributes(#{file_name})")
+      raise Puppet::Util::Windows::Error, "GetFileAttributes(#{file_name})"
     end
 
     result
@@ -114,26 +117,26 @@ module Puppet::Util::Windows::File
 
   def set_attributes(path, flags)
     success = SetFileAttributesW(wide_string(path), flags) != FFI::WIN32_FALSE
-    raise Puppet::Util::Windows::Error.new(_("Failed to set file attributes")) if !success
+    raise Puppet::Util::Windows::Error, _("Failed to set file attributes") unless success
 
     success
   end
   module_function :set_attributes
 
-  #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
+  # define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
   INVALID_HANDLE_VALUE = FFI::Pointer.new(-1).address
   def self.create_file(file_name, desired_access, share_mode, security_attributes,
-    creation_disposition, flags_and_attributes, template_file_handle)
+                       creation_disposition, flags_and_attributes, template_file_handle)
 
     result = CreateFileW(wide_string(file_name.to_s),
-      desired_access, share_mode, security_attributes, creation_disposition,
-      flags_and_attributes, template_file_handle)
+                         desired_access, share_mode, security_attributes, creation_disposition,
+                         flags_and_attributes, template_file_handle)
 
     return result unless result == INVALID_HANDLE_VALUE
-    raise Puppet::Util::Windows::Error.new(
-      "CreateFile(#{file_name}, #{desired_access.to_s(8)}, #{share_mode.to_s(8)}, " +
-        "#{security_attributes}, #{creation_disposition.to_s(8)}, " +
-        "#{flags_and_attributes.to_s(8)}, #{template_file_handle})")
+
+    raise Puppet::Util::Windows::Error, "CreateFile(#{file_name}, #{desired_access.to_s(8)}, #{share_mode.to_s(8)}, " \
+                                        "#{security_attributes}, #{creation_disposition.to_s(8)}, " \
+                                        "#{flags_and_attributes.to_s(8)}, #{template_file_handle})"
   end
 
   def self.get_reparse_point_data(handle, &block)
@@ -143,16 +146,16 @@ module Puppet::Util::Windows::File
 
       reparse_tag = reparse_data_buffer_ptr.read_win32_ulong
       buffer_type = case reparse_tag
-      when IO_REPARSE_TAG_SYMLINK
-        SYMLINK_REPARSE_DATA_BUFFER
-      when IO_REPARSE_TAG_MOUNT_POINT
-        MOUNT_POINT_REPARSE_DATA_BUFFER
-      when IO_REPARSE_TAG_NFS
-        raise Puppet::Util::Windows::Error.new("Retrieving NFS reparse point data is unsupported")
-      else
-        raise Puppet::Util::Windows::Error.new("DeviceIoControl(#{handle}, " +
-          "FSCTL_GET_REPARSE_POINT) returned unknown tag 0x#{reparse_tag.to_s(16).upcase}")
-      end
+                    when IO_REPARSE_TAG_SYMLINK
+                      SYMLINK_REPARSE_DATA_BUFFER
+                    when IO_REPARSE_TAG_MOUNT_POINT
+                      MOUNT_POINT_REPARSE_DATA_BUFFER
+                    when IO_REPARSE_TAG_NFS
+                      raise Puppet::Util::Windows::Error, "Retrieving NFS reparse point data is unsupported"
+                    else
+                      raise Puppet::Util::Windows::Error, "DeviceIoControl(#{handle}, " \
+                                                          "FSCTL_GET_REPARSE_POINT) returned unknown tag 0x#{reparse_tag.to_s(16).upcase}"
+                    end
 
       yield buffer_type.new(reparse_data_buffer_ptr)
     end
@@ -177,7 +180,7 @@ module Puppet::Util::Windows::File
 
   def self.device_io_control(handle, io_control_code, in_buffer = nil, out_buffer = nil)
     if out_buffer.nil?
-      raise Puppet::Util::Windows::Error.new(_("out_buffer is required"))
+      raise Puppet::Util::Windows::Error, _("out_buffer is required")
     end
 
     FFI::MemoryPointer.new(:dword, 1) do |bytes_returned_ptr|
@@ -191,10 +194,9 @@ module Puppet::Util::Windows::File
       )
 
       if result == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(
-          "DeviceIoControl(#{handle}, #{io_control_code}, " +
-          "#{in_buffer}, #{in_buffer ? in_buffer.size : ''}, " +
-          "#{out_buffer}, #{out_buffer ? out_buffer.size : ''}")
+        raise Puppet::Util::Windows::Error, "DeviceIoControl(#{handle}, #{io_control_code}, " \
+                                            "#{in_buffer}, #{in_buffer ? in_buffer.size : ''}, " \
+                                            "#{out_buffer}, #{out_buffer ? out_buffer.size : ''}"
       end
     end
 
@@ -204,7 +206,8 @@ module Puppet::Util::Windows::File
   def reparse_point?(file_name)
     attributes = get_attributes(file_name, false)
 
-    return false if (attributes == INVALID_FILE_ATTRIBUTES)
+    return false if attributes == INVALID_FILE_ATTRIBUTES
+
     (attributes & FILE_ATTRIBUTE_REPARSE_POINT) == FILE_ATTRIBUTE_REPARSE_POINT
   end
   module_function :reparse_point?
@@ -218,13 +221,14 @@ module Puppet::Util::Windows::File
   def self.open_symlink(link_name)
     begin
       yield handle = create_file(
-      link_name,
-      GENERIC_READ,
-      FILE_SHARE_READ,
-      nil, # security_attributes
-      OPEN_EXISTING,
-      FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
-      0) # template_file
+        link_name,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nil, # security_attributes
+        OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+        0
+      ) # template_file
     ensure
       FFI::WIN32.CloseHandle(handle) if handle
     end
@@ -244,13 +248,13 @@ module Puppet::Util::Windows::File
   module_function :readlink
 
   def get_long_pathname(path)
-    converted = ''
+    converted = ''.dup
     FFI::Pointer.from_string_to_wide_string(path) do |path_ptr|
       # includes terminating NULL
       buffer_size = GetLongPathNameW(path_ptr, FFI::Pointer::NULL, 0)
       FFI::MemoryPointer.new(:wchar, buffer_size) do |converted_ptr|
         if GetLongPathNameW(path_ptr, converted_ptr, buffer_size) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to call GetLongPathName"))
+          raise Puppet::Util::Windows::Error, _("Failed to call GetLongPathName")
         end
 
         converted = converted_ptr.read_wide_string(buffer_size - 1)
@@ -262,13 +266,13 @@ module Puppet::Util::Windows::File
   module_function :get_long_pathname
 
   def get_short_pathname(path)
-    converted = ''
+    converted = ''.dup
     FFI::Pointer.from_string_to_wide_string(path) do |path_ptr|
       # includes terminating NULL
       buffer_size = GetShortPathNameW(path_ptr, FFI::Pointer::NULL, 0)
       FFI::MemoryPointer.new(:wchar, buffer_size) do |converted_ptr|
         if GetShortPathNameW(path_ptr, converted_ptr, buffer_size) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new("Failed to call GetShortPathName")
+          raise Puppet::Util::Windows::Error, "Failed to call GetShortPathName"
         end
 
         converted = converted_ptr.read_wide_string(buffer_size - 1)

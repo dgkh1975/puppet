@@ -1,29 +1,30 @@
-  # Static Loader contains constants, basic data types and other types required for the system
-  # to boot.
-  #
+# frozen_string_literal: true
+
+# Static Loader contains constants, basic data types and other types required for the system
+# to boot.
+#
 module Puppet::Pops
 module Loader
 class StaticLoader < Loader
+  BUILTIN_TYPE_NAMES = %w[
+    Component
+    Exec
+    File
+    Filebucket
+    Group
+    Node
+    Notify
+    Package
+    Resources
+    Schedule
+    Service
+    Stage
+    Tidy
+    User
+    Whit
+  ].freeze
 
-  BUILTIN_TYPE_NAMES = %w{
-      Component
-      Exec
-      File
-      Filebucket
-      Group
-      Node
-      Notify
-      Package
-      Resources
-      Schedule
-      Service
-      Stage
-      Tidy
-      User
-      Whit
-    }.freeze
-
-  BUILTIN_TYPE_NAMES_LC = Set.new(BUILTIN_TYPE_NAMES.map { |n| n.downcase }).freeze
+  BUILTIN_TYPE_NAMES_LC = Set.new(BUILTIN_TYPE_NAMES.map(&:downcase)).freeze
 
   BUILTIN_ALIASES = {
     'Data' => 'Variant[ScalarData,Undef,Hash[String,Data],Array[Data]]',
@@ -36,6 +37,7 @@ class StaticLoader < Loader
   }.freeze
 
   attr_reader :loaded
+
   def initialize
     @loaded = {}
     @runtime_3_initialized = false
@@ -44,9 +46,9 @@ class StaticLoader < Loader
 
   def discover(type, error_collector = nil, name_authority = Pcore::RUNTIME_NAME_AUTHORITY)
     # Static loader only contains runtime types
-    return EMPTY_ARRAY unless type == :type && name_authority == name_authority = Pcore::RUNTIME_NAME_AUTHORITY #rubocop:disable Lint/AssignmentInCondition
+    return EMPTY_ARRAY unless type == :type && name_authority == Pcore::RUNTIME_NAME_AUTHORITY
 
-    typed_names = type == :type && name_authority == Pcore::RUNTIME_NAME_AUTHORITY ? @loaded.keys : EMPTY_ARRAY
+    typed_names = @loaded.keys
     block_given? ? typed_names.select { |tn| yield(tn) } : typed_names
   end
 
@@ -71,7 +73,7 @@ class StaticLoader < Loader
     nil # at top of the hierarchy
   end
 
-  def to_s()
+  def to_s
     "(StaticLoader)"
   end
 
@@ -106,7 +108,7 @@ class StaticLoader < Loader
     end
   end
 
-  def create_resource_type_references()
+  def create_resource_type_references
     # These needs to be done quickly and we do not want to scan the file system for these
     # We are also not interested in their definition only that they exist.
     # These types are in all environments.

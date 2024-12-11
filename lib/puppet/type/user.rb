@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'etc'
 require_relative '../../puppet/parameter/boolean'
 require_relative '../../puppet/property/list'
@@ -21,52 +23,51 @@ module Puppet
       user resource will autorequire those role accounts."
 
     feature :allows_duplicates,
-      "The provider supports duplicate users with the same UID."
+            "The provider supports duplicate users with the same UID."
 
     feature :manages_homedir,
-      "The provider can create and remove home directories."
+            "The provider can create and remove home directories."
 
     feature :manages_passwords,
-      "The provider can modify user passwords, by accepting a password
+            "The provider can modify user passwords, by accepting a password
       hash."
 
     feature :manages_password_age,
-      "The provider can set age requirements and restrictions for
+            "The provider can set age requirements and restrictions for
       passwords."
 
     feature :manages_password_salt,
-      "The provider can set a password salt. This is for providers that
+            "The provider can set a password salt. This is for providers that
        implement PBKDF2 passwords with salt properties."
 
     feature :manages_solaris_rbac,
-      "The provider can manage normal users"
+            "The provider can manage normal users"
 
     feature :manages_roles,
-      "The provider can manage roles"
+            "The provider can manage roles"
 
     feature :manages_expiry,
-      "The provider can manage the expiry date for a user."
+            "The provider can manage the expiry date for a user."
 
-   feature :system_users,
-     "The provider allows you to create system users with lower UIDs."
+    feature :system_users,
+            "The provider allows you to create system users with lower UIDs."
 
     feature :manages_aix_lam,
-      "The provider can manage AIX Loadable Authentication Module (LAM) system."
+            "The provider can manage AIX Loadable Authentication Module (LAM) system."
 
     feature :manages_local_users_and_groups,
-      "Allows local users to be managed on systems that also use some other
+            "Allows local users to be managed on systems that also use some other
        remote Name Service Switch (NSS) method of managing accounts."
 
     feature :manages_shell,
-      "The provider allows for setting shell and validates if possible"
+            "The provider allows for setting shell and validates if possible"
 
     feature :manages_loginclass,
-      "The provider can manage the login class for a user."
+            "The provider can manage the login class for a user."
 
     newproperty(:ensure, :parent => Puppet::Property::Ensure) do
       newvalue(:present, :event => :user_created) do
         provider.create
-        @resource.generate
       end
 
       newvalue(:absent, :event => :user_removed) do
@@ -92,12 +93,12 @@ module Puppet
       def retrieve
         if provider.exists?
           if provider.respond_to?(:is_role?) and provider.is_role?
-            return :role
+            :role
           else
-            return :present
+            :present
           end
         else
-          return :absent
+          :absent
         end
       end
 
@@ -172,11 +173,11 @@ module Puppet
         found = false
         @should.each do |value|
           number = Puppet::Util.gid(value)
-          if number
-            provider.gid = number
-            found = true
-            break
-          end
+          next unless number
+
+          provider.gid = number
+          found = true
+          break
         end
 
         fail _("Could not find group(s) %{groups}") % { groups: @should.join(",") } unless found
@@ -193,6 +194,7 @@ module Puppet
         if !@should.empty? && provider.respond_to?(:comments_insync?)
           return provider.comments_insync?(is, @should)
         end
+
         super(is)
       end
 
@@ -203,6 +205,7 @@ module Puppet
         if newvalue.is_a?(String) && !Encoding.compatible?(currentvalue, newvalue)
           return super(currentvalue, newvalue.dup.force_encoding(currentvalue.encoding))
         end
+
         super(currentvalue, newvalue)
       end
     end
@@ -228,6 +231,9 @@ module Puppet
         * OS X 10.8 and higher use salted SHA512 PBKDF2 hashes. When managing passwords
           on these systems, the `salt` and `iterations` attributes need to be specified as
           well as the password.
+        * macOS 10.15 and later require the salt to be 32 bytes. Because Puppet's user
+          resource requires the value to be hex encoded, the length of the salt's
+          string must be 64.
         * Windows passwords can be managed only in cleartext, because there is no Windows
           API for setting the password hash.
 
@@ -428,13 +434,13 @@ module Puppet
         run.
 
         Note that on Windows, this manages creation/deletion of the user profile instead of the
-        home directory. The user profile is stored in the `C:\Users\<username>` directory."
+        home directory. The user profile is stored in the `C:\\Users\\<username>` directory."
 
       defaultto false
 
       validate do |val|
         if munge(val)
-          raise ArgumentError, _("User provider %{name} can not manage home directories") % { name: provider.class.name } if provider and not provider.class.manages_homedir?
+          raise ArgumentError, _("User provider %{name} can not manage home directories") % { name: provider.class.name } if provider and !provider.class.manages_homedir?
         end
       end
     end
@@ -449,8 +455,8 @@ module Puppet
 
       validate do |value|
         if value.intern != :absent and value !~ /^\d{4}-\d{2}-\d{2}$/
-          #TRANSLATORS YYYY-MM-DD represents a date with a four-digit year, a two-digit month, and a two-digit day,
-          #TRANSLATORS separated by dashes.
+          # TRANSLATORS YYYY-MM-DD represents a date with a four-digit year, a two-digit month, and a two-digit day,
+          # TRANSLATORS separated by dashes.
           raise ArgumentError, _("Expiry dates must be YYYY-MM-DD or the string \"absent\"")
         end
       end
@@ -465,7 +471,7 @@ module Puppet
       groups = obj.shouldorig if obj
       if groups
         groups = groups.collect { |group|
-          if group.is_a?(String) && group =~/^\d+$/
+          if group.is_a?(String) && group =~ /^\d+$/
             Integer(group)
           else
             group
@@ -524,7 +530,7 @@ module Puppet
       end
     end
 
-    #autorequire the roles that the user has
+    # autorequire the roles that the user has
     autorequire(:user) do
       reqs = []
 
@@ -627,16 +633,16 @@ module Puppet
     end
 
     newproperty(:attributes, :parent => Puppet::Property::KeyValue, :required_features => :manages_aix_lam) do
-      desc "Specify AIX attributes for the user in an array or hash of attribute = value pairs. 
-      
+      desc "Specify AIX attributes for the user in an array or hash of attribute = value pairs.
+
       For example:
-      
+
       ```
       ['minage=0', 'maxage=5', 'SYSTEM=compat']
       ```
-      
-      or 
-    
+
+      or
+
      ```
      attributes => { 'minage' => '0', 'maxage' => '5', 'SYSTEM' => 'compat' }
      ```
@@ -675,7 +681,7 @@ module Puppet
             newer."
 
       munge do |value|
-        if value.is_a?(String) and value =~/^[-0-9]+$/
+        if value.is_a?(String) and value =~ /^[-0-9]+$/
           Integer(value)
         else
           value
@@ -684,18 +690,17 @@ module Puppet
     end
 
     newparam(:forcelocal, :boolean => true,
-            :required_features => :manages_local_users_and_groups,
-            :parent => Puppet::Parameter::Boolean) do
+                          :required_features => :manages_local_users_and_groups,
+                          :parent => Puppet::Parameter::Boolean) do
       desc "Forces the management of local accounts when accounts are also
             being managed by some other Name Service Switch (NSS). For AIX, refer to the `ia_load_module` parameter.
-            
+
             This option relies on your operating system's implementation of `luser*` commands, such as `luseradd` , and `lgroupadd`, `lusermod`. The `forcelocal` option could behave unpredictably in some circumstances. If the tools it depends on are not available, it might have no effect at all."
       defaultto false
     end
 
     def generate
-      if !self[:purge_ssh_keys].empty? && self[:purge_ssh_keys] != :false
-        return [] if self[:ensure] == :present && !provider.exists? 
+      unless self[:purge_ssh_keys].empty?
         if Puppet::Type.type(:ssh_authorized_key).nil?
           warning _("Ssh_authorized_key type is not available. Cannot purge SSH keys.")
         else
@@ -710,7 +715,7 @@ module Puppet
       desc "Whether to purge authorized SSH keys for this user if they are not managed
         with the `ssh_authorized_key` resource type. This parameter is a noop if the
         ssh_authorized_key type is not available.
-        
+
         Allowed values are:
 
         * `false` (default) --- don't purge SSH keys for this user.
@@ -728,13 +733,13 @@ module Puppet
       newvalues(:true, :false)
 
       validate do |value|
-        if [ :true, :false ].include? value.to_s.intern
+        if [:true, :false].include? value.to_s.intern
           return
         end
-        value = [ value ] if value.is_a?(String)
+
+        value = [value] if value.is_a?(String)
         if value.is_a?(Array)
           value.each do |entry|
-
             raise ArgumentError, _("Each entry for purge_ssh_keys must be a string, not a %{klass}") % { klass: entry.class } unless entry.is_a?(String)
 
             valid_home = Puppet::Util.absolute_path?(entry) || entry =~ %r{^~/|^%h/}
@@ -743,6 +748,45 @@ module Puppet
           return
         end
         raise ArgumentError, _("purge_ssh_keys must be true, false, or an array of file names, not %{value}") % { value: value.inspect }
+      end
+
+      munge do |value|
+        # Resolve string, boolean and symbol forms of true and false to a
+        # single representation.
+        case value
+        when :false, false, "false"
+          []
+        when :true, true, "true"
+          home = homedir
+          home ? ["#{home}/.ssh/authorized_keys"] : []
+        else
+          # value can be a string or array - munge each value
+          [value].flatten.filter_map do |entry|
+            authorized_keys_path(entry)
+          end
+        end
+      end
+
+      private
+
+      def homedir
+        resource[:home] || Dir.home(resource[:name])
+      rescue ArgumentError
+        Puppet.debug("User '#{resource[:name]}' does not exist")
+        nil
+      end
+
+      def authorized_keys_path(entry)
+        return entry unless entry.match?(%r{^(?:~|%h)/})
+
+        # if user doesn't exist (yet), ignore nonexistent homedir
+        home = homedir
+        return nil unless home
+
+        # compiler freezes "value" so duplicate using a gsub, second mutating gsub! is then ok
+        entry = entry.gsub(%r{^~/}, "#{home}/")
+        entry.gsub!(%r{^%h/}, "#{home}/")
+        entry
       end
     end
 
@@ -765,51 +809,14 @@ module Puppet
     # @see generate
     # @api private
     def find_unmanaged_keys
-      munged_unmanaged_keys.
-        select { |f| File.readable?(f) }.
-        map { |f| unknown_keys_in_file(f) }.
-        flatten.each do |res|
+      self[:purge_ssh_keys]
+        .select { |f| File.readable?(f) }
+        .map { |f| unknown_keys_in_file(f) }
+        .flatten.each do |res|
           res[:ensure] = :absent
           res[:user] = self[:name]
-          @parameters.each do |name, param|
-            res[name] = param.value if param.metaparam?
-          end
+          res.copy_metaparams(@parameters)
         end
-    end
-
-    def munged_unmanaged_keys
-      value = self[:purge_ssh_keys]
-
-      # Resolve string, boolean and symbol forms of true and false to a
-      # single representation.
-      test_sym = value.to_s.intern
-      value = test_sym if [:true, :false].include? test_sym
-
-      return [] if value == :false
-
-      home = self[:home]
-      begin
-        home ||= provider.home
-      rescue
-        Puppet.debug("User '#{self[:name]}' does not exist")
-      end
-
-      if home.to_s.empty? || !Dir.exist?(home.to_s)
-        if value == :true || [ value ].flatten.any? { |v| v.start_with?('~/', '%h/') }
-          Puppet.debug("User '#{self[:name]}' has no home directory set to purge ssh keys from.")
-          return []
-        end
-      end
-
-      return [ "#{home}/.ssh/authorized_keys" ] if value == :true
-
-      # value is an array - munge each value
-      [ value ].flatten.map do |entry|
-        # make sure frozen value is duplicated by using a gsub, second mutating gsub! is then ok
-        entry = entry.gsub(/^~\//, "#{home}/")
-        entry.gsub!(/^%h\//, "#{home}/")
-        entry
-      end
     end
 
     # Parse an ssh authorized keys file superficially, extract the comments
@@ -831,23 +838,25 @@ module Puppet
       # the authorized_keys file may contain UTF-8 comments
       Puppet::FileSystem.open(keyfile, nil, 'r:UTF-8').each do |line|
         next unless line =~ Puppet::Type.type(:ssh_authorized_key).keyline_regex
+
         # the name is stored in the 4th capture of the regex
-        name = $4
+        name = ::Regexp.last_match(4)
         if name.empty?
-          $3.delete("\n")
+          ::Regexp.last_match(3).delete("\n")
           # If no comment is specified for this key, generate a unique internal
           # name. This uses the same rules as
           # provider/ssh_authorized_key/parsed (PUP-3357)
           name = "#{keyfile}:unnamed-#{name_index += 1}"
         end
         names << name
-        Puppet.debug "#{self.ref} parsed for purging Ssh_authorized_key[#{name}]"
+        Puppet.debug "#{ref} parsed for purging Ssh_authorized_key[#{name}]"
       end
 
       names.map { |keyname|
         Puppet::Type.type(:ssh_authorized_key).new(
           :name => keyname,
-          :target => keyfile)
+          :target => keyfile
+        )
       }.reject { |res|
         catalog.resource_refs.include? res.ref
       }

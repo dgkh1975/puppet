@@ -1,5 +1,6 @@
-module Puppet::Pops::Types
+# frozen_string_literal: true
 
+module Puppet::Pops::Types
   # Implemented by classes that can produce an iterator to iterate over their contents
   module IteratorProducer
     def iterator
@@ -31,8 +32,9 @@ module Puppet::Pops::Types
     # @raise [ArgumentError] In case an `Iterable` cannot be produced
     # @api public
     def self.asserted_iterable(my_caller, obj, infer_elements = false)
-      iter = self.on(obj, nil, infer_elements)
+      iter = on(obj, nil, infer_elements)
       raise ArgumentError, "#{my_caller.class}(): wrong argument type (#{obj.class}; is not Iterable." if iter.nil?
+
       iter
     end
 
@@ -72,7 +74,7 @@ module Puppet::Pops::Types
         else
           if element_type.nil? && infer_elements
             tc = TypeCalculator.singleton
-            element_type = PVariantType.maybe_create(o.map {|e| tc.infer_set(e) })
+            element_type = PVariantType.maybe_create(o.map { |e| tc.infer_set(e) })
           end
           Iterator.new(element_type, o.each)
         end
@@ -83,9 +85,13 @@ module Puppet::Pops::Types
         else
           if element_type.nil? && infer_elements
             tc = TypeCalculator.singleton
-            element_type = PTupleType.new([
-              PVariantType.maybe_create(o.keys.map {|e| tc.infer_set(e) }),
-              PVariantType.maybe_create(o.values.map {|e| tc.infer_set(e) })], PHashType::KEY_PAIR_TUPLE_SIZE)
+            element_type =
+              PTupleType
+              .new([
+                     PVariantType.maybe_create(o.keys.map { |e| tc.infer_set(e) }),
+                     PVariantType.maybe_create(o.values.map { |e| tc.infer_set(e) })
+                   ],
+                   PHashType::KEY_PAIR_TUPLE_SIZE)
           end
           HashIterator.new(element_type, o.each_pair)
         end
@@ -138,7 +144,7 @@ module Puppet::Pops::Types
       case object
       when Iterable
         object.unbounded?
-      when String,Integer,Array,Hash,Enumerator,PIntegerType,PEnumType,Dir
+      when String, Integer, Array, Hash, Enumerator, PIntegerType, PEnumType, Dir
         false
       else
         TypeAsserter.assert_instance_of('', PIterableType::DEFAULT, object, false)
@@ -168,6 +174,7 @@ module Puppet::Pops::Types
 
     def to_a
       raise Puppet::Error, 'Attempt to create an Array from an unbounded Iterable' if unbounded?
+
       super
     end
 
@@ -230,16 +237,17 @@ module Puppet::Pops::Types
 
     def step(step, &block)
       raise ArgumentError if step <= 0
+
       r = self
       r = r.step_iterator(step) if step > 1
 
       if block_given?
         begin
-        if block.arity == 1
-          loop { yield(r.next) }
-        else
-          loop { yield(*r.next) }
-        end
+          if block.arity == 1
+            loop { yield(r.next) }
+          else
+            loop { yield(*r.next) }
+          end
         rescue StopIteration
         end
         self
@@ -282,6 +290,7 @@ module Puppet::Pops::Types
     def initialize(element_type, enumeration, step_size)
       super(element_type, enumeration)
       raise ArgumentError if step_size <= 0
+
       @step_size = step_size
     end
 
@@ -313,6 +322,7 @@ module Puppet::Pops::Types
 
     def initialize(range, step = 1)
       raise ArgumentError if step == 0
+
       @range = range
       @step_size = step
       @current = (step < 0 ? range.to : range.from) - step
@@ -326,8 +336,8 @@ module Puppet::Pops::Types
       value = @current + @step_size
       if @step_size < 0
         raise StopIteration if value < @range.from
-      else
-        raise StopIteration if value > @range.to
+      elsif value > @range.to
+        raise StopIteration
       end
       @current = value
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Defines classes to deal with issues, and message formatting and defines constants with Issues.
 # @api public
 #
@@ -22,6 +24,7 @@ module Issues
 
     # If this issue can have its severity lowered to :warning, :deprecation, or :ignored
     attr_writer :demotable
+
     # Configures the Issue with required arguments (bound by occurrence), and a block producing a message.
     def initialize issue_code, *args, &block
       @issue_code = issue_code
@@ -41,7 +44,7 @@ module Issues
     # in the given `hash`.
     # @api public
     #
-    def format(hash ={})
+    def format(hash = {})
       # Create a Message Data where all hash keys become methods for convenient interpolation
       # in issue text.
       msgdata = MessageData.new(*arg_names)
@@ -89,16 +92,18 @@ module Issues
     # @raise [Puppet::Error] if no label provider is found
     def label_provider
       label_provider = @data[:label]
-      #TRANSLATORS ":label" is a keyword and should not be translated
+      # TRANSLATORS ":label" is a keyword and should not be translated
       raise Puppet::Error, _('Label provider key :label must be set to produce the text of the message!') unless label_provider
+
       label_provider
     end
 
     # Returns the label provider given as a key in the hash passed to #format.
     #
     def semantic
-      #TRANSLATORS ":semantic" is a keyword and should not be translated
+      # TRANSLATORS ":semantic" is a keyword and should not be translated
       raise Puppet::Error, _('Label provider key :semantic must be set to produce the text of the message!') unless @data[:semantic]
+
       @data[:semantic]
     end
   end
@@ -204,6 +209,10 @@ module Issues
   # parameters cannot have numeric names, clashes with match result variables
   ILLEGAL_NUMERIC_PARAMETER = issue :ILLEGAL_NUMERIC_PARAMETER, :name do
     _("The numeric parameter name '$%{name}' cannot be used (clashes with numeric match result variables)") % { name: name }
+  end
+
+  ILLEGAL_NONLITERAL_PARAMETER_TYPE = issue :ILLEGAL_NONLITERAL_PARAMETER_TYPE, :name, :type_class do
+    _("The parameter '$%{name}' must be a literal type, not %{type_class}") % { name: name, type_class: label.a_an(type_class) }
   end
 
   # In certain versions of Puppet it may be allowed to assign to a not already assigned key
@@ -541,7 +550,7 @@ module Issues
     _("Illegal Resource Type expression, expected result to be a type name, or untitled Resource, got %{actual}") % { actual: actual }
   end
 
-  DUPLICATE_TITLE = issue :DUPLICATE_TITLE, :title  do
+  DUPLICATE_TITLE = issue :DUPLICATE_TITLE, :title do
     _("The title '%{title}' has already been used in this resource expression") % { title: title }
   end
 
@@ -591,7 +600,7 @@ module Issues
   end
 
   DISCONTINUED_IMPORT = hard_issue :DISCONTINUED_IMPORT do
-    #TRANSLATORS "import" is a function name and should not be translated
+    # TRANSLATORS "import" is a function name and should not be translated
     _("Use of 'import' has been discontinued in favor of a manifest directory. See http://links.puppet.com/puppet-import-deprecation")
   end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Util::Package::Version
   class Pip
     include Comparable
@@ -31,12 +33,12 @@ module Puppet::Util::Package::Version
         )?
       )
       (?:\\+(?<local>[a-z0-9]+(?:[-_\\.][a-z0-9]+)*))?      # local version
-    ".freeze
+    "
 
     def self.parse(version)
       raise ValidationFailure, version.to_s unless version.is_a? String
 
-      matched = version.match(Regexp.new(("^\\s*") + VERSION_PATTERN + ("\\s*$"), Regexp::EXTENDED | Regexp::MULTILINE | Regexp::IGNORECASE))
+      matched = version.match(Regexp.new("^\\s*" + VERSION_PATTERN + "\\s*$", Regexp::EXTENDED | Regexp::MULTILINE | Regexp::IGNORECASE))
       raise ValidationFailure, version unless matched
 
       new(matched)
@@ -57,7 +59,7 @@ module Puppet::Util::Package::Version
       parts.push(@pre_data.join)              if @pre_data
       parts.push(".post#{@post_data[1]}")     if @post_data
       parts.push(".dev#{@dev_data[1]}")       if @dev_data
-      parts.push("+#{@local_data.join(".")}") if @local_data
+      parts.push("+#{@local_data.join('.')}") if @local_data
 
       parts.join
     end
@@ -70,6 +72,7 @@ module Puppet::Util::Package::Version
 
     def <=>(other)
       raise ValidationFailure, other.to_s unless other.is_a?(self.class)
+
       compare(key, other.key)
     end
 
@@ -90,16 +93,16 @@ module Puppet::Util::Package::Version
 
     def parse_letter_version(letter, number)
       if letter
-        number = 0 if !number
+        number ||= 0
         letter.downcase!
 
         if letter == "alpha"
           letter = "a"
         elsif letter == "beta"
           letter = "b"
-        elsif ["c", "pre", "preview"].include?(letter)
+        elsif %w[c pre preview].include?(letter)
           letter = "rc"
-        elsif ["rev", "r"].include?(letter)
+        elsif %w[rev r].include?(letter)
           letter = "post"
         end
 
@@ -110,13 +113,14 @@ module Puppet::Util::Package::Version
     end
 
     def parse_local_version(local_version)
-      local_version.split(/[\\._-]/).map{|part| part =~ /[0-9]+/ && part !~ /[a-zA-Z]+/ ? part.to_i : part.downcase} if local_version
+      local_version.split(/[\\._-]/).map { |part| part =~ /[0-9]+/ && part !~ /[a-zA-Z]+/ ? part.to_i : part.downcase } if local_version
     end
 
     def compose_key(epoch, release, pre, post, dev, local)
       release_key = release.reverse
       release_key.each_with_index do |element, index|
         break unless element == 0
+
         release_key.delete_at(index) unless release_key.at(index + 1) != 0
       end
       release_key.reverse!
@@ -134,7 +138,7 @@ module Puppet::Util::Package::Version
       if !local
         local_key = [[-Float::INFINITY, ""]]
       else
-        local_key = local.map{|i| (i.is_a? Integer) ? [i, ""] : [-Float::INFINITY, i]}
+        local_key = local.map { |i| (i.is_a? Integer) ? [i, ""] : [-Float::INFINITY, i] }
       end
 
       [epoch, release_key, pre_key, post_key, dev_key, local_key]
@@ -149,10 +153,12 @@ module Puppet::Util::Package::Version
           return compare(element, other.at(index)) if element != other.at(index)
         end
       elsif (this.is_a? Array) && !(other.is_a? Array)
-        raise Puppet::Error, 'Cannot compare #{this} (Array) with #{other} (#{other.class}). Only ±Float::INFINITY accepted.' unless other.abs == Float::INFINITY
+        raise Puppet::Error, "Cannot compare #{this} (Array) with #{other} (#{other.class}). Only ±Float::INFINITY accepted." unless other.abs == Float::INFINITY
+
         return other == -Float::INFINITY ? 1 : -1
       elsif !(this.is_a? Array) && (other.is_a? Array)
-        raise Puppet::Error, 'Cannot compare #{this} (#{this.class}) with #{other} (Array). Only ±Float::INFINITY accepted.' unless this.abs == Float::INFINITY
+        raise Puppet::Error, "Cannot compare #{this} (#{this.class}) with #{other} (Array). Only ±Float::INFINITY accepted." unless this.abs == Float::INFINITY
+
         return this == -Float::INFINITY ? -1 : 1
       end
       this <=> other

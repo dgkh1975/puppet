@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pathname'
 
 require_relative '../../../puppet/forge'
@@ -9,7 +11,6 @@ require_relative '../../../puppet/module_tool/installed_modules'
 module Puppet::ModuleTool
   module Applications
     class Upgrader < Application
-
       include Puppet::ModuleTool::Errors
 
       def initialize(name, options)
@@ -75,13 +76,17 @@ module Puppet::ModuleTool
           vstring = mod.version ? "v#{mod.version}" : '???'
           Puppet.notice _("Found '%{name}' (%{version}) in %{dir} ...") % { name: name, version: colorize(:cyan, vstring), dir: dir }
           unless @ignore_changes
-            changes = Checksummer.run(mod.path) rescue []
+            changes = begin
+              Checksummer.run(mod.path)
+            rescue
+              []
+            end
             if mod.has_metadata? && !changes.empty?
               raise LocalChangesError,
-                :action            => :upgrade,
-                :module_name       => name,
-                :requested_version => results[:requested_version],
-                :installed_version => mod.version
+                    :action => :upgrade,
+                    :module_name => name,
+                    :requested_version => results[:requested_version],
+                    :installed_version => mod.version
             end
           end
 
@@ -94,7 +99,7 @@ module Puppet::ModuleTool
             raise NoCandidateReleasesError, results.merge(:module_name => name, :source => module_repository.host)
           elsif results[:requested_version] != :latest
             requested = Puppet::Module.parse_range(results[:requested_version])
-            unless available_versions.any? {|m| requested.include? m.version}
+            unless available_versions.any? { |m| requested.include? m.version }
               raise NoCandidateReleasesError, results.merge(:module_name => name, :source => module_repository.host)
             end
           end
@@ -116,22 +121,22 @@ module Puppet::ModuleTool
 
             version = release.version
 
-            unless forced?
-              # Since upgrading already installed modules can be troublesome,
-              # we'll place constraints on the graph for each installed
-              # module, locking it to upgrades within the same major version.
-              installed_range = ">=#{version} #{version.major}.x"
-              graph.add_constraint('installed', installed_module, installed_range) do |node|
-                Puppet::Module.parse_range(installed_range).include? node.version
-              end
+            next if forced?
 
-              release.mod.dependencies.each do |dep|
-                dep_name = dep['name'].tr('/', '-')
+            # Since upgrading already installed modules can be troublesome,
+            # we'll place constraints on the graph for each installed
+            # module, locking it to upgrades within the same major version.
+            installed_range = ">=#{version} #{version.major}.x"
+            graph.add_constraint('installed', installed_module, installed_range) do |node|
+              Puppet::Module.parse_range(installed_range).include? node.version
+            end
 
-                range = dep['version_requirement']
-                graph.add_constraint("#{installed_module} constraint", dep_name, range) do |node|
-                  Puppet::Module.parse_range(range).include? node.version
-                end
+            release.mod.dependencies.each do |dep|
+              dep_name = dep['name'].tr('/', '-')
+
+              range = dep['version_requirement']
+              graph.add_constraint("#{installed_module} constraint", dep_name, range) do |node|
+                Puppet::Module.parse_range(range).include? node.version
               end
             end
           end
@@ -145,48 +150,47 @@ module Puppet::ModuleTool
 
           releases.each do |rel|
             mod = installed_modules_source.by_name[rel.name.split('-').last]
-            if mod
-              next if mod.has_metadata? && mod.forge_name.tr('/', '-') == rel.name
+            next unless mod
+            next if mod.has_metadata? && mod.forge_name.tr('/', '-') == rel.name
 
-              if rel.name != name
-                dependency = {
-                  :name => rel.name,
-                  :version => rel.version
-                }
-              end
-
-              raise InstallConflictError,
-                :requested_module  => name,
-                :requested_version => options[:version] || 'latest',
-                :dependency        => dependency,
-                :directory         => mod.path,
-                :metadata          => mod.metadata
+            if rel.name != name
+              dependency = {
+                :name => rel.name,
+                :version => rel.version
+              }
             end
+
+            raise InstallConflictError,
+                  :requested_module => name,
+                  :requested_version => options[:version] || 'latest',
+                  :dependency => dependency,
+                  :directory => mod.path,
+                  :metadata => mod.metadata
           end
 
           child = releases.find { |x| x.name == name }
 
           unless forced?
             if child.version == results[:installed_version]
-              versions = graph.dependencies[name].map { |r| r.version }
+              versions = graph.dependencies[name].map(&:version)
               newer_versions = versions.select { |v| v > results[:installed_version] }
 
               raise VersionAlreadyInstalledError,
-                :module_name       => name,
-                :requested_version => results[:requested_version],
-                :installed_version => results[:installed_version],
-                :newer_versions    => newer_versions,
-                :possible_culprits => installed_modules_source.fetched.reject { |x| x == name }
+                    :module_name => name,
+                    :requested_version => results[:requested_version],
+                    :installed_version => results[:installed_version],
+                    :newer_versions => newer_versions,
+                    :possible_culprits => installed_modules_source.fetched.reject { |x| x == name }
             elsif child.version < results[:installed_version]
               raise DowngradingUnsupportedError,
-                :module_name       => name,
-                :requested_version => results[:requested_version],
-                :installed_version => results[:installed_version]
+                    :module_name => name,
+                    :requested_version => results[:requested_version],
+                    :installed_version => results[:installed_version]
             end
           end
 
           Puppet.info _("Preparing to upgrade ...")
-          releases.each { |release| release.prepare }
+          releases.each(&:prepare)
 
           Puppet.notice _('Upgrading -- do not interrupt ...')
           releases.each do |release|
@@ -201,14 +205,13 @@ module Puppet::ModuleTool
           results[:result] = :success
           results[:base_dir] = releases.first.install_dir
           results[:affected_modules] = releases
-          results[:graph] = [ build_install_graph(releases.first, releases) ]
-
+          results[:graph] = [build_install_graph(releases.first, releases)]
         rescue VersionAlreadyInstalledError => e
           results[:result] = (e.newer_versions.empty? ? :noop : :failure)
           results[:error] = { :oneline => e.message, :multiline => e.multiline }
         rescue => e
           results[:error] = {
-            :oneline   => e.message,
+            :oneline => e.message,
             :multiline => e.respond_to?(:multiline) ? e.multiline : [e.to_s, e.backtrace].join("\n")
           }
         ensure
@@ -219,6 +222,8 @@ module Puppet::ModuleTool
       end
 
       private
+
+      # rubocop:disable Naming/MemoizedInstanceVariableName
       def module_repository
         @repo ||= Puppet::Forge.new(Puppet[:module_repository])
       end
@@ -226,6 +231,7 @@ module Puppet::ModuleTool
       def installed_modules_source
         @installed ||= Puppet::ModuleTool::InstalledModules.new(@environment)
       end
+      # rubocop:enable Naming/MemoizedInstanceVariableName
 
       def installed_modules
         installed_modules_source.modules
@@ -254,7 +260,7 @@ module Puppet::ModuleTool
 
         graphed << release
 
-        dependencies = release.dependencies.values.map do |deps|
+        dependencies = release.dependencies.values.filter_map do |deps|
           dep = (deps & installed).first
           if dep == installed_modules[dep.name]
             next
@@ -263,16 +269,16 @@ module Puppet::ModuleTool
           if dep && !graphed.include?(dep)
             build_install_graph(dep, installed, graphed)
           end
-        end.compact
+        end
 
-        return {
-          :release          => release,
-          :name             => release.name,
-          :path             => release.install_dir,
-          :dependencies     => dependencies.compact,
-          :version          => release.version,
+        {
+          :release => release,
+          :name => release.name,
+          :path => release.install_dir,
+          :dependencies => dependencies.compact,
+          :version => release.version,
           :previous_version => previous,
-          :action           => action,
+          :action => action,
         }
       end
 

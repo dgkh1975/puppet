@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/node'
 require_relative '../../puppet/indirector'
 require_relative '../../puppet/transaction'
@@ -83,15 +85,15 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   # Returns [typename, title] when given a String with "Type[title]".
   # Returns [nil, nil] if '[' ']' not detected.
   #
-  def title_key_for_ref( ref )
+  def title_key_for_ref(ref)
     s = ref.index('[')
     e = ref.rindex(']')
     if s && e && e > s
-      a = [ref[0, s], ref[s+1, e-s-1]]
+      a = [ref[0, s], ref[s + 1, e - s - 1]]
     else
       a = [nil, nil]
     end
-    return a
+    a
   end
 
   def add_resource_before(other, *resources)
@@ -100,7 +102,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
       idx = @resources.index(other_title_key)
       if idx.nil?
         raise ArgumentError, _("Cannot add resource %{resource_1} before %{resource_2} because %{resource_2} is not yet in the catalog") %
-            { resource_1: resource.ref, resource_2: other.ref }
+                             { resource_1: resource.ref, resource_2: other.ref }
       end
       add_one_resource(resource, idx)
     end
@@ -115,9 +117,9 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
       idx = @resources.index(other_title_key)
       if idx.nil?
         raise ArgumentError, _("Cannot add resource %{resource_1} after %{resource_2} because %{resource_2} is not yet in the catalog") %
-            { resource_1: resource.ref, resource_2: other.ref }
+                             { resource_1: resource.ref, resource_2: other.ref }
       end
-      add_one_resource(resource, idx+1)
+      add_one_resource(resource, idx + 1)
     end
   end
 
@@ -134,7 +136,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     adjacent(resource, :direction => :in)[0]
   end
 
-  def add_one_resource(resource, idx=-1)
+  def add_one_resource(resource, idx = -1)
     title_key = title_key_for_ref(resource.ref)
     if @resource_table[title_key]
       fail_on_duplicate_type_and_title(resource, title_key)
@@ -165,7 +167,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     # The alias setting logic checks, and does not error if the alias is set to an already set alias
     # for the same resource (i.e. it is ok if alias == title
     explicit_aliases = [resource[:alias]].flatten.compact
-    explicit_aliases.each {| given_alias | self.alias(resource, given_alias) }
+    explicit_aliases.each { |given_alias| self.alias(resource, given_alias) }
 
     # Skip creating uniqueness key alias and checking collisions for non-isomorphic resources.
     return unless resource.respond_to?(:isomorphic?) and resource.isomorphic?
@@ -182,7 +184,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   def alias(resource, key)
     ref = resource.ref
     ref =~ /^(.+)\[/
-    class_name = $1 || resource.class.name
+    class_name = ::Regexp.last_match(1) || resource.class.name
 
     newref = [class_name, key].flatten
 
@@ -198,15 +200,16 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     existing = @resource_table[newref]
     if existing
       return if existing == resource
+
       resource_declaration = Puppet::Util::Errors.error_location(resource.file, resource.line)
       msg = if resource_declaration.empty?
-              #TRANSLATORS 'alias' should not be translated
+              # TRANSLATORS 'alias' should not be translated
               _("Cannot alias %{resource} to %{key}; resource %{newref} already declared") %
-                  { resource: ref, key: key.inspect, newref: newref.inspect }
+                { resource: ref, key: key.inspect, newref: newref.inspect }
             else
-              #TRANSLATORS 'alias' should not be translated
+              # TRANSLATORS 'alias' should not be translated
               _("Cannot alias %{resource} to %{key} at %{resource_declaration}; resource %{newref} already declared") %
-                  { resource: ref, key: key.inspect, resource_declaration: resource_declaration, newref: newref.inspect }
+                { resource: ref, key: key.inspect, resource_declaration: resource_declaration, newref: newref.inspect }
             end
       msg += Puppet::Util::Errors.error_location_with_space(existing.file, existing.line)
       raise ArgumentError, msg
@@ -269,7 +272,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   def clear(remove_resources = true)
     super()
     # We have to do this so that the resources clean themselves up.
-    @resource_table.values.each { |resource| resource.remove } if remove_resources
+    @resource_table.values.each(&:remove) if remove_resources
     @resource_table.clear
     @resources = []
 
@@ -289,6 +292,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     unless klass
       raise ArgumentError, _("Unknown resource type %{type}") % { type: type }
     end
+
     resource = klass.new(options)
     return unless resource
 
@@ -300,7 +304,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   def finalize
     make_default_resources
 
-    @resource_table.values.each { |resource| resource.finish }
+    @resource_table.values.each(&:finish)
 
     write_graph(:resources)
   end
@@ -313,7 +317,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     super()
     @name = name
     @catalog_uuid = SecureRandom.uuid
-    @catalog_format = 1
+    @catalog_format = 2
     @metadata = {}
     @recursive_metadata = {}
     @classes = []
@@ -376,7 +380,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     type_name = type.is_a?(Puppet::CompilableResourceType) || type.is_a?(Puppet::Resource::Type) ? type.name : type
     type_name, title = Puppet::Resource.type_and_title(type_name, title)
     type = type_name if type.is_a?(String)
-    title_key   = [type_name, title.to_s]
+    title_key = [type_name, title.to_s]
     result = @resource_table[title_key]
     if result.nil?
       # an instance has to be created in order to construct the unique key used when
@@ -391,7 +395,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   end
 
   def resource_refs
-    resource_keys.collect{ |type, name| name.is_a?( String ) ? "#{type}[#{name}]" : nil}.compact
+    resource_keys.filter_map { |type, name| name.is_a?(String) ? "#{type}[#{name}]" : nil }
   end
 
   def resource_keys
@@ -407,7 +411,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   def self.from_data_hash(data)
     result = new(data['name'], Puppet::Node::Environment::NONE)
 
-    result.tag(*data['tags']) if data['tags'] 
+    result.tag(*data['tags']) if data['tags']
     result.version = data['version'] if data['version']
     result.code_id = data['code_id'] if data['code_id']
     result.catalog_uuid = data['catalog_uuid'] if data['catalog_uuid']
@@ -431,14 +435,14 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
         source = result.resource(edge.source)
         unless source
           raise ArgumentError, _("Could not intern from data: Could not find relationship source %{source} for %{target}") %
-              { source: edge.source.inspect, target: edge.target.to_s }
+                               { source: edge.source.inspect, target: edge.target.to_s }
         end
         edge.source = source
 
         target = result.resource(edge.target)
         unless target
           raise ArgumentError, _("Could not intern from data: Could not find relationship target %{target} for %{source}") %
-              { target: edge.target.inspect, source: edge.source.to_s }
+                               { target: edge.target.inspect, source: edge.source.to_s }
         end
         edge.target = target
 
@@ -448,16 +452,14 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
 
     result.add_class(*data['classes']) if data['classes']
 
-    result.metadata = data['metadata'].inject({}) { |h, (k, v)| h[k] = Puppet::FileServing::Metadata.from_data_hash(v); h } if data['metadata']
+    result.metadata = data['metadata'].transform_values { |v| Puppet::FileServing::Metadata.from_data_hash(v); } if data['metadata']
 
     recursive_metadata = data['recursive_metadata']
     if recursive_metadata
-      result.recursive_metadata = recursive_metadata.inject({}) do |h, (title, source_to_meta_hash)|
-        h[title] = source_to_meta_hash.inject({}) do |inner_h, (source, metas)|
-          inner_h[source] = metas.map {|meta| Puppet::FileServing::Metadata.from_data_hash(meta)}
-          inner_h
+      result.recursive_metadata = recursive_metadata.transform_values do |source_to_meta_hash|
+        source_to_meta_hash.transform_values do |metas|
+          metas.map { |meta| Puppet::FileServing::Metadata.from_data_hash(meta) }
         end
-        h
       end
     end
 
@@ -465,29 +467,27 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   end
 
   def to_data_hash
-    metadata_hash = metadata.inject({}) { |h, (k, v)| h[k] = v.to_data_hash; h }
-    recursive_metadata_hash = recursive_metadata.inject({}) do |h, (title, source_to_meta_hash)|
-      h[title] = source_to_meta_hash.inject({}) do |inner_h, (source, metas)|
-        inner_h[source] = metas.map {|meta| meta.to_data_hash}
-        inner_h
+    metadata_hash = metadata.transform_values(&:to_data_hash)
+    recursive_metadata_hash = recursive_metadata.transform_values do |source_to_meta_hash|
+      source_to_meta_hash.transform_values do |metas|
+        metas.map(&:to_data_hash)
       end
-      h
     end
 
     {
-      'tags'      => tags.to_a,
-      'name'      => name,
-      'version'   => version,
-      'code_id'   => code_id,
+      'tags' => tags.to_a,
+      'name' => name,
+      'version' => version,
+      'code_id' => code_id,
       'catalog_uuid' => catalog_uuid,
       'catalog_format' => catalog_format,
-      'environment'  => environment.to_s,
+      'environment' => environment.to_s,
       'resources' => @resources.map { |v| @resource_table[v].to_data_hash },
-      'edges'     => edges.map { |e| e.to_data_hash },
-      'classes'   => classes,
+      'edges' => edges.map(&:to_data_hash),
+      'classes' => classes,
     }.merge(metadata_hash.empty? ?
-      {} : {'metadata' => metadata_hash}).merge(recursive_metadata_hash.empty? ?
-        {} : {'recursive_metadata' => recursive_metadata_hash})
+      {} : { 'metadata' => metadata_hash }).merge(recursive_metadata_hash.empty? ?
+        {} : { 'recursive_metadata' => recursive_metadata_hash })
   end
 
   # Convert our catalog into a RAL catalog.
@@ -508,7 +508,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     # environment set in the catalog (if it is set)
     # See PUP-3755
     if environment_instance
-      Puppet.override({:current_environment => environment_instance}) do
+      Puppet.override({ :current_environment => environment_instance }) do
         to_catalog :to_resource, &block
       end
     else
@@ -536,10 +536,11 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
     # https://puppet.com/docs/puppet/latest/configuration.html#resourcefile
     resourcefile = Puppet.settings.setting(:resourcefile)
     Puppet::FileSystem.open(resourcefile.value, resourcefile.mode.to_i(8), "w:UTF-8") do |f|
-      to_print = resources.map do |resource|
+      to_print = resources.filter_map do |resource|
         next unless resource.managed?
-        "#{resource.ref.downcase}"
-      end.compact
+
+        resource.ref.downcase.to_s
+      end
       f.puts to_print.join("\n")
     end
   rescue => detail
@@ -589,14 +590,14 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
   # This pretty much just converts all of the resources from one class to another, using
   # a conversion method.
   def to_catalog(convert)
-    result = self.class.new(self.name, self.environment_instance)
+    result = self.class.new(name, environment_instance)
 
-    result.version = self.version
-    result.code_id = self.code_id
-    result.catalog_uuid = self.catalog_uuid
-    result.catalog_format = self.catalog_format
-    result.metadata = self.metadata
-    result.recursive_metadata = self.recursive_metadata
+    result.version = version
+    result.code_id = code_id
+    result.catalog_uuid = catalog_uuid
+    result.catalog_format = catalog_format
+    result.metadata = metadata
+    result.recursive_metadata = recursive_metadata
 
     map = {}
     resources.each do |resource|
@@ -642,7 +643,7 @@ class Puppet::Resource::Catalog < Puppet::Graph::SimpleGraph
 
     map.clear
 
-    result.add_class(*self.classes)
+    result.add_class(*classes)
     result.merge_tags_from(self)
 
     result

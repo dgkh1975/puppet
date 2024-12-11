@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:package).provide :dnf, :parent => :yum do
   desc "Support via `dnf`.
 
@@ -9,7 +11,7 @@ Puppet::Type.type(:package).provide :dnf, :parent => :yum do
   These options should be specified as an array where each element is either
    a string or a hash."
 
-  has_feature :install_options, :versionable, :virtual_packages, :install_only
+  has_feature :install_options, :versionable, :virtual_packages, :install_only, :version_ranges
 
   commands :cmd => "dnf", :rpm => "rpm"
 
@@ -18,6 +20,10 @@ Puppet::Type.type(:package).provide :dnf, :parent => :yum do
   # never try to use RPM on a machine without it. We think this
   # has probably become obsolete with the way `commands` work, so
   # we should investigate removing it at some point.
+  #
+  # Mixing confine statements, control expressions, and exception handling
+  # confuses Rubocop's Layout cops, so we disable them entirely.
+  # rubocop:disable Layout
   if command('rpm')
     confine :true => begin
       rpm('--version')
@@ -27,11 +33,13 @@ Puppet::Type.type(:package).provide :dnf, :parent => :yum do
         true
       end
   end
+  # rubocop:enable Layout
 
-  defaultfor :operatingsystem => :fedora
-  notdefaultfor :operatingsystem => :fedora, :operatingsystemmajrelease => (19..21).to_a
-  defaultfor :osfamily => :redhat
-  notdefaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
+  defaultfor 'os.name' => :fedora
+  notdefaultfor 'os.name' => :fedora, 'os.release.major' => (19..21).to_a
+  defaultfor 'os.family' => :redhat
+  notdefaultfor 'os.family' => :redhat, 'os.release.major' => (4..7).to_a
+  defaultfor 'os.name' => :amazon, 'os.release.major' => ["2023"]
 
   def self.update_command
     # In DNF, update is deprecated for upgrade

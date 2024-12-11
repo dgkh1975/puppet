@@ -1,8 +1,11 @@
 test_name 'C100565: puppet agent with module should translate messages' do
   confine :except, :platform => /^solaris/ # translation not supported
 
-  tag 'audit:high',
+  tag 'audit:medium',
       'audit:acceptance'
+
+  skip_test('i18n test module uses deprecated function; update module to resume testing.')
+  # function validate_absolute_path used https://github.com/eputnam/eputnam-i18ndemo/blob/621d06d/manifests/init.pp#L15
 
   require 'puppet/acceptance/environment_utils.rb'
   extend Puppet::Acceptance::EnvironmentUtils

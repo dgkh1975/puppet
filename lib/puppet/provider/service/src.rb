@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require 'timeout'
 
 # AIX System Resource controller (SRC)
 Puppet::Type.type(:service).provide :src, :parent => :base do
-
   desc "Support for AIX's System Resource controller.
 
   Services are started/stopped based on the `stopsrc` and `startsrc`
@@ -13,17 +14,17 @@ Puppet::Type.type(:service).provide :src, :parent => :base do
   is not yet supported.
   "
 
-  defaultfor :operatingsystem => :aix
-  confine :operatingsystem => :aix
+  defaultfor 'os.name' => :aix
+  confine 'os.name' => :aix
 
-  optional_commands :stopsrc  => "/usr/bin/stopsrc",
+  optional_commands :stopsrc => "/usr/bin/stopsrc",
                     :startsrc => "/usr/bin/startsrc",
-                    :refresh  => "/usr/bin/refresh",
-                    :lssrc    => "/usr/bin/lssrc",
-                    :lsitab   => "/usr/sbin/lsitab",
-                    :mkitab   => "/usr/sbin/mkitab",
-                    :rmitab   => "/usr/sbin/rmitab",
-                    :chitab   => "/usr/sbin/chitab"
+                    :refresh => "/usr/bin/refresh",
+                    :lssrc => "/usr/bin/lssrc",
+                    :lsitab => "/usr/sbin/lsitab",
+                    :mkitab => "/usr/sbin/mkitab",
+                    :rmitab => "/usr/sbin/rmitab",
+                    :chitab => "/usr/sbin/chitab"
 
   has_feature :refreshable
 
@@ -53,7 +54,7 @@ Puppet::Type.type(:service).provide :src, :parent => :base do
   end
 
   def enabled?
-    output = execute([command(:lsitab), @resource[:name]], {:failonfail => false, :combine => true})
+    output = execute([command(:lsitab), @resource[:name]], { :failonfail => false, :combine => true })
     output.exitstatus == 0 ? :true : :false
   end
 
@@ -73,21 +74,22 @@ Puppet::Type.type(:service).provide :src, :parent => :base do
       loop do
         status = self.status
         break if status == desired_state.to_sym
+
         sleep(1)
       end
     end
   rescue Timeout::Error
-    raise Puppet::Error.new("Timed out waiting for #{@resource[:name]} to transition states")
+    raise Puppet::Error, "Timed out waiting for #{@resource[:name]} to transition states"
   end
 
   def start
     super
-    self.wait(:running)
+    wait(:running)
   end
 
   def stop
     super
-    self.wait(:stopped)
+    wait(:stopped)
   end
 
   def restart
@@ -100,26 +102,26 @@ Puppet::Type.type(:service).provide :src, :parent => :base do
       # While subsystems with -S (signals) must be stopped/started
       method = args[11]
       do_refresh = case method
-        when "-K" then :true
-        when "-S" then :false
-        else self.fail("Unknown service communication method #{method}")
-      end
+                   when "-K" then :true
+                   when "-S" then :false
+                   else self.fail("Unknown service communication method #{method}")
+                   end
 
       begin
         if do_refresh == :true
           execute([command(:refresh), "-s", @resource[:name]])
         else
-          self.stop
-          self.start
+          stop
+          start
         end
         return :true
       rescue Puppet::ExecutionFailure => detail
-        raise Puppet::Error.new("Unable to restart service #{@resource[:name]}, error was: #{detail}", detail )
+        raise Puppet::Error.new("Unable to restart service #{@resource[:name]}, error was: #{detail}", detail)
       end
     end
     self.fail("No such service found")
   rescue Puppet::ExecutionFailure => detail
-    raise Puppet::Error.new("Cannot get status of #{@resource[:name]}, error was: #{detail}", detail )
+    raise Puppet::Error.new("Cannot get status of #{@resource[:name]}, error was: #{detail}", detail)
   end
 
   def status
@@ -132,16 +134,14 @@ Puppet::Type.type(:service).provide :src, :parent => :base do
       # PID is the 3rd field, but inoperative subsystems
       # skip this so split doesn't work right
       state = case args[-1]
-        when "active" then :running
-        when "inoperative" then :stopped
-      end
+              when "active"      then :running
+              when "inoperative" then :stopped
+              end
       Puppet.debug("Service #{@resource[:name]} is #{args[-1]}")
       return state
     end
   rescue Puppet::ExecutionFailure => detail
-    self.debug(detail.message)
-    return :stopped
+    debug(detail.message)
+    :stopped
   end
-
 end
-

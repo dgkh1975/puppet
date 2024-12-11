@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Windows Access Control Entry
 #
 # Represents an access control entry, which grants or denies a subject,
@@ -60,7 +62,7 @@ class Puppet::Util::Windows::AccessControlEntry
   end
 
   def inspect
-    inheritance = ""
+    inheritance = ''.dup
     inheritance << '(I)' if inherited?
     inheritance << '(OI)' if object_inherit?
     inheritance << '(CI)' if container_inherit?

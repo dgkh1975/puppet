@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/ldap'
 
 Puppet::Type.type(:user).provide :ldap, :parent => Puppet::Provider::Ldap do
@@ -17,12 +19,12 @@ Puppet::Type.type(:user).provide :ldap, :parent => Puppet::Provider::Ldap do
   has_feature :manages_passwords, :manages_shell
 
   manages(:posixAccount, :person).at("ou=People").named_by(:uid).and.maps :name => :uid,
-    :password => :userPassword,
-    :comment => :cn,
-    :uid => :uidNumber,
-    :gid => :gidNumber,
-    :home => :homeDirectory,
-    :shell => :loginShell
+                                                                          :password => :userPassword,
+                                                                          :comment => :cn,
+                                                                          :uid => :uidNumber,
+                                                                          :gid => :gidNumber,
+                                                                          :home => :homeDirectory,
+                                                                          :shell => :loginShell
 
   # Use the last field of a space-separated array as
   # the sn.  LDAP requires a surname, for some stupid reason.
@@ -39,6 +41,7 @@ Puppet::Type.type(:user).provide :ldap, :parent => Puppet::Provider::Ldap do
       existing.each do |hash|
         value = hash[:uid]
         next unless value
+
         num = value[0].to_i
         largest = num if num > largest
       end
@@ -97,7 +100,7 @@ Puppet::Type.type(:user).provide :ldap, :parent => Puppet::Provider::Ldap do
       current = ldap_group[:members]
 
       if form == :add
-        if current.is_a?(Array) and ! current.empty?
+        if current.is_a?(Array) and !current.empty?
           new = current + [name]
         else
           new = [name]
@@ -107,7 +110,7 @@ Puppet::Type.type(:user).provide :ldap, :parent => Puppet::Provider::Ldap do
         new = :absent if new.empty?
       end
 
-      group_manager.update(group, {:ensure => :present, :members => current}, {:ensure => :present, :members => new})
+      group_manager.update(group, { :ensure => :present, :members => current }, { :ensure => :present, :members => new })
     end
   end
 
@@ -124,9 +127,9 @@ Puppet::Type.type(:user).provide :ldap, :parent => Puppet::Provider::Ldap do
 
   def group_properties(values)
     if values.empty? or values == :absent
-      {:ensure => :present}
+      { :ensure => :present }
     else
-      {:ensure => :present, :members => values}
+      { :ensure => :present, :members => values }
     end
   end
 end

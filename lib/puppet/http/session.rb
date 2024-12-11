@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 # The session is the mechanism by which services may be connected to and accessed.
 #
 # @api public
 class Puppet::HTTP::Session
   # capabilities for a site
-  CAP_LOCALES = 'locales'.freeze
-  CAP_JSON = 'json'.freeze
+  CAP_LOCALES = 'locales'
+  CAP_JSON = 'json'
 
   # puppet version where locales mount was added
   SUPPORTED_LOCALES_MOUNT_AGENT_VERSION = Gem::Version.new("5.3.4")
@@ -50,7 +52,7 @@ class Puppet::HTTP::Session
     raise ArgumentError, "Unknown service #{name}" unless Puppet::HTTP::Service.valid_name?(name)
 
     # short circuit if explicit URL host & port given
-    if url && url.host != nil && !url.host.empty?
+    if url && !url.host.nil? && !url.host.empty?
       service = Puppet::HTTP::Service.create_service(@client, self, name, url.host, url.port)
       service.connect(ssl_context: ssl_context)
       return service
@@ -60,7 +62,7 @@ class Puppet::HTTP::Session
     return cached if cached
 
     canceled = false
-    canceled_handler  = lambda { |cancel| canceled = cancel }
+    canceled_handler = ->(cancel) { canceled = cancel }
 
     @resolvers.each do |resolver|
       Puppet.debug("Resolving service '#{name}' using #{resolver.class}")

@@ -1,5 +1,5 @@
 require 'spec_helper'
-
+require 'puppet_spec/compiler'
 require 'puppet'
 require 'puppet/transaction/report'
 require 'matchers/json'
@@ -7,6 +7,7 @@ require 'matchers/json'
 describe Puppet::Transaction::Report do
   include JSONMatchers
   include PuppetSpec::Files
+  include PuppetSpec::Compiler
 
   before do
     allow(Puppet::Util::Storage).to receive(:store)
@@ -134,6 +135,74 @@ describe Puppet::Transaction::Report do
 
     expect(report.resource_statuses.values.any? {|res| res.resource_type =~ /whit/i}).to be_falsey
     expect(report.metrics['time'].values.any? {|metric| metric.first =~ /whit/i}).to be_falsey
+  end
+
+  describe "when exclude_unchanged_resources is true" do
+    let(:test_dir) { tmpdir('unchanged_resources') }
+    let(:test_dir2) { tmpdir('unchanged_resources') }
+    let(:test_file) { tmpfile('some_path')}
+    it 'should still list "changed" resource statuses but remove "unchanged"' do
+      transaction = apply_compiled_manifest(<<-END)
+        notify { "hi": } ~>
+        exec { "/bin/this_command_does_not_exist":
+          command => "#{make_absolute('/bin/this_command_does_not_exist')}",
+          refreshonly => true,
+        }
+        file { '#{test_dir}':
+          ensure => directory
+        }
+        file { 'failing_file':
+          path => '#{test_dir2}',
+          ensure => file
+        }
+        file { 'skipped_file':
+          path => '#{test_file}',
+          require => File[failing_file]
+        }
+      END
+      rs = transaction.report.to_data_hash['resource_statuses']
+      expect(rs["Notify[hi]"]['out_of_sync']).to be true
+      expect(rs["Exec[/bin/this_command_does_not_exist]"]['failed_to_restart']).to be true
+      expect(rs["File[failing_file]"]['failed']).to be true
+      expect(rs["File[skipped_file]"]['skipped']).to be true
+      expect(rs).to_not have_key(["File[#{test_dir}]"])
+    end
+  end
+
+  describe"when exclude_unchanged_resources is false" do
+    before do
+      Puppet[:exclude_unchanged_resources] = false
+    end
+
+    let(:test_dir) { tmpdir('unchanged_resources') }
+    let(:test_dir2) { tmpdir('unchanged_resources') }
+    let(:test_file) { tmpfile('some_path')}
+    it 'should list all resource statuses' do
+      transaction = apply_compiled_manifest(<<-END)
+        notify { "hi": } ~>
+        exec { "/bin/this_command_does_not_exist":
+          command => "#{make_absolute('/bin/this_command_does_not_exist')}",
+          refreshonly => true,
+        }
+        file { '#{test_dir}':
+          ensure => directory
+        }
+        file { 'failing_file':
+          path => '#{test_dir2}',
+          ensure => file
+        }
+        file { 'skipped_file':
+          path => '#{test_file}',
+          require => File[failing_file]
+        }
+      END
+      rs = transaction.report.to_data_hash['resource_statuses']
+      expect(rs["Notify[hi]"]['out_of_sync']).to be true
+      expect(rs["Exec[/bin/this_command_does_not_exist]"]['failed_to_restart']).to be true
+      expect(rs["File[failing_file]"]['failed']).to be true
+      expect(rs["File[skipped_file]"]['skipped']).to be true
+      expect(rs["File[#{test_dir}]"]['changed']).to be false
+    end
   end
 
   describe "when accepting logs" do
@@ -541,9 +610,9 @@ Version:
     expect(Puppet::Transaction::Report.default_format).to eq(:json)
   end
 
-  it "supports both json, pson and yaml" do
-    # msgpack is optional, so using include instead of eq
-    expect(Puppet::Transaction::Report.supported_formats).to include(:json, :pson, :yaml)
+  it "supports both json and yaml" do
+    # msgpack and pson are optional, so using include instead of eq
+    expect(Puppet::Transaction::Report.supported_formats).to include(:json, :yaml)
   end
 
   context 'can make a round trip through' do
@@ -553,7 +622,7 @@ Version:
 
     after(:each) { Puppet.pop_context }
 
-    it 'pson' do
+    it 'pson', if: Puppet.features.pson? do
       report = generate_report
 
       tripped = Puppet::Transaction::Report.convert_from(:pson, report.render)

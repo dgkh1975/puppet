@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/plist'
 Puppet::Type.type(:service).provide :launchd, :parent => :base do
   desc <<-'EOT'
@@ -42,9 +44,9 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
 
   commands :launchctl => "/bin/launchctl"
 
-  defaultfor :operatingsystem => :darwin
-  confine :operatingsystem    => :darwin
-  confine :feature            => :cfpropertylist
+  defaultfor 'os.name' => :darwin
+  confine 'os.name'    => :darwin
+  confine :feature => :cfpropertylist
 
   has_feature :enableable
   has_feature :refreshable
@@ -70,7 +72,9 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
   #
   # @api private
   def self.get_os_version
-    @os_version ||= Puppet.runtime[:facter].value(:operatingsystemmajrelease).to_i
+    # rubocop:disable Naming/MemoizedInstanceVariableName
+    @os_version ||= Facter.value('os.release.major').to_i
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   # Defines the path to the overrides plist file where service enabling
@@ -80,7 +84,7 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
   #
   # @api private
   def self.launchd_overrides
-    if self.get_os_version < 14
+    if get_os_version < 14
       "/var/db/launchd.db/com.apple.launchd/overrides.plist"
     else
       "/var/db/com.apple.xpc.launchd/disabled.plist"
@@ -103,8 +107,8 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
   # containing the name, provider, path, and status of each service on the
   # system.
   def self.instances
-    jobs = self.jobsearch
-    @job_list ||= self.job_list
+    jobs = jobsearch
+    @job_list ||= job_list
     jobs.keys.collect do |job|
       job_status = @job_list.has_key?(job) ? :running : :stopped
       new(:name => job, :provider => :launchd, :path => jobs[job], :status => job_status)
@@ -130,18 +134,20 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
   # the cache will be refreshed if refresh is true.
   #
   # @api private
-  def self.make_label_to_path_map(refresh=false)
-    return @label_to_path_map if @label_to_path_map and not refresh
+  def self.make_label_to_path_map(refresh = false)
+    return @label_to_path_map if @label_to_path_map and !refresh
+
     @label_to_path_map = {}
     launchd_paths.each do |path|
       return_globbed_list_of_file_paths(path).each do |filepath|
         Puppet.debug("Reading launchd plist #{filepath}")
         job = read_plist(filepath)
         next if job.nil?
+
         if job.respond_to?(:key) && job.key?("Label")
           @label_to_path_map[job["Label"]] = filepath
         else
-          #TRANSLATORS 'plist' and label' should not be translated
+          # TRANSLATORS 'plist' and label' should not be translated
           Puppet.debug(_("The %{file} plist does not contain a 'label' key; Puppet is skipping it") % { file: filepath })
           next
         end
@@ -154,17 +160,17 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
   # are found on the system. The key of the hash is the job id and the value
   # is the path to the file. If a label is passed, we return the job id and
   # path for that specific job.
-  def self.jobsearch(label=nil)
+  def self.jobsearch(label = nil)
     by_label = make_label_to_path_map
 
     if label
       if by_label.has_key? label
-        return { label => by_label[label] }
+        { label => by_label[label] }
       else
         # try refreshing the map, in case a plist has been added in the interim
         by_label = make_label_to_path_map(true)
         if by_label.has_key? label
-          return { label => by_label[label] }
+          { label => by_label[label] }
         else
           raise Puppet::Error, "Unable to find launchd plist for job: #{label}"
         end
@@ -181,12 +187,13 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
     @job_list = Hash.new
     begin
       output = launchctl :list
-      raise Puppet::Error.new("launchctl list failed to return any data.") if output.nil?
+      raise Puppet::Error, "launchctl list failed to return any data." if output.nil?
+
       output.split("\n").each do |line|
         @job_list[line.split(/\s/).last] = :running
       end
-    rescue Puppet::ExecutionFailure
-      raise Puppet::Error.new("Unable to determine status of #{resource[:name]}", $!)
+    rescue Puppet::ExecutionFailure => e
+      raise Puppet::Error.new("Unable to determine status of #{resource[:name]}", e)
     end
     @job_list
   end
@@ -202,10 +209,11 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
     i = 1
     overrides = nil
     loop do
-      Puppet.debug(_("Reading overrides plist, attempt %{i}") % {i: i}) if i > 1
+      Puppet.debug(_("Reading overrides plist, attempt %{i}") % { i: i }) if i > 1
       overrides = read_plist(launchd_overrides)
       break unless overrides.nil?
-      raise Puppet::Error.new(_('Unable to read overrides plist, too many attempts')) if i == 20
+      raise Puppet::Error, _('Unable to read overrides plist, too many attempts') if i == 20
+
       Puppet.info(_('Overrides file could not be read, trying again.'))
       Kernel.sleep(0.1)
       i += 1
@@ -231,7 +239,7 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
     if FileTest.file?(job_path)
       job_plist = self.class.read_plist(job_path)
     else
-      raise Puppet::Error.new("Unable to parse launchd plist at path: #{job_path}")
+      raise Puppet::Error, "Unable to parse launchd plist at path: #{job_path}"
     end
     [job_path, job_plist]
   end
@@ -240,7 +248,7 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
   # status mechanism and fall back to the base provider status method.
   def status
     if @resource && ((@resource[:hasstatus] == :false) || (@resource[:status]))
-      return super
+      super
     elsif @property_hash[:status].nil?
       # property_hash was flushed so the service changed status
       service_name = @resource[:name]
@@ -273,19 +281,18 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
     # always add -w so it always starts the job, it is a noop if it is not needed, this means we do
     # not have to rescan all launchd plists.
     cmds << "-w"
-    if self.enabled? == :false  || self.status == :stopped # launchctl won't load disabled jobs
+    if enabled? == :false || status == :stopped # launchctl won't load disabled jobs
       did_enable_job = true
     end
     cmds << job_path
     begin
       execute(cmds)
-    rescue Puppet::ExecutionFailure
-      raise Puppet::Error.new("Unable to start service: #{resource[:name]} at path: #{job_path}", $!)
+    rescue Puppet::ExecutionFailure => e
+      raise Puppet::Error.new("Unable to start service: #{resource[:name]} at path: #{job_path}", e)
     end
     # As load -w clears the Disabled flag, we need to add it in after
-    self.disable if did_enable_job and resource[:enable] == :false
+    disable if did_enable_job and resource[:enable] == :false
   end
-
 
   def stop
     if resource[:stop]
@@ -296,26 +303,26 @@ Puppet::Type.type(:service).provide :launchd, :parent => :base do
     did_disable_job = false
     cmds = []
     cmds << :launchctl << :unload
-    if self.enabled? == :true # keepalive jobs can't be stopped without disabling
+    if enabled? == :true # keepalive jobs can't be stopped without disabling
       cmds << "-w"
       did_disable_job = true
     end
     cmds << job_path
     begin
       execute(cmds)
-    rescue Puppet::ExecutionFailure
-      raise Puppet::Error.new("Unable to stop service: #{resource[:name]} at path: #{job_path}", $!)
+    rescue Puppet::ExecutionFailure => e
+      raise Puppet::Error.new("Unable to stop service: #{resource[:name]} at path: #{job_path}", e)
     end
     # As unload -w sets the Disabled flag, we need to add it in after
-    self.enable if did_disable_job and resource[:enable] == :true
+    enable if did_disable_job and resource[:enable] == :true
   end
 
   def restart
     Puppet.debug("A restart has been triggered for the #{resource[:name]} service")
     Puppet.debug("Stopping the #{resource[:name]} service")
-    self.stop
+    stop
     Puppet.debug("Starting the #{resource[:name]} service")
-    self.start
+    start
   end
 
   # launchd jobs are enabled by default. They are only disabled if the key

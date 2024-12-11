@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/parser/functions'
 require_relative '../../../puppet/parser/files'
 require_relative '../../../puppet/resource/type_collection'
@@ -27,6 +29,7 @@ class Parser
   # Returns the token text of the given lexer token, or nil, if token is nil
   def token_text t
     return t if t.nil?
+
     if t.is_a?(Factory) && t.model_class <= Model::QualifiedName
       t['value']
     elsif t.is_a?(Model::QualifiedName)
@@ -74,14 +77,14 @@ class Parser
   def parse_file(file)
     unless Puppet::FileSystem.exist?(file)
       unless file =~ /\.pp$/
-        file = file + ".pp"
+        file += ".pp"
       end
     end
     @lexer.file = file
     _parse
   end
 
-  def initialize()
+  def initialize
     @lexer = Lexer2.new
     @namestack = []
     @definitions = []
@@ -89,7 +92,7 @@ class Parser
 
   # This is a callback from the generated parser (when an error occurs while parsing)
   #
-  def on_error(token,value,stack)
+  def on_error(token, value, stack)
     if token == 0 # denotes end of file
       value_at = 'end of input'
     else
@@ -169,7 +172,7 @@ class Parser
     @namestack << name
   end
 
-  def namepop()
+  def namepop
     @namestack.pop
   end
 
@@ -190,16 +193,15 @@ class Parser
     # where the "10, notice" forms an argument list. The parser builds an Array with the expressions and includes
     # the comma tokens to enable the error to be reported against the first comma.
     #
-    begin
-      Factory.transform_calls(expressions)
-    rescue Factory::ArgsToNonCallError => e
-      # e.args[1] is the first comma token in the list
-      # e.name_expr is the function name expression
-      if e.name_expr.is_a?(Factory) && e.name_expr.model_class <= Model::QualifiedName
-        error(e.args[1], _("attempt to pass argument list to the function '%{name}' which cannot be called without parentheses") % { name: e.name_expr['value'] })
-      else
-        error(e.args[1], _("illegal comma separated argument list"))
-      end
+
+    Factory.transform_calls(expressions)
+  rescue Factory::ArgsToNonCallError => e
+    # e.args[1] is the first comma token in the list
+    # e.name_expr is the function name expression
+    if e.name_expr.is_a?(Factory) && e.name_expr.model_class <= Model::QualifiedName
+      error(e.args[1], _("attempt to pass argument list to the function '%{name}' which cannot be called without parentheses") % { name: e.name_expr['value'] })
+    else
+      error(e.args[1], _("illegal comma separated argument list"))
     end
   end
 
@@ -217,17 +219,16 @@ class Parser
 
   # Creates an empty program with a single No-op at the input's EOF offset with 0 length.
   #
-  def create_empty_program()
+  def create_empty_program
     locator = @lexer.locator
     no_op = Factory.literal(nil)
     # Create a synthetic NOOP token at EOF offset with 0 size. The lexer does not produce an EOF token that is
     # visible to the grammar rules. Creating this token is mainly to reuse the positioning logic as it
     # expects a token decorated with location information.
-    _, token = @lexer.emit_completed([:NOOP,'',0], locator.string.bytesize)
+    _, token = @lexer.emit_completed([:NOOP, '', 0], locator.string.bytesize)
     loc(no_op, token)
     # Program with a Noop
-    program = Factory.PROGRAM(no_op, [], locator)
-    program
+    Factory.PROGRAM(no_op, [], locator)
   end
 
   # Performs the parsing and returns the resulting model.
@@ -235,12 +236,12 @@ class Parser
   #
   # @api private
   #
-  def _parse()
+  def _parse
     begin
       @yydebug = false
-      main = yyparse(@lexer,:scan)
+      main = yyparse(@lexer, :scan)
     end
-    return main
+    main
   ensure
     @lexer.clear
     @namestack = []

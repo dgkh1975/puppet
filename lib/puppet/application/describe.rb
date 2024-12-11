@@ -1,15 +1,17 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/application'
 
 class Formatter
-
   def initialize(width)
     @width = width
   end
 
   def wrap(txt, opts)
     return "" unless txt && !txt.empty?
+
     work = (opts[:scrub] ? scrub(txt) : txt)
-    indent = (opts[:indent] ? opts[:indent] : 0)
+    indent = opts[:indent] || 0
     textLen = @width - indent
     patt = Regexp.new("\\A(.{0,#{textLen}})[ \n]")
     prefix = " " * indent
@@ -18,8 +20,8 @@ class Formatter
 
     while work.length > textLen
       if work =~ patt
-        res << $1
-        work.slice!(0, $MATCH.length)
+        res << ::Regexp.last_match(1)
+        work.slice!(0, ::Regexp.last_match(0).length)
       else
         res << work.slice!(0, textLen)
       end
@@ -41,23 +43,22 @@ class Formatter
     # If we can match an indentation, then just remove that same level of
     # indent from every line.
     if text =~ /^(\s+)/
-      indent = $1
-      return text.gsub(/^#{indent}/,'')
+      indent = ::Regexp.last_match(1)
+      text.gsub(/^#{indent}/, '')
     else
-      return text
+      text
     end
   end
-
 end
 
 class TypeDoc
-
   def initialize
     @format = Formatter.new(76)
     @types = {}
     Puppet::Type.loadall
     Puppet::Type.eachtype { |type|
       next if type.name == :component
+
       @types[type.name] = type
     }
   end
@@ -125,7 +126,7 @@ class TypeDoc
       docs[name] = type.attrclass(name).doc if attrs.include?(kind) && name != :provider
     end
 
-    docs.sort { |a,b|
+    docs.sort { |a, b|
       a[0].to_s <=> b[0].to_s
     }.each { |name, doc|
       print "\n- **#{name}**"
@@ -159,73 +160,72 @@ class TypeDoc
     list = type.providers.sort_by(&:to_s).join(", ")
     puts @format.wrap(list, :indent => 4)
   end
-
 end
 
 class Puppet::Application::Describe < Puppet::Application
   banner "puppet describe [options] [type]"
 
-  option("--short", "-s", "Only list parameters without detail") do |arg|
+  option("--short", "-s", "Only list parameters without detail") do |_arg|
     options[:parameters] = false
   end
 
-  option("--providers","-p")
+  option("--providers", "-p")
   option("--list", "-l")
-  option("--meta","-m")
+  option("--meta", "-m")
 
   def summary
     _("Display help about resource types")
   end
 
   def help
-    <<-HELP
+    <<~HELP
 
-puppet-describe(8) -- #{summary}
-========
+      puppet-describe(8) -- #{summary}
+      ========
 
-SYNOPSIS
---------
-Prints help about Puppet resource types, providers, and metaparameters.
-
-
-USAGE
------
-puppet describe [-h|--help] [-s|--short] [-p|--providers] [-l|--list] [-m|--meta]
+      SYNOPSIS
+      --------
+      Prints help about Puppet resource types, providers, and metaparameters.
 
 
-OPTIONS
--------
-* --help:
-  Print this help text
-
-* --providers:
-  Describe providers in detail for each type
-
-* --list:
-  List all types
-
-* --meta:
-  List all metaparameters
-
-* --short:
-  List only parameters without detail
+      USAGE
+      -----
+      puppet describe [-h|--help] [-s|--short] [-p|--providers] [-l|--list] [-m|--meta]
 
 
-EXAMPLE
--------
-    $ puppet describe --list
-    $ puppet describe file --providers
-    $ puppet describe user -s -m
+      OPTIONS
+      -------
+      * --help:
+        Print this help text
+
+      * --providers:
+        Describe providers in detail for each type
+
+      * --list:
+        List all types
+
+      * --meta:
+        List all metaparameters
+
+      * --short:
+        List only parameters without detail
 
 
-AUTHOR
-------
-David Lutterkort
+      EXAMPLE
+      -------
+          $ puppet describe --list
+          $ puppet describe file --providers
+          $ puppet describe user -s -m
 
 
-COPYRIGHT
----------
-Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
+      AUTHOR
+      ------
+      David Lutterkort
+
+
+      COPYRIGHT
+      ---------
+      Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
     HELP
   end
@@ -249,5 +249,4 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
     handle_help(nil) unless options[:list] || options[:types].size > 0
     $stderr.puts "Warning: ignoring types when listing all types" if options[:list] && options[:types].size > 0
   end
-
 end

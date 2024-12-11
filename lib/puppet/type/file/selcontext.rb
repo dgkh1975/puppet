@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Manage SELinux context of files.
 #
 # This code actually manages three pieces of data in the context.
@@ -19,7 +21,6 @@
 #
 # See https://www.nsa.gov/selinux/ for complete docs on SELinux.
 
-
 module Puppet
   require_relative '../../../puppet/util/selinux'
 
@@ -28,35 +29,37 @@ module Puppet
 
     def retrieve
       return :absent unless @resource.stat
-      context = self.get_selinux_current_context(@resource[:path])
+
+      context = get_selinux_current_context(@resource[:path])
       is = parse_selinux_context(name, context)
       if name == :selrange and selinux_support?
-        self.selinux_category_to_label(is)
+        selinux_category_to_label(is)
       else
         is
       end
     end
 
     def retrieve_default_context(property)
+      return nil if Puppet::Util::Platform.windows?
       if @resource[:selinux_ignore_defaults] == :true
         return nil
       end
 
-      context = self.get_selinux_default_context(@resource[:path], @resource[:ensure])
+      context = get_selinux_default_context_with_handle(@resource[:path], provider.class.selinux_handle, @resource[:ensure])
       unless context
         return nil
       end
 
-      property_default = self.parse_selinux_context(property, context)
-      self.debug "Found #{property} default '#{property_default}' for #{@resource[:path]}" if not property_default.nil?
+      property_default = parse_selinux_context(property, context)
+      debug "Found #{property} default '#{property_default}' for #{@resource[:path]}" unless property_default.nil?
       property_default
     end
 
     def insync?(value)
-      if not selinux_support?
+      if !selinux_support?
         debug("SELinux bindings not found. Ignoring parameter.")
         true
-      elsif not selinux_label_support?(@resource[:path])
+      elsif !selinux_label_support?(@resource[:path])
         debug("SELinux not available for this filesystem. Ignoring parameter.")
         true
       else
@@ -65,25 +68,25 @@ module Puppet
     end
 
     def unsafe_munge(should)
-      if not selinux_support?
+      unless selinux_support?
         return should
       end
 
       if name == :selrange
-        self.selinux_category_to_label(should)
+        selinux_category_to_label(should)
       else
         should
       end
     end
 
     def sync
-      self.set_selinux_context(@resource[:path], @should, name)
+      set_selinux_context(@resource[:path], @should, name)
       :file_changed
     end
   end
 
   Puppet::Type.type(:file).newparam(:selinux_ignore_defaults) do
-    desc "If this is set then Puppet will not ask SELinux (via matchpathcon) to
+    desc "If this is set, Puppet will not call the SELinux function selabel_lookup to
       supply defaults for the SELinux attributes (seluser, selrole,
       seltype, and selrange). In general, you should leave this set at its
       default and only set it to true when you need Puppet to not try to fix
@@ -96,47 +99,45 @@ module Puppet
   Puppet::Type.type(:file).newproperty(:seluser, :parent => Puppet::SELFileContext) do
     desc "What the SELinux user component of the context of the file should be.
       Any valid SELinux user component is accepted.  For example `user_u`.
-      If not specified it defaults to the value returned by matchpathcon for
+      If not specified, it defaults to the value returned by selabel_lookup for
       the file, if any exists.  Only valid on systems with SELinux support
       enabled."
 
     @event = :file_changed
-    defaultto { self.retrieve_default_context(:seluser) }
+    defaultto { retrieve_default_context(:seluser) }
   end
 
   Puppet::Type.type(:file).newproperty(:selrole, :parent => Puppet::SELFileContext) do
     desc "What the SELinux role component of the context of the file should be.
       Any valid SELinux role component is accepted.  For example `role_r`.
-      If not specified it defaults to the value returned by matchpathcon for
+      If not specified, it defaults to the value returned by selabel_lookup for
       the file, if any exists.  Only valid on systems with SELinux support
       enabled."
 
     @event = :file_changed
-    defaultto { self.retrieve_default_context(:selrole) }
+    defaultto { retrieve_default_context(:selrole) }
   end
 
   Puppet::Type.type(:file).newproperty(:seltype, :parent => Puppet::SELFileContext) do
     desc "What the SELinux type component of the context of the file should be.
       Any valid SELinux type component is accepted.  For example `tmp_t`.
-      If not specified it defaults to the value returned by matchpathcon for
+      If not specified, it defaults to the value returned by selabel_lookup for
       the file, if any exists.  Only valid on systems with SELinux support
       enabled."
 
     @event = :file_changed
-    defaultto { self.retrieve_default_context(:seltype) }
+    defaultto { retrieve_default_context(:seltype) }
   end
 
   Puppet::Type.type(:file).newproperty(:selrange, :parent => Puppet::SELFileContext) do
     desc "What the SELinux range component of the context of the file should be.
       Any valid SELinux range component is accepted.  For example `s0` or
-      `SystemHigh`.  If not specified it defaults to the value returned by
-      matchpathcon for the file, if any exists.  Only valid on systems with
+      `SystemHigh`.  If not specified, it defaults to the value returned by
+      selabel_lookup for the file, if any exists.  Only valid on systems with
       SELinux support enabled and that have support for MCS (Multi-Category
       Security)."
 
     @event = :file_changed
-    defaultto { self.retrieve_default_context(:selrange) }
+    defaultto { retrieve_default_context(:selrange) }
   end
-
 end
-

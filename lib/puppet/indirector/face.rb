@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/face'
 
 class Puppet::Indirector::Face < Puppet::Face
@@ -20,21 +22,21 @@ class Puppet::Indirector::Face < Puppet::Face
       face's manpage for more details.
     EOT
 
-    before_action do |action, args, options|
+    before_action do |_action, _args, options|
       set_terminus(options[:terminus])
     end
 
-    after_action do |action, args, options|
+    after_action do |_action, _args, _options|
       indirection.reset_terminus_class
     end
   end
 
   def self.indirections
-    Puppet::Indirector::Indirection.instances.collect { |t| t.to_s }.sort
+    Puppet::Indirector::Indirection.instances.collect(&:to_s).sort
   end
 
   def self.terminus_classes(indirection)
-    Puppet::Indirector::Terminus.terminus_classes(indirection.to_sym).collect { |t| t.to_s }.sort
+    Puppet::Indirector::Terminus.terminus_classes(indirection.to_sym).collect(&:to_s).sort
   end
 
   def call_indirection_method(method, key, options)
@@ -51,23 +53,13 @@ class Puppet::Indirector::Face < Puppet::Face
       raise RuntimeError, message, detail.backtrace
     end
 
-    return result
-  end
-
-  option "--extra " + _("HASH") do
-    summary _("Extra arguments to pass to the indirection request")
-    description <<-EOT
-      A terminus can take additional arguments to refine the operation, which
-      are passed as an arbitrary hash to the back-end.  Anything passed as
-      the extra value is just send direct to the back-end.
-    EOT
-    default_to do Hash.new end
+    result
   end
 
   action :destroy do
     summary _("Delete an object.")
     arguments _("<key>")
-    when_invoked {|key, options| call_indirection_method :destroy, key, options[:extra] }
+    when_invoked { |key, _options| call_indirection_method :destroy, key, {} }
   end
 
   action :find do
@@ -77,11 +69,10 @@ class Puppet::Indirector::Face < Puppet::Face
       # Default the key to Puppet[:certname] if none is supplied
       if args.length == 1
         key = Puppet[:certname]
-        options = args.last
       else
-        key, options = *args
+        key = args.first
       end
-      call_indirection_method :find, key, options[:extra]
+      call_indirection_method :find, key, {}
     end
   end
 
@@ -93,13 +84,13 @@ class Puppet::Indirector::Face < Puppet::Face
       currently accept data from STDIN, save actions cannot currently be invoked
       from the command line.
     EOT
-    when_invoked {|key, options| call_indirection_method :save, key, options[:extra] }
+    when_invoked { |key, _options| call_indirection_method :save, key, {} }
   end
 
   action :search do
     summary _("Search for an object or retrieve multiple objects.")
     arguments _("<query>")
-    when_invoked {|key, options| call_indirection_method :search, key, options[:extra] }
+    when_invoked { |key, _options| call_indirection_method :search, key, {} }
   end
 
   # Print the configuration for the current terminus class
@@ -111,7 +102,7 @@ class Puppet::Indirector::Face < Puppet::Face
       run mode with the '--run_mode' option.
     EOT
 
-    when_invoked do |options|
+    when_invoked do |_options|
       if indirection.terminus_class
         _("Run mode '%{mode}': %{terminus}") % { mode: Puppet.run_mode.name, terminus: indirection.terminus_class }
       else
@@ -143,11 +134,9 @@ class Puppet::Indirector::Face < Puppet::Face
   end
 
   def set_terminus(from)
-    begin
-      indirection.terminus_class = from
-    rescue => detail
-      msg = _("Could not set '%{indirection}' terminus to '%{from}' (%{detail}); valid terminus types are %{types}") % { indirection: indirection.name, from: from, detail: detail, types: self.class.terminus_classes(indirection.name).join(", ") }
-      raise detail, msg, detail.backtrace
-    end
+    indirection.terminus_class = from
+  rescue => detail
+    msg = _("Could not set '%{indirection}' terminus to '%{from}' (%{detail}); valid terminus types are %{types}") % { indirection: indirection.name, from: from, detail: detail, types: self.class.terminus_classes(indirection.name).join(", ") }
+    raise detail, msg, detail.backtrace
   end
 end

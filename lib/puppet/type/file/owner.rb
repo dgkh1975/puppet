@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet
   Puppet::Type.type(:file).newproperty(:owner) do
     include Puppet::Util::Warnings
@@ -18,7 +20,14 @@ module Puppet
       # evaluate this property, because they might be added during the catalog
       # apply.
       @should.map! do |val|
-        provider.name2uid(val) or raise "Could not find user #{val}"
+        uid = provider.name2uid(val)
+        if uid
+          uid
+        elsif provider.resource.noop?
+          return false
+        else
+          raise "Could not find user #{val}"
+        end
       end
 
       return true if @should.include?(current)
@@ -32,7 +41,7 @@ module Puppet
     end
 
     # We want to print names, not numbers
-    def is_to_s(currentvalue)
+    def is_to_s(currentvalue) # rubocop:disable Naming/PredicateName
       super(provider.uid2name(currentvalue) || currentvalue)
     end
 
@@ -41,4 +50,3 @@ module Puppet
     end
   end
 end
-

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::ModuleTool::Errors
   class ModuleToolError < Puppet::Error
     def v(version)
@@ -8,7 +10,7 @@ module Puppet::ModuleTool::Errors
       if @action == :upgrade
         "#{v(@installed_version)} -> #{v(@requested_version)}"
       else
-        "#{v(@installed_version || @requested_version)}"
+        v(@installed_version || @requested_version).to_s
       end
     end
   end

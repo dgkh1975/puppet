@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Algorithms and Containers project is Copyright (c) 2009 Kanwei Li
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -122,6 +124,7 @@ class Puppet::Graph::RbTreeMap
     result = nil
     if @root
       return unless has_key? key
+
       @root, result = delete_recursive(@root, key)
       @root.color = :black if @root
       @size -= 1
@@ -181,12 +184,14 @@ class Puppet::Graph::RbTreeMap
 
   def first
     return nil unless @root
+
     node = min_recursive(@root)
     [node.key, node.value]
   end
 
   def last
     return nil unless @root
+
     node = max_recursive(@root)
     [node.key, node.value]
   end
@@ -197,6 +202,7 @@ class Puppet::Graph::RbTreeMap
 
   class Node # :nodoc: all
     attr_accessor :color, :key, :value, :left, :right
+
     def initialize(key, value)
       @key = key
       @value = value
@@ -230,33 +236,41 @@ class Puppet::Graph::RbTreeMap
 
     def rotate_left
       r = @right
-      r_key, r_value = r.key, r.value
+      r_key = r.key
+      r_value = r.value
       b = r.left
       r.left = @left
       @left = r
       @right = r.right
       r.right = b
-      r.color, r.key, r.value = :red, @key, @value
-      @key, @value = r_key, r_value
+      r.color = :red
+      r.key = @key
+      r.value = @value
+      @key = r_key
+      @value = r_value
       self
     end
 
     def rotate_right
       l = @left
-      l_key, l_value = l.key, l.value
+      l_key = l.key
+      l_value = l.value
       b = l.right
       l.right = @right
       @right = l
       @left = l.left
       l.left = b
-      l.color, l.key, l.value = :red, @key, @value
-      @key, @value = l_key, l_value
+      l.color = :red
+      l.key = @key
+      l.value = @value
+      @key = l_key
+      @value = l_value
       self
     end
 
     def move_red_left
       colorflip
-      if (@right.left && @right.left.red?)
+      if @right.left && @right.left.red?
         @right.rotate_right
         rotate_left
         colorflip
@@ -266,7 +280,7 @@ class Puppet::Graph::RbTreeMap
 
     def move_red_right
       colorflip
-      if (@left.left && @left.left.red?)
+      if @left.left && @left.left.red?
         rotate_right
         colorflip
       end
@@ -286,6 +300,7 @@ class Puppet::Graph::RbTreeMap
 
   def recursive_yield(node, &blk)
     return unless node
+
     recursive_yield(node.left, &blk)
     yield node.key, node.value
     recursive_yield(node.right, &blk)
@@ -293,14 +308,15 @@ class Puppet::Graph::RbTreeMap
 
   def delete_recursive(node, key)
     if (key <=> node.key) == -1
-      node.move_red_left if ( !isred(node.left) && !isred(node.left.left) )
+      node.move_red_left if !isred(node.left) && !isred(node.left.left)
       node.left, result = delete_recursive(node.left, key)
     else
       node.rotate_right if isred(node.left)
-      if ( ( (key <=> node.key) == 0) && node.right.nil? )
+      if ((key <=> node.key) == 0) && node.right.nil?
         return nil, node.value
       end
-      if ( !isred(node.right) && !isred(node.right.left) )
+
+      if !isred(node.right) && !isred(node.right.left)
         node.move_red_right
       end
       if (key <=> node.key) == 0
@@ -313,40 +329,43 @@ class Puppet::Graph::RbTreeMap
         node.right, result = delete_recursive(node.right, key)
       end
     end
-    return node.fixup, result
+    [node.fixup, result]
   end
 
   def delete_min_recursive(node)
     if node.left.nil?
       return nil, node.value
     end
-    if ( !isred(node.left) && !isred(node.left.left) )
+
+    if !isred(node.left) && !isred(node.left.left)
       node.move_red_left
     end
     node.left, result = delete_min_recursive(node.left)
 
-    return node.fixup, result
+    [node.fixup, result]
   end
 
   def delete_max_recursive(node)
-    if (isred(node.left))
+    if isred(node.left)
       node = node.rotate_right
     end
     return nil, node.value if node.right.nil?
-    if ( !isred(node.right) && !isred(node.right.left) )
+
+    if !isred(node.right) && !isred(node.right.left)
       node.move_red_right
     end
     node.right, result = delete_max_recursive(node.right)
 
-    return node.fixup, result
+    [node.fixup, result]
   end
 
   def get_recursive(node, key)
     return nil if node.nil?
+
     case key <=> node.key
-    when  0 then return node
-    when -1 then return get_recursive(node.left, key)
-    when  1 then return get_recursive(node.right, key)
+    when 0 then node
+    when -1 then get_recursive(node.left, key)
+    when  1 then get_recursive(node.right, key)
     end
   end
 
@@ -369,14 +388,14 @@ class Puppet::Graph::RbTreeMap
     end
 
     case key <=> node.key
-    when  0 then node.value = value
+    when 0 then node.value = value
     when -1 then node.left = insert(node.left, key, value)
     when  1 then node.right = insert(node.right, key, value)
     end
 
-    node.rotate_left if (node.right && node.right.red?)
-    node.rotate_right if (node.left && node.left.red? && node.left.left && node.left.left.red?)
-    node.colorflip if (node.left && node.left.red? && node.right && node.right.red?)
+    node.rotate_left if node.right && node.right.red?
+    node.rotate_right if node.left && node.left.red? && node.left.left && node.left.left.red?
+    node.colorflip if node.left && node.left.red? && node.right && node.right.red?
     node
   end
 

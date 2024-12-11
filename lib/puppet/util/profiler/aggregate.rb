@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/profiler'
 require_relative '../../../puppet/util/profiler/wall_clock'
 
@@ -7,16 +9,12 @@ class Puppet::Util::Profiler::Aggregate < Puppet::Util::Profiler::WallClock
     @metrics_hash = Metric.new
   end
 
-  def shutdown()
+  def shutdown
     super
     @logger.call("AGGREGATE PROFILING RESULTS:")
     @logger.call("----------------------------")
     print_metrics(@metrics_hash, "")
     @logger.call("----------------------------")
-  end
-
-  def do_start(description, metric_id)
-    super(description, metric_id)
   end
 
   def do_finish(context, description, metric_id)
@@ -42,7 +40,7 @@ class Puppet::Util::Profiler::Aggregate < Puppet::Util::Profiler::WallClock
   end
 
   def print_metrics(metrics_hash, prefix)
-    metrics_hash.sort_by {|k,v| v.time }.reverse_each do |k,v|
+    metrics_hash.sort_by { |_k, v| v.time }.reverse_each do |k, v|
       @logger.call("#{prefix}#{k}: #{v.time} s (#{v.count} calls)")
       print_metrics(metrics_hash[k], "#{prefix}#{k} -> ")
     end
@@ -57,7 +55,7 @@ class Puppet::Util::Profiler::Aggregate < Puppet::Util::Profiler::WallClock
     attr_reader :count, :time
 
     def [](key)
-      if !has_key?(key)
+      unless has_key?(key)
         self[key] = Metric.new
       end
       super(key)
@@ -74,12 +72,11 @@ class Puppet::Util::Profiler::Aggregate < Puppet::Util::Profiler::WallClock
 
   class Timer
     def initialize
-      @start = Time.now
+      @start = Process.clock_gettime(Process::CLOCK_MONOTONIC, :float_second)
     end
 
     def stop
-      Time.now - @start
+      Process.clock_gettime(Process::CLOCK_MONOTONIC, :float_second) - @start
     end
   end
 end
-

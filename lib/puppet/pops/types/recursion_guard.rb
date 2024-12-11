@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
 # Keeps track of self recursion of conceptual 'this' and 'that' instances using two separate maps and
@@ -6,6 +8,10 @@ module Types
 # Puppet Type since both types may contain self references.
 #
 # All comparisons are made using the `object_id` of the instance rather than the instance itself.
+#
+# Hash#compare_by_identity is intentionally not used since we only need to keep
+# track of object ids we've seen before, based on object_id, so we don't store
+# entire objects in memory.
 #
 # @api private
 class RecursionGuard
@@ -24,14 +30,14 @@ class RecursionGuard
   # @param instance [Object] the instance to check
   # @return [Integer] the resulting state
   def recursive_this?(instance)
-    instance_variable_defined?(:@recursive_this_map) && @recursive_this_map.has_key?(instance.object_id)
+    instance_variable_defined?(:@recursive_this_map) && @recursive_this_map.has_key?(instance.object_id) # rubocop:disable Lint/HashCompareByIdentity
   end
 
   # Checks if recursion was detected for the given argument in the 'that' context
   # @param instance [Object] the instance to check
   # @return [Integer] the resulting state
   def recursive_that?(instance)
-    instance_variable_defined?(:@recursive_that_map) && @recursive_that_map.has_key?(instance.object_id)
+    instance_variable_defined?(:@recursive_that_map) && @recursive_that_map.has_key?(instance.object_id) # rubocop:disable Lint/HashCompareByIdentity
   end
 
   # Add the given argument as 'this' invoke the given block with the resulting state
@@ -40,7 +46,7 @@ class RecursionGuard
   def with_this(instance)
     if (@state & SELF_RECURSION_IN_THIS) == 0
       tc = this_count
-      @state = @state | SELF_RECURSION_IN_THIS if this_put(instance)
+      @state |= SELF_RECURSION_IN_THIS if this_put(instance)
       if tc < this_count
         # recursive state detected
         result = yield(@state)
@@ -60,7 +66,7 @@ class RecursionGuard
   def with_that(instance)
     if (@state & SELF_RECURSION_IN_THAT) == 0
       tc = that_count
-      @state = @state | SELF_RECURSION_IN_THAT if that_put(instance)
+      @state |= SELF_RECURSION_IN_THAT if that_put(instance)
       if tc < that_count
         # recursive state detected
         result = yield(@state)
@@ -79,7 +85,7 @@ class RecursionGuard
   # @return [Integer] the resulting state
   def add_this(instance)
     if (@state & SELF_RECURSION_IN_THIS) == 0
-      @state = @state | SELF_RECURSION_IN_THIS if this_put(instance)
+      @state |= SELF_RECURSION_IN_THIS if this_put(instance)
     end
     @state
   end
@@ -89,7 +95,7 @@ class RecursionGuard
   # @return [Integer] the resulting state
   def add_that(instance)
     if (@state & SELF_RECURSION_IN_THAT) == 0
-      @state = @state | SELF_RECURSION_IN_THAT if that_put(instance)
+      @state |= SELF_RECURSION_IN_THAT if that_put(instance)
     end
     @state
   end

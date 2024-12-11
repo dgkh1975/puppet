@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
-
 # A Puppet Language Type that exposes the {{SemanticPuppet::Version}} and {{SemanticPuppet::VersionRange}}.
 # The version type is parameterized with version ranges.
 #
@@ -8,11 +9,10 @@ module Types
 class PSemVerType < PScalarType
   def self.register_ptype(loader, ir)
     create_ptype(loader, ir, 'ScalarType',
-       'ranges' => {
-         KEY_TYPE => PArrayType.new(PVariantType.new([PSemVerRangeType::DEFAULT,PStringType::NON_EMPTY])),
-         KEY_VALUE => []
-       }
-    )
+                 'ranges' => {
+                   KEY_TYPE => PArrayType.new(PVariantType.new([PSemVerRangeType::DEFAULT, PStringType::NON_EMPTY])),
+                   KEY_VALUE => []
+                 })
   end
 
   attr_reader :ranges
@@ -24,7 +24,7 @@ class PSemVerType < PScalarType
   end
 
   def instance?(o, guard = nil)
-    o.is_a?(SemanticPuppet::Version) && (@ranges.empty? || @ranges.any? {|range| range.include?(o) })
+    o.is_a?(SemanticPuppet::Version) && (@ranges.empty? || @ranges.any? { |range| range.include?(o) })
   end
 
   def eql?(o)
@@ -119,7 +119,7 @@ class PSemVerType < PScalarType
   protected
 
   def _assignable?(o, guard)
-    return false unless o.class == self.class
+    return false unless o.instance_of?(self.class)
     return true if @ranges.empty?
     return false if o.ranges.empty?
 

@@ -1,11 +1,12 @@
+# frozen_string_literal: true
+
 # The Report service is used to submit run reports to the report server.
 #
 # @api public
 #
 class Puppet::HTTP::Service::Report < Puppet::HTTP::Service
-
   # @return [String] Default API for the report service
-  API = '/puppet/v3'.freeze
+  API = '/puppet/v3'
 
   # Use `Puppet::HTTP::Session.route_to(:report)` to create or get an instance of this class.
   #
@@ -46,7 +47,7 @@ class Puppet::HTTP::Service::Report < Puppet::HTTP::Service
       with_base_url("/report/#{name}"),
       serialize(formatter, report),
       headers: headers,
-      params: { environment: environment },
+      params: { environment: environment }
     )
 
     # override parent's process_response handling
@@ -54,11 +55,8 @@ class Puppet::HTTP::Service::Report < Puppet::HTTP::Service
 
     if response.success?
       response
-    elsif !@session.supports?(:report, 'json') && Puppet[:preferred_serialization_format] != 'pson'
-      #TRANSLATORS "pson", "preferred_serialization_format", and "puppetserver" should not be translated
-      raise Puppet::HTTP::ProtocolError.new(_("To submit reports to a server running puppetserver %{server_version}, set preferred_serialization_format to pson") % { server_version: response[Puppet::HTTP::HEADER_PUPPET_VERSION]})
     else
-      raise Puppet::HTTP::ResponseError.new(response)
+      raise Puppet::HTTP::ResponseError, response
     end
   end
 end

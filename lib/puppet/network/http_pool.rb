@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/network/http/connection'
 
 module Puppet::Network; end
@@ -8,12 +10,12 @@ module Puppet::Network; end
 # @deprecated Use {Puppet::HTTP::Client} instead.
 #
 module Puppet::Network::HttpPool
-
   @http_client_class = Puppet::Network::HTTP::Connection
 
   def self.http_client_class
     @http_client_class
   end
+
   def self.http_client_class=(klass)
     @http_client_class = klass
   end
@@ -34,12 +36,11 @@ module Puppet::Network::HttpPool
 
     if verify_peer
       verifier = Puppet::SSL::Verifier.new(host, nil)
-      http_client_class.new(host, port, use_ssl: use_ssl, verifier: verifier)
     else
       ssl = Puppet::SSL::SSLProvider.new
       verifier = Puppet::SSL::Verifier.new(host, ssl.create_insecure_context)
-      http_client_class.new(host, port, use_ssl: use_ssl, verifier: verifier)
     end
+    http_client_class.new(host, port, use_ssl: use_ssl, verifier: verifier)
   end
 
   # Retrieve a connection for the given host and port.

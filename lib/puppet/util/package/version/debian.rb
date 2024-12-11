@@ -1,12 +1,14 @@
+# frozen_string_literal: true
+
 module Puppet::Util::Package::Version
   class Debian < Numeric
     include Comparable
 
     # Version string matching regexes
-    REGEX_EPOCH   = '(?:([0-9]+):)?'
+    REGEX_EPOCH = '(?:([0-9]+):)?'
     # alphanumerics and the characters . + - ~ , starts with a digit, ~ only of debian_revision is present
     REGEX_UPSTREAM_VERSION = '([\.\+~0-9a-zA-Z-]+?)'
-    #alphanumerics and the characters + . ~
+    # alphanumerics and the characters + . ~
     REGEX_DEBIAN_REVISION = '(?:-([\.\+~0-9a-zA-Z]*))?'
 
     REGEX_FULL    = REGEX_EPOCH + REGEX_UPSTREAM_VERSION + REGEX_DEBIAN_REVISION.freeze
@@ -42,6 +44,7 @@ module Puppet::Util::Package::Version
 
     def <=>(other)
       return nil unless other.is_a?(self.class)
+
       cmp = @epoch <=> other.epoch
       if cmp == 0
         cmp = compare_upstream_version(other)
@@ -96,7 +99,7 @@ module Puppet::Util::Package::Version
       mine ||= ''
       yours ||= ''
       while mine_index < mine.length && yours_index < yours.length && cmp == 0
-        #handle ~
+        # handle ~
         _mymatch, mytilde = *match_tildes(mine.slice(mine_index..-1))
         mytilde ||= ''
 
@@ -107,42 +110,41 @@ module Puppet::Util::Package::Version
         mine_index += mytilde.length
         yours_index += yourstilde.length
 
-        if cmp == 0 # handle letters
+        next unless cmp == 0 # handle letters
 
-          _mymatch, myletters = *match_letters(mine.slice(mine_index..-1))
-          myletters ||= ''
+        _mymatch, myletters = *match_letters(mine.slice(mine_index..-1))
+        myletters ||= ''
 
-          _yoursmatch, yoursletters = *match_letters(yours.slice(yours_index..-1))
-          yoursletters ||= ''
+        _yoursmatch, yoursletters = *match_letters(yours.slice(yours_index..-1))
+        yoursletters ||= ''
 
-          cmp = myletters <=> yoursletters
-          mine_index += myletters.length
-          yours_index += yoursletters.length
+        cmp = myletters <=> yoursletters
+        mine_index += myletters.length
+        yours_index += yoursletters.length
 
-          if cmp == 0 # handle nonletters except tilde
-            _mymatch, mynon_letters = *match_non_letters(mine.slice(mine_index..-1))
-            mynon_letters ||= ''
+        next unless cmp == 0 # handle nonletters except tilde
 
-            _yoursmatch, yoursnon_letters = *match_non_letters(yours.slice(yours_index..-1))
-            yoursnon_letters ||= ''
+        _mymatch, mynon_letters = *match_non_letters(mine.slice(mine_index..-1))
+        mynon_letters ||= ''
 
-            cmp = mynon_letters <=> yoursnon_letters
-            mine_index += mynon_letters.length
-            yours_index += yoursnon_letters.length
+        _yoursmatch, yoursnon_letters = *match_non_letters(yours.slice(yours_index..-1))
+        yoursnon_letters ||= ''
 
-            if cmp == 0 # handle digits
-              _mymatch, mydigits = *match_digits(mine.slice(mine_index..-1))
-              mydigits ||= ''
+        cmp = mynon_letters <=> yoursnon_letters
+        mine_index += mynon_letters.length
+        yours_index += yoursnon_letters.length
 
-              _yoursmatch, yoursdigits = *match_digits(yours.slice(yours_index..-1))
-              yoursdigits ||= ''
+        next unless cmp == 0 # handle digits
 
-              cmp = mydigits.to_i <=> yoursdigits.to_i
-              mine_index += mydigits.length
-              yours_index += yoursdigits.length
-            end
-          end
-        end
+        _mymatch, mydigits = *match_digits(mine.slice(mine_index..-1))
+        mydigits ||= ''
+
+        _yoursmatch, yoursdigits = *match_digits(yours.slice(yours_index..-1))
+        yoursdigits ||= ''
+
+        cmp = mydigits.to_i <=> yoursdigits.to_i
+        mine_index += mydigits.length
+        yours_index += yoursdigits.length
       end
       if cmp == 0
         if mine_index < mine.length && match_tildes(mine[mine_index])
@@ -161,7 +163,7 @@ module Puppet::Util::Package::Version
     end
 
     def match_non_letters(a)
-      a.match(/^([\.\+-]+)/)
+      a.match(/^([.+-]+)/)
     end
 
     def match_tildes(a)

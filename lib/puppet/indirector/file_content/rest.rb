@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/file_serving/content'
 require_relative '../../../puppet/indirector/file_content'
 require_relative '../../../puppet/indirector/rest'
@@ -15,7 +17,7 @@ class Puppet::Indirector::FileContent::Rest < Puppet::Indirector::REST
 
     api.get_file_content(
       path: Puppet::Util.uri_unescape(url.path),
-      environment: request.environment.to_s,
+      environment: request.environment.to_s
     ) do |data|
       content << data
     end

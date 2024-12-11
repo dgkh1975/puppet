@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # The Lexer is responsible for turning source text into tokens.
 # This version is a performance enhanced lexer (in comparison to the 3.x and earlier "future parser" lexer.
 #
@@ -71,6 +72,7 @@ class Lexer2
   TOKEN_TIMES        = [:TIMES,        '*',   1].freeze
   TOKEN_MODULO       = [:MODULO,       '%',   1].freeze
 
+  # rubocop:disable Layout/SpaceBeforeComma
   TOKEN_NOT          = [:NOT,          '!',   1].freeze
   TOKEN_DOT          = [:DOT,          '.',   1].freeze
   TOKEN_PIPE         = [:PIPE,         '|',   1].freeze
@@ -81,6 +83,7 @@ class Lexer2
   TOKEN_SEMIC        = [:SEMIC,        ';',   1].freeze
   TOKEN_QMARK        = [:QMARK,        '?',   1].freeze
   TOKEN_TILDE        = [:TILDE,        '~',   1].freeze # lexed but not an operator in Puppet
+  # rubocop:enable Layout/SpaceBeforeComma
 
   TOKEN_REGEXP       = [:REGEXP,       nil,   0].freeze
 
@@ -103,9 +106,11 @@ class Lexer2
   TOKEN_HEREDOC        = [:HEREDOC,     nil,  0].freeze
 
   # EPP_START is currently a marker token, may later get syntax
+  # rubocop:disable Layout/ExtraSpacing
   TOKEN_EPPSTART    = [:EPP_START,      nil,  0].freeze
   TOKEN_EPPEND      = [:EPP_END,       '%>',  2].freeze
   TOKEN_EPPEND_TRIM = [:EPP_END_TRIM, '-%>',  3].freeze
+  # rubocop:enable Layout/ExtraSpacing
 
   # This is used for unrecognized tokens, will always be a single character. This particular instance
   # is not used, but is kept here for documentation purposes.
@@ -115,41 +120,41 @@ class Lexer2
   # Booleans are pre-calculated (rather than evaluating the strings "false" "true" repeatedly.
   #
   KEYWORDS = {
-    'case'     => [:CASE,     'case',     4],
-    'class'    => [:CLASS,    'class',    5],
-    'default'  => [:DEFAULT,  'default',  7],
-    'define'   => [:DEFINE,   'define',   6],
-    'if'       => [:IF,       'if',       2],
-    'elsif'    => [:ELSIF,    'elsif',    5],
-    'else'     => [:ELSE,     'else',     4],
+    'case' => [:CASE, 'case', 4],
+    'class' => [:CLASS, 'class', 5],
+    'default' => [:DEFAULT, 'default', 7],
+    'define' => [:DEFINE, 'define', 6],
+    'if' => [:IF, 'if', 2],
+    'elsif' => [:ELSIF, 'elsif', 5],
+    'else' => [:ELSE, 'else', 4],
     'inherits' => [:INHERITS, 'inherits', 8],
-    'node'     => [:NODE,     'node',     4],
-    'and'      => [:AND,      'and',      3],
-    'or'       => [:OR,       'or',       2],
-    'undef'    => [:UNDEF,    'undef',    5],
-    'false'    => [:BOOLEAN,  false,      5],
-    'true'     => [:BOOLEAN,  true,       4],
-    'in'       => [:IN,       'in',       2],
-    'unless'   => [:UNLESS,   'unless',   6],
+    'node' => [:NODE, 'node', 4],
+    'and' => [:AND, 'and', 3],
+    'or' => [:OR, 'or', 2],
+    'undef' => [:UNDEF,    'undef',    5],
+    'false' => [:BOOLEAN,  false,      5],
+    'true' => [:BOOLEAN, true, 4],
+    'in' => [:IN, 'in', 2],
+    'unless' => [:UNLESS, 'unless', 6],
     'function' => [:FUNCTION, 'function', 8],
-    'type'     => [:TYPE,     'type',     4],
-    'attr'     => [:ATTR,     'attr',     4],
-    'private'  => [:PRIVATE,  'private',  7],
+    'type' => [:TYPE,     'type',     4],
+    'attr' => [:ATTR,     'attr',     4],
+    'private' => [:PRIVATE, 'private', 7],
   }
 
-  KEYWORDS.each {|k,v| v[1].freeze; v.freeze }
+  KEYWORDS.each { |_k, v| v[1].freeze; v.freeze }
   KEYWORDS.freeze
 
   # Reverse lookup of keyword name to string
   KEYWORD_NAMES = {}
-  KEYWORDS.each {|k, v| KEYWORD_NAMES[v[0]] = k }
+  KEYWORDS.each { |k, v| KEYWORD_NAMES[v[0]] = k }
   KEYWORD_NAMES.freeze
 
-  PATTERN_WS        = %r{[[:blank:]\r]+}
-  PATTERN_NON_WS    = %r{\w+\b?}
+  PATTERN_WS        = /[[:blank:]\r]+/
+  PATTERN_NON_WS    = /\w+\b?/
 
   # The single line comment includes the line ending.
-  PATTERN_COMMENT   = %r{#.*\r?}
+  PATTERN_COMMENT   = /#.*\r?/
   PATTERN_MLCOMMENT = %r{/\*(.*?)\*/}m
 
   PATTERN_REGEX     = %r{/[^/]*/}
@@ -165,13 +170,13 @@ class Lexer2
   # The NAME and CLASSREF in 4x are strict. Each segment must start with
   # a letter a-z and may not contain dashes (\w includes letters, digits and _).
   #
-  PATTERN_CLASSREF       = %r{((::){0,1}[A-Z][\w]*)+}
-  PATTERN_NAME           = %r{^((::)?[a-z][\w]*)(::[a-z][\w]*)*$}
+  PATTERN_CLASSREF       = /((::){0,1}[A-Z]\w*)+/
+  PATTERN_NAME           = /^((::)?[a-z]\w*)(::[a-z]\w*)*$/
 
-  PATTERN_BARE_WORD     = %r{((?:::){0,1}(?:[a-z_](?:[\w-]*[\w])?))+}
+  PATTERN_BARE_WORD      = /((?:::){0,1}(?:[a-z_](?:[\w-]*\w)?))+/
 
-  PATTERN_DOLLAR_VAR     = %r{\$(::)?(\w+::)*\w+}
-  PATTERN_NUMBER         = %r{\b(?:0[xX][0-9A-Fa-f]+|0?\d+(?:\.\d+)?(?:[eE]-?\d+)?)\b}
+  PATTERN_DOLLAR_VAR     = /\$(::)?(\w+::)*\w+/
+  PATTERN_NUMBER         = /\b(?:0[xX][0-9A-Fa-f]+|0?\d+(?:\.\d+)?(?:[eE]-?\d+)?)\b/
 
   # PERFORMANCE NOTE:
   # Comparison against a frozen string is faster (than unfrozen).
@@ -180,10 +185,10 @@ class Lexer2
 
   attr_reader :locator
 
-  def initialize()
+  def initialize
     @selector = {
-      '.' =>  lambda { emit(TOKEN_DOT, @scanner.pos) },
-      ',' => lambda {  emit(TOKEN_COMMA, @scanner.pos) },
+      '.' => -> { emit(TOKEN_DOT, @scanner.pos) },
+      ',' => -> { emit(TOKEN_COMMA, @scanner.pos) },
       '[' => lambda do
         before = @scanner.pos
         # Must check the preceding character to see if it is whitespace.
@@ -197,7 +202,7 @@ class Lexer2
           emit(TOKEN_LBRACK, before)
         end
       end,
-      ']' => lambda { emit(TOKEN_RBRACK, @scanner.pos) },
+      ']' => -> { emit(TOKEN_RBRACK, @scanner.pos) },
       '(' => lambda do
         before = @scanner.pos
         # If first on a line, or only whitespace between start of line and '('
@@ -209,10 +214,10 @@ class Lexer2
           emit(TOKEN_LPAREN, before)
         end
       end,
-      ')' => lambda { emit(TOKEN_RPAREN, @scanner.pos) },
-      ';' => lambda { emit(TOKEN_SEMIC, @scanner.pos) },
-      '?' => lambda { emit(TOKEN_QMARK, @scanner.pos) },
-      '*' => lambda { emit(TOKEN_TIMES, @scanner.pos) },
+      ')' => -> { emit(TOKEN_RPAREN, @scanner.pos) },
+      ';' => -> { emit(TOKEN_SEMIC, @scanner.pos) },
+      '?' => -> { emit(TOKEN_QMARK, @scanner.pos) },
+      '*' => -> { emit(TOKEN_TIMES, @scanner.pos) },
       '%' => lambda do
         scn = @scanner
         before = scn.pos
@@ -245,14 +250,14 @@ class Lexer2
         emit(TOKEN_RBRACE, @scanner.pos)
       end,
 
-
       # TOKENS @, @@, @(
       '@' => lambda do
         scn = @scanner
         la = scn.peek(2)
-        if la[1] == '@'
+        case la[1]
+        when '@'
           emit(TOKEN_ATAT, scn.pos) # TODO; Check if this is good for the grammar
-        elsif la[1] == '('
+        when '('
           heredoc
         else
           emit(TOKEN_AT, scn.pos)
@@ -263,7 +268,11 @@ class Lexer2
       '|' => lambda do
         scn = @scanner
         la = scn.peek(3)
-        emit(la[1] == '>' ? (la[2] == '>' ? TOKEN_RRCOLLECT : TOKEN_RCOLLECT) : TOKEN_PIPE, scn.pos)
+        emit(if la[1] == '>'
+               la[2] == '>' ? TOKEN_RRCOLLECT : TOKEN_RCOLLECT
+             else
+               TOKEN_PIPE
+             end, scn.pos)
       end,
 
       # TOKENS =, =>, ==, =~
@@ -340,7 +349,7 @@ class Lexer2
         emit(la[1] == '>' ? TOKEN_IN_EDGE_SUB : TOKEN_TILDE, scn.pos)
       end,
 
-      '#' => lambda { @scanner.skip(PATTERN_COMMENT); nil },
+      '#' => -> { @scanner.skip(PATTERN_COMMENT); nil },
 
       # TOKENS '/', '/*' and '/ regexp /'
       '/' => lambda do
@@ -358,10 +367,11 @@ class Lexer2
             while escaped_end(value)
               more = scn.scan_until(PATTERN_REGEX_END)
               return emit(TOKEN_DIV, before) unless more
+
               value << more
             end
             regex = value.sub(PATTERN_REGEX_A, '').sub(PATTERN_REGEX_Z, '').gsub(PATTERN_REGEX_ESC, '/')
-            emit_completed([:REGEX, Regexp.new(regex), scn.pos-before], before)
+            emit_completed([:REGEX, Regexp.new(regex), scn.pos - before], before)
           else
             emit(TOKEN_DIV, before)
           end
@@ -422,7 +432,7 @@ class Lexer2
             value = scn.scan(PATTERN_CLASSREF)
             if value && scn.peek(2) != '::'
               after = scn.pos
-              emit_completed([:CLASSREF, value.freeze, after-before], before)
+              emit_completed([:CLASSREF, value.freeze, after - before], before)
             else
               # move to faulty position ('::<uc-letter>' was ok)
               scn.pos = scn.pos + 3
@@ -452,7 +462,7 @@ class Lexer2
         before = scn.pos
         value = scn.scan(PATTERN_DOLLAR_VAR)
         if value
-          emit_completed([:VARIABLE, value[1..-1].freeze, scn.pos - before], before)
+          emit_completed([:VARIABLE, value[1..].freeze, scn.pos - before], before)
         else
           # consume the $ and let higher layer complain about the error instead of getting a syntax error
           emit(TOKEN_VARIABLE_EMPTY, before)
@@ -485,12 +495,12 @@ class Lexer2
         ctx[:line_lexical_start] = @scanner.pos
         nil
       end,
-      '' => lambda { nil } # when the peek(1) returns empty
+      '' => -> { nil } # when the peek(1) returns empty
     }
 
-    [ ' ', "\t", "\r" ].each { |c| @selector[c] = lambda { @scanner.skip(PATTERN_WS); nil } }
+    [' ', "\t", "\r"].each { |c| @selector[c] = -> { @scanner.skip(PATTERN_WS); nil } }
 
-    [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].each do |c|
+    ('0'..'9').each do |c|
       @selector[c] = lambda do
         scn = @scanner
         before = scn.pos
@@ -511,20 +521,20 @@ class Lexer2
                 invalid_number = nil
                 before = scn.pos
                 break if before == 0
+
                 scn.pos = scn.pos - 1
               end
             end
             scn.pos = before
-            invalid_number = scn.peek(after - before) unless invalid_number
+            invalid_number ||= scn.peek(after - before)
           end
           assert_numeric(invalid_number, before)
           scn.pos = before + 1
-          lex_error(Issues::ILLEGAL_NUMBER, {:value => invalid_number})
+          lex_error(Issues::ILLEGAL_NUMBER, { :value => invalid_number })
         end
       end
     end
-    ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-      'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '_'].each do |c|
+    ('a'..'z').to_a.push('_').each do |c|
       @selector[c] = lambda do
         scn = @scanner
         before = scn.pos
@@ -546,8 +556,7 @@ class Lexer2
       end
     end
 
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-      'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'].each do |c|
+    ('A'..'Z').each do |c|
       @selector[c] = lambda do
         scn = @scanner
         before = scn.pos
@@ -573,7 +582,7 @@ class Lexer2
         emit([:OTHER, scn.peek(0), 1], scn.pos)
       end
     end
-    @selector.each { |k,v| k.freeze }
+    @selector.each { |k, _v| k.freeze }
     @selector.freeze
   end
 
@@ -595,7 +604,7 @@ class Lexer2
   # Clears the lexer state (it is not required to call this as it will be garbage collected
   # and the next lex call (lex_string, lex_file) will reset the internal state.
   #
-  def clear()
+  def clear
     # not really needed, but if someone wants to ensure garbage is collected as early as possible
     @scanner = nil
     @locator = nil
@@ -611,7 +620,7 @@ class Lexer2
     lex_string(string, nil)
   end
 
-  def lex_string(string, path=nil)
+  def lex_string(string, path = nil)
     initvars
     assert_not_bom(string)
     @scanner = StringScanner.new(string)
@@ -630,7 +639,11 @@ class Lexer2
     @scanner = StringScanner.new(string)
     @locator = locator || Locator.locator(string, '')
     @lexing_context[:escapes] = escapes || UQ_ESCAPES
-    @lexing_context[:uq_slurp_pattern] = interpolate ? (escapes.include?('$') ? SLURP_UQ_PATTERN : SLURP_UQNE_PATTERN) : SLURP_ALL_PATTERN
+    @lexing_context[:uq_slurp_pattern] = if interpolate
+                                           escapes.include?('$') ? SLURP_UQ_PATTERN : SLURP_UQNE_PATTERN
+                                         else
+                                           SLURP_ALL_PATTERN
+                                         end
   end
 
   # Convenience method, and for compatibility with older lexer. Use the lex_file instead.
@@ -666,7 +679,7 @@ class Lexer2
       :line_lexical_start => 0
     }
     # Use of --tasks introduces the new keyword 'plan'
-    @taskm_keywords = Puppet[:tasks] ? { 'plan' => [:PLAN, 'plan',  4], 'apply' => [:APPLY, 'apply', 5] }.freeze : EMPTY_HASH
+    @taskm_keywords = Puppet[:tasks] ? { 'plan' => [:PLAN, 'plan', 4], 'apply' => [:APPLY, 'apply', 5] }.freeze : EMPTY_HASH
   end
 
   # Scans all of the content and returns it in an array
@@ -674,7 +687,7 @@ class Lexer2
   #
   def fullscan
     result = []
-    scan {|token| result.push(token) }
+    scan { |token| result.push(token) }
     result
   end
 
@@ -691,7 +704,7 @@ class Lexer2
     # This makes a small but notable difference since instance member access is avoided for
     # every token in the lexed content.
     #
-    scn   = @scanner
+    scn = @scanner
     lex_error_without_pos(Issues::NO_INPUT_TO_LEXER) unless scn
 
     ctx   = @lexing_context
@@ -701,7 +714,7 @@ class Lexer2
     scn.skip(PATTERN_WS)
 
     # This is the lexer's main loop
-    until queue.empty? && scn.eos? do
+    until queue.empty? && scn.eos?
       token = queue.shift || selector[scn.peek(1)].call
       if token
         ctx[:after] = token[0]
@@ -771,7 +784,6 @@ class Lexer2
       true
     end
   end
-
 end
 end
 end

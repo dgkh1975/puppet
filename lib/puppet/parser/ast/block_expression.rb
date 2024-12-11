@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Evaluates contained expressions, produce result of the last
 #
 class Puppet::Parser::AST::BlockExpression < Puppet::Parser::AST::Branch
@@ -6,10 +8,10 @@ class Puppet::Parser::AST::BlockExpression < Puppet::Parser::AST::Branch
   end
 
   def sequence_with(other)
-    Puppet::Parser::AST::BlockExpression.new(:children => self.children + other.children)
+    Puppet::Parser::AST::BlockExpression.new(:children => children + other.children)
   end
 
   def to_s
-    "[" + @children.collect { |c| c.to_s }.join(', ') + "]"
+    "[" + @children.collect(&:to_s).join(', ') + "]"
   end
 end

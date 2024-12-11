@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/indirector'
 
 # A class for managing nodes, including their facts and environment.
@@ -16,12 +18,12 @@ class Puppet::Node
   indirects :node, :terminus_setting => :node_terminus, :doc => "Where to find node information.
     A node is composed of its name, its facts, and its environment."
 
-  attr_accessor :name, :classes, :source, :ipaddress, :parameters, :trusted_data, :environment_name
-  attr_reader :time, :facts
+  attr_accessor :name, :classes, :source, :ipaddress, :parameters, :environment_name
+  attr_reader :time, :facts, :trusted_data
 
   attr_reader :server_facts
 
-  ENVIRONMENT = 'environment'.freeze
+  ENVIRONMENT = 'environment'
 
   def initialize_from_hash(data)
     @name       = data['name']       || (raise ArgumentError, _("No name provided in serialized data"))
@@ -46,7 +48,7 @@ class Puppet::Node
       'environment' => environment.name.to_s,
     }
     result['classes'] = classes unless classes.empty?
-    serialized_params = self.serializable_parameters
+    serialized_params = serializable_parameters
     result['parameters'] = serialized_params unless serialized_params.empty?
     result
   end
@@ -58,9 +60,7 @@ class Puppet::Node
   end
 
   def environment
-    if @environment
-      @environment
-    else
+    unless @environment
       env = parameters[ENVIRONMENT]
       if env
         self.environment = env
@@ -74,8 +74,8 @@ class Puppet::Node
         self.environment = Puppet.lookup(:environments).get!(Puppet[:environment])
       end
 
-      @environment
     end
+    @environment
   end
 
   def environment=(env)
@@ -89,9 +89,8 @@ class Puppet::Node
     unless @environment.nil?
       # always set the environment parameter. It becomes top scope $environment for a manifest during catalog compilation.
       @parameters[ENVIRONMENT] = @environment.name.to_s
-      self.environment_name = @environment.name if instance_variable_defined?(:@environment_name)
+      self.environment_name = @environment.name
     end
-    @environment
   end
 
   def has_environment_instance?
@@ -100,6 +99,7 @@ class Puppet::Node
 
   def initialize(name, options = {})
     raise ArgumentError, _("Node names cannot be nil") unless name
+
     @name = name
 
     classes = options[:classes]
@@ -142,7 +142,7 @@ class Puppet::Node
       raise error
     end
 
-    if !@facts.nil?
+    unless @facts.nil?
       @facts.sanitize
       # facts should never modify the environment parameter
       orig_param_env = @parameters[ENVIRONMENT]
@@ -174,7 +174,7 @@ class Puppet::Node
 
   def add_server_facts(facts)
     # Append the current environment to the list of server facts
-    @server_facts = facts.merge({ "environment" => self.environment.name.to_s})
+    @server_facts = facts.merge({ "environment" => environment.name.to_s })
 
     # Merge the server facts into the parameters for the node
     merge(facts)
@@ -189,7 +189,7 @@ class Puppet::Node
   def split_name(name)
     list = name.split(".")
     tmp = []
-    list.each_with_index do |short, i|
+    list.each_with_index do |_short, i|
       tmp << list[0..i].join(".")
     end
     tmp.reverse
@@ -228,7 +228,7 @@ class Puppet::Node
     if trusted_param
       # Blows up if it is a parameter as it will be set as $trusted by the compiler as if it was a variable
       @parameters.delete('trusted')
-      unless trusted_param.is_a?(Hash) && %w{authenticated certname extensions}.all? {|key| trusted_param.has_key?(key) }
+      unless trusted_param.is_a?(Hash) && %w[authenticated certname extensions].all? { |key| trusted_param.has_key?(key) }
         # trusted is some kind of garbage, do not resurrect
         trusted_param = nil
       end
@@ -245,7 +245,7 @@ class Puppet::Node
     #
     # Note that trusted_data should be a hash, but (2) and (4) are not
     # hashes, so we to_h at the end
-    if !trusted_data
+    unless trusted_data
       trusted = Puppet.lookup(:trusted_information) do
         trusted_param || Puppet::Context::TrustedInformation.local(self)
       end

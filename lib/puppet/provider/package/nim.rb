@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require_relative '../../../puppet/util/package'
 
@@ -13,23 +15,21 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
 
   # The commands we are using on an AIX box are installed standard
   # (except nimclient) nimclient needs the bos.sysmgt.nim.client fileset.
-  commands    :nimclient  => "/usr/sbin/nimclient",
-              :lslpp      => "/usr/bin/lslpp",
-              :rpm        => "rpm"
+  commands    :nimclient => "/usr/sbin/nimclient",
+              :lslpp => "/usr/bin/lslpp",
+              :rpm => "rpm"
 
   # If NIM has not been configured, /etc/niminfo will not be present.
   # However, we have no way of knowing if the NIM server is not configured
   # properly.
-  confine  :exists => "/etc/niminfo"
+  confine :exists => "/etc/niminfo"
 
   has_feature :versionable
 
   attr_accessor :latest_info
 
-
-
   def self.srclistcmd(source)
-    [ command(:nimclient), "-o", "showres", "-a", "installp_flags=L", "-a", "resource=#{source}" ]
+    [command(:nimclient), "-o", "showres", "-a", "installp_flags=L", "-a", "resource=#{source}"]
   end
 
   def uninstall
@@ -62,7 +62,7 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
 
     pkg = @resource[:name]
 
-    version_specified = (useversion and (! @resource.should(:ensure).is_a? Symbol))
+    version_specified = (useversion and (!@resource.should(:ensure).is_a? Symbol))
 
     # This is unfortunate for a couple of reasons.  First, because of a subtle
     # difference in the command-line syntax for installing an RPM vs an
@@ -81,7 +81,7 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
     # switch back to the metaprogrammed stuff, and just parse all of the output
     # in Ruby... but we'd be doing an awful lot of unnecessary work.
     showres_command = "/usr/sbin/nimclient -o showres -a resource=#{source} |/usr/bin/grep -p -E "
-    if (version_specified)
+    if version_specified
       version = @resource.should(:ensure)
       showres_command << "'#{Regexp.escape(pkg)}( |-)#{Regexp.escape(version)}'"
     else
@@ -90,18 +90,17 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
     end
     output = Puppet::Util::Execution.execute(showres_command)
 
-
-    if (version_specified)
+    if version_specified
       package_type = determine_package_type(output, pkg, version)
     else
       package_type, version = determine_latest_version(output, pkg)
     end
 
-    if (package_type == nil)
+    if package_type.nil?
 
       errmsg = if version_specified
                  _("Unable to find package '%{package}' with version '%{version}' on lpp_source '%{source}'") %
-                     { package: pkg, version: version, source: source }
+                   { package: pkg, version: version, source: source }
                else
                  _("Unable to find package '%{package}' on lpp_source '%{source}'") % { package: pkg, source: source }
                end
@@ -113,10 +112,10 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
     # to add that value to our installation command.  However, if there is only
     # one version of the package available, `version` will be set to `nil`, and
     # we don't need to add the version string to the command.
-    if (version)
+    if version
       # Now we know if the package type is RPM or not, and we can adjust our
       # `pkg` string for passing to the install command accordingly.
-      if (package_type == :rpm)
+      if package_type == :rpm
         # RPMs expect a hyphen between the package name and the version number
         version_separator = "-"
       else
@@ -144,7 +143,6 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
       end
     end
   end
-
 
   private
 
@@ -180,7 +178,6 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
   #   @@R:mypackage.foo-1.2.3-4 1.2.3-4
   #   @@R:mypackage.foo-1.2.3-8 1.2.3-8
 
-
   # Parse the output of a `nimclient -o showres` command.  Returns a two-dimensional
   # hash, where the first-level keys are package names, the second-level keys are
   # version number strings for all of the available version numbers for a package,
@@ -205,7 +202,7 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
   # leading or trailing whitespace (including newlines) from the resulting
   # strings and then returns them as an array.
   def split_into_paragraphs(showres_output)
-    showres_output.split(/^\s*$/).map { |p| p.strip! }
+    showres_output.split(/^\s*$/).map(&:strip!)
   end
 
   def parse_showres_header_line(line)
@@ -248,12 +245,12 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
     package_string = match.captures[1]
 
     case package_type_flag
-      when "I","S"
-        parse_installp_package_string(package_string)
-      when "R"
-        parse_rpm_package_string(package_string)
-      else
-        self.fail _("Unrecognized package type specifier: '%{package_type_flag}' in package line:\n'%{line}'") % { package_type_flag: package_type_flag, line: line }
+    when "I", "S"
+      parse_installp_package_string(package_string)
+    when "R"
+      parse_rpm_package_string(package_string)
+    else
+      self.fail _("Unrecognized package type specifier: '%{package_type_flag}' in package line:\n'%{line}'") % { package_type_flag: package_type_flag, line: line }
     end
   end
 
@@ -271,21 +268,23 @@ Puppet::Type.type(:package).provide :nim, :parent => :aix, :source => :aix do
     unless packages.has_key?(package_name)
       return nil
     end
-    if (packages[package_name].count == 1)
+
+    if packages[package_name].count == 1
       version = packages[package_name].keys[0]
-      return packages[package_name][version], nil
+      [packages[package_name][version], nil]
     else
       versions = packages[package_name].keys
       latest_version = (versions.sort { |a, b| Puppet::Util::Package.versioncmp(b, a) })[0]
-      return packages[package_name][latest_version], latest_version
+      [packages[package_name][latest_version], latest_version]
     end
   end
 
   def determine_package_type(showres_output, package_name, version)
     packages = parse_showres_output(showres_output)
-    unless (packages.has_key?(package_name) and packages[package_name].has_key?(version))
+    unless packages.has_key?(package_name) and packages[package_name].has_key?(version)
       return nil
     end
+
     packages[package_name][version]
   end
 end

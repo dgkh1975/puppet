@@ -15,19 +15,12 @@ class AgentTestClient
   end
 end
 
-def without_warnings
-  flag = $VERBOSE
-  $VERBOSE = nil
-  yield
-  $VERBOSE = flag
-end
-
 describe Puppet::Agent do
   before do
     @agent = Puppet::Agent.new(AgentTestClient, false)
 
-    # make Puppet::Application safe for stubbing; restore in an :after block; silence warnings for this.
-    without_warnings { Puppet::Application = Class.new(Puppet::Application) }
+    # make Puppet::Application safe for stubbing
+    stub_const('Puppet::Application', Class.new(Puppet::Application))
     allow(Puppet::Application).to receive(:clear?).and_return(true)
     Puppet::Application.class_eval do
       class << self
@@ -36,11 +29,10 @@ describe Puppet::Agent do
         end
       end
     end
-  end
 
-  after do
-    # restore Puppet::Application from stub-safe subclass, and silence warnings
-    without_warnings { Puppet::Application = Puppet::Application.superclass }
+    ssl_context = Puppet::SSL::SSLContext.new
+    machine = instance_double("Puppet::SSL::StateMachine", ensure_client_certificate: ssl_context)
+    allow(Puppet::SSL::StateMachine).to receive(:new).and_return(machine)
   end
 
   it "should set its client class at initialization" do
@@ -97,6 +89,8 @@ describe Puppet::Agent do
     end
 
     it "should splay" do
+      Puppet[:splay] = true
+
       expect(@agent).to receive(:splay)
 
       @agent.run
@@ -167,7 +161,7 @@ describe Puppet::Agent do
       client = AgentTestClient.new
       expect(AgentTestClient).to receive(:new).and_return(client)
 
-      expect(client).to receive(:run).with(:pluginsync => true, :other => :options)
+      expect(client).to receive(:run).with({:pluginsync => true, :other => :options})
       @agent.run(:other => :options)
     end
 
@@ -177,6 +171,26 @@ describe Puppet::Agent do
 
       expect(@agent).to receive(:lock).and_return(:result)
       expect(@agent.run).to eq(:result)
+    end
+
+    it "should check if it's disabled after splaying and log a message" do
+      Puppet[:splay] = true
+      Puppet[:splaylimit] = '5s'
+      Puppet[:onetime] = true
+
+      expect(@agent).to receive(:disabled?).and_return(false, true)
+
+      allow(Puppet).to receive(:notice).and_call_original
+      expect(Puppet).to receive(:notice).with(/Skipping run of .*; administratively disabled.*/)
+      @agent.run
+    end
+
+    it "should check if it's disabled after acquiring the lock and log a message" do
+      expect(@agent).to receive(:disabled?).and_return(false, true)
+
+      allow(Puppet).to receive(:notice).and_call_original
+      expect(Puppet).to receive(:notice).with(/Skipping run of .*; administratively disabled.*/)
+      @agent.run
     end
 
     describe "and a puppet agent is already running" do
@@ -195,7 +209,7 @@ describe Puppet::Agent do
         @agent.run
       end
 
-      it "should inform that a run is already in progres and try to run every X seconds if waitforlock is used" do
+      it "should inform that a run is already in progress and try to run every X seconds if waitforlock is used" do
         # so the locked file exists
         allow(File).to receive(:file?).and_return(true)
         # so we don't have to wait again for the run to exit (default maxwaitforcert is 60)
@@ -224,7 +238,7 @@ describe Puppet::Agent do
         @agent.run
       end
     end
-    
+
     describe "when should_fork is true", :if => Puppet.features.posix? && RUBY_PLATFORM != 'java' do
       before do
         @agent = Puppet::Agent.new(AgentTestClient, true)

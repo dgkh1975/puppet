@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'sub_lookup'
 
 module Puppet::Pops
@@ -14,7 +16,7 @@ class LookupKey
     qual_index = root_key.index(DOUBLE_COLON)
 
     @key = key
-    @module_name = qual_index.nil? ? nil : root_key[0..qual_index-1].freeze
+    @module_name = qual_index.nil? ? nil : root_key[0..qual_index - 1].freeze
     @root_key = root_key
     @segments = segments.empty? ? nil : segments.freeze
   end

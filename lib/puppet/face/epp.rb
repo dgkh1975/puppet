@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/face'
 require_relative '../../puppet/pops'
 require_relative '../../puppet/parser/files'
@@ -69,7 +71,7 @@ Puppet::Face.define(:epp, '0.0.1') do
       status = true # no validation error yet
       files = args
       if files.empty?
-        if not STDIN.tty?
+        if !STDIN.tty?
           tmp = validate_template_string(STDIN.read)
           status &&= tmp
         else
@@ -93,7 +95,7 @@ Puppet::Face.define(:epp, '0.0.1') do
       end
       if !missing_files.empty?
         raise Puppet::Error, _("One or more file(s) specified did not exist:\n%{missing_files_list}") %
-            { missing_files_list: missing_files.map { |f| "   #{f}" }.join("\n") }
+                             { missing_files_list: missing_files.map { |f| "   #{f}" }.join("\n") }
       else
         # Exit with 1 if there were errors
         raise Puppet::Error, _("Errors while validating epp") unless status
@@ -101,8 +103,7 @@ Puppet::Face.define(:epp, '0.0.1') do
     end
   end
 
-
-  action (:dump) do
+  action(:dump) do
     summary _("Outputs a dump of the internal template parse tree for debugging")
     arguments "[--format <old|pn|json>] [--pretty] { -e <source> | [<templates> ...] } "
     returns _("A dump of the resulting AST model unless there are syntax or validation errors.")
@@ -115,7 +116,7 @@ Puppet::Face.define(:epp, '0.0.1') do
       * 'pn' is the Puppet Extended S-Expression Notation.
       * 'json' outputs the same graph as 'pn' but with JSON syntax.
 
-      The output will be "pretty printed" when the option --pretty is given together with --format 'pn' or 'json'. 
+      The output will be "pretty printed" when the option --pretty is given together with --format 'pn' or 'json'.
       This option has no effect on the 'old' format.
 
       The command accepts one or more templates (.epp) files, or an -e followed by the template
@@ -173,20 +174,19 @@ Puppet::Face.define(:epp, '0.0.1') do
       if options[:e]
         buffer.print dump_parse(options[:e], 'command-line-string', options, false)
       elsif args.empty?
-        if ! STDIN.tty?
+        if !STDIN.tty?
           buffer.print dump_parse(STDIN.read, 'stdin', options, false)
         else
           raise Puppet::Error, _("No input to parse given on command line or stdin")
         end
       else
-        templates, missing_files = args.reduce([[],[]]) do |memo, file|
+        templates, missing_files = args.each_with_object([[], []]) do |file, memo|
           template_file = effective_template(file, compiler.environment)
           if template_file.nil?
             memo[1] << file
           else
             memo[0] << template_file
           end
-          memo
         end
 
         show_filename = templates.count > 1
@@ -194,16 +194,16 @@ Puppet::Face.define(:epp, '0.0.1') do
           buffer.print dump_parse(Puppet::FileSystem.read(file, :encoding => 'utf-8'), file, options, show_filename)
         end
 
-        if !missing_files.empty?
+        unless missing_files.empty?
           raise Puppet::Error, _("One or more file(s) specified did not exist:\n%{missing_files_list}") %
-              { missing_files_list:  missing_files.collect { |f| "   #{f}" }.join("\n") }
+                               { missing_files_list: missing_files.collect { |f| "   #{f}" }.join("\n") }
         end
       end
       buffer.string
     end
   end
 
-  action (:render) do
+  action(:render) do
     summary _("Renders an epp template as text")
     arguments "-e <source> | [<templates> ...] "
     returns _("A rendered result of one or more given templates.")
@@ -333,7 +333,6 @@ Puppet::Face.define(:epp, '0.0.1') do
 
       compiler = create_compiler(options)
       compiler.with_context_overrides('For rendering epp') do
-
         # Print to a buffer since the face needs to return the resulting string
         # and the face API is "all or nothing"
         #
@@ -342,7 +341,7 @@ Puppet::Face.define(:epp, '0.0.1') do
         if options[:e]
           buffer.print render_inline(options[:e], compiler, options)
         elsif args.empty?
-          if ! STDIN.tty?
+          if !STDIN.tty?
             buffer.print render_inline(STDIN.read, compiler, options)
           else
             raise Puppet::Error, _("No input to process given on command line or stdin")
@@ -351,22 +350,21 @@ Puppet::Face.define(:epp, '0.0.1') do
           show_filename = args.count > 1
           file_nbr = 0
           args.each do |file|
-            begin
-              buffer.print render_file(file, compiler, options, show_filename, file_nbr += 1)
-            rescue Puppet::ParseError => detail
-              Puppet.err(detail.message)
-              status = false
-            end
+            buffer.print render_file(file, compiler, options, show_filename, file_nbr += 1)
+          rescue Puppet::ParseError => detail
+            Puppet.err(detail.message)
+            status = false
           end
         end
         raise Puppet::Error, _("error while rendering epp") unless status
+
         buffer.string
       end
     end
   end
 
   def dump_parse(source, filename, options, show_filename = true)
-    output = ""
+    output = ''.dup
     evaluating_parser = Puppet::Pops::Parser::EvaluatingParser::EvaluatingEppParser.new
     begin
       if options[:validate]
@@ -405,9 +403,10 @@ Puppet::Face.define(:epp, '0.0.1') do
     values_file = options[:values_file]
     if values_file
       begin
-        if values_file =~ /\.yaml$/
+        case values_file
+        when /\.yaml$/
           template_values = Puppet::Util::Yaml.safe_load_file(values_file, [Symbol])
-        elsif values_file =~ /\.pp$/
+        when /\.pp$/
           evaluating_parser = Puppet::Pops::Parser::EvaluatingParser.new
           template_values = evaluating_parser.evaluate_file(compiler.topscope, values_file)
         else
@@ -416,7 +415,7 @@ Puppet::Face.define(:epp, '0.0.1') do
       rescue => e
         Puppet.err(_("Could not load --values_file %{error}") % { error: e.message })
       end
-      if !(template_values.nil? || template_values.is_a?(Hash))
+      unless template_values.nil? || template_values.is_a?(Hash)
         Puppet.err(_("--values_file option must evaluate to a Hash or undef/nil, got: '%{template_class}'") % { template_class: template_values.class })
       end
     end
@@ -450,7 +449,7 @@ Puppet::Face.define(:epp, '0.0.1') do
 
   def render_file(epp_template_name, compiler, options, show_filename, file_nbr)
     template_args = get_values(compiler, options)
-    output = ""
+    output = ''.dup
     begin
       if show_filename && options[:header]
         output << "\n" unless file_nbr == 1
@@ -529,6 +528,7 @@ Puppet::Face.define(:epp, '0.0.1') do
       unless given_facts.instance_of?(Hash)
         raise _("Incorrect formatted data in %{fact_file} given via the --facts flag") % { fact_file: fact_file }
       end
+
       # It is difficult to add to or modify the set of facts once the node is created
       # as changes does not show up in parameters. Rather than manually patching up
       # a node and risking future regressions, a new node is created from scratch
@@ -562,5 +562,4 @@ Puppet::Face.define(:epp, '0.0.1') do
       nil
     end
   end
-
 end

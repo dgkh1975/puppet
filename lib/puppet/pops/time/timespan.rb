@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/concurrent/thread_local_singleton'
 
 module Puppet::Pops
@@ -9,16 +11,16 @@ module Time
   NSECS_PER_HOUR = NSECS_PER_MIN  * 60
   NSECS_PER_DAY  = NSECS_PER_HOUR * 24
 
-  KEY_STRING = 'string'.freeze
-  KEY_FORMAT = 'format'.freeze
-  KEY_NEGATIVE = 'negative'.freeze
-  KEY_DAYS = 'days'.freeze
-  KEY_HOURS = 'hours'.freeze
-  KEY_MINUTES = 'minutes'.freeze
-  KEY_SECONDS = 'seconds'.freeze
-  KEY_MILLISECONDS = 'milliseconds'.freeze
-  KEY_MICROSECONDS = 'microseconds'.freeze
-  KEY_NANOSECONDS = 'nanoseconds'.freeze
+  KEY_STRING = 'string'
+  KEY_FORMAT = 'format'
+  KEY_NEGATIVE = 'negative'
+  KEY_DAYS = 'days'
+  KEY_HOURS = 'hours'
+  KEY_MINUTES = 'minutes'
+  KEY_SECONDS = 'seconds'
+  KEY_MILLISECONDS = 'milliseconds'
+  KEY_MICROSECONDS = 'microseconds'
+  KEY_NANOSECONDS = 'nanoseconds'
 
   # TimeData is a Numeric that stores its value internally as nano-seconds but will be considered to be seconds and fractions of
   # seconds when used in arithmetic or comparison with other Numeric types.
@@ -99,7 +101,8 @@ module Time
         hash[KEY_SECONDS] || 0,
         hash[KEY_MILLISECONDS] || 0,
         hash[KEY_MICROSECONDS] || 0,
-        hash[KEY_NANOSECONDS] || 0)
+        hash[KEY_NANOSECONDS] || 0
+      )
     end
 
     def self.parse(str, format = Format::DEFAULTS)
@@ -476,9 +479,10 @@ module Time
           # Using %L or %N to parse a string only makes sense when they are considered to be fractions. Using them
           # as a total quantity would introduce ambiguities.
           raise ArgumentError, _('Format specifiers %L and %N denotes fractions and must be used together with a specifier of higher magnitude') if use_total?
+
           n = group.to_i
           p = 9 - group.length
-          p <= 0 ? n : n * 10 ** p
+          p <= 0 ? n : n * 10**p
         end
 
         def create_format
@@ -518,7 +522,7 @@ module Time
         def multiplier
           width = @width || @default_width
           if width < 9
-            10 ** (9 - width)
+            10**(9 - width)
           else
             1
           end
@@ -529,8 +533,8 @@ module Time
           width = @width || @default_width
           if width < 9
             # Truncate digits to the right, i.e. let %6N reflect microseconds
-            ns /= 10 ** (9 - width)
-            ns %= 10 ** width unless use_total?
+            ns /= 10**(9 - width)
+            ns %= 10**width unless use_total?
           else
             ns %= NSECS_PER_SEC unless use_total?
           end
@@ -544,7 +548,7 @@ module Time
       end
 
       def format(timespan)
-        bld = timespan.negative? ? '-' : ''
+        bld = timespan.negative? ? '-'.dup : ''.dup
         @segments.each { |segment| segment.append_to(bld, timespan) }
         bld
       end
@@ -552,12 +556,15 @@ module Time
       def parse(timespan)
         md = regexp.match(timespan)
         raise ArgumentError, _("Unable to parse '%{timespan}' using format '%{format}'") % { timespan: timespan, format: @format } if md.nil?
+
         nanoseconds = 0
         md.captures.each_with_index do |group, index|
           segment = @segments[index]
           next if segment.is_a?(LiteralSegment)
+
           group.lstrip!
           raise ArgumentError, _("Unable to parse '%{timespan}' using format '%{format}'") % { timespan: timespan, format: @format } unless group =~ /\A[0-9]+\z/
+
           nanoseconds += segment.nanoseconds(group)
         end
         Timespan.new(timespan.start_with?('-') ? -nanoseconds : nanoseconds)
@@ -574,7 +581,7 @@ module Time
       end
 
       def build_regexp
-        bld = '\A-?'
+        bld = '\A-?'.dup
         @segments.each { |segment| segment.append_regexp(bld) }
         bld << '\z'
         Regexp.new(bld)
@@ -607,12 +614,12 @@ module Time
       ]
 
       def bad_format_specifier(format, start, position)
-        _("Bad format specifier '%{expression}' in '%{format}', at position %{position}") % { expression: format[start,position-start], format: format, position: position }
+        _("Bad format specifier '%{expression}' in '%{format}', at position %{position}") % { expression: format[start, position - start], format: format, position: position }
       end
 
       def append_literal(bld, codepoint)
         if bld.empty? || !bld.last.is_a?(Format::LiteralSegment)
-          bld << Format::LiteralSegment.new(''.concat(codepoint))
+          bld << Format::LiteralSegment.new(''.dup.concat(codepoint))
         else
           bld.last.concat(codepoint)
         end
@@ -620,12 +627,13 @@ module Time
 
       # States used by the #internal_parser function
       STATE_LITERAL = 0 # expects literal or '%'
-      STATE_PAD  = 1 # expects pad, width, or format character
+      STATE_PAD = 1 # expects pad, width, or format character
       STATE_WIDTH = 2 # expects width, or format character
 
       def internal_parse(str)
         bld = []
         raise ArgumentError, _('Format must be a String') unless str.is_a?(String)
+
         highest = -1
         state = STATE_LITERAL
         padchar = '0'
@@ -633,7 +641,7 @@ module Time
         position = -1
         fstart = 0
 
-        str.codepoints do |codepoint|
+        str.each_codepoint do |codepoint|
           position += 1
           if state == STATE_LITERAL
             if codepoint == 0x25 # '%'
@@ -653,10 +661,12 @@ module Time
             state = STATE_LITERAL
           when 0x2D # '-'
             raise ArgumentError, bad_format_specifier(str, fstart, position) unless state == STATE_PAD
+
             padchar = nil
             state = STATE_WIDTH
           when 0x5F # '_'
             raise ArgumentError, bad_format_specifier(str, fstart, position) unless state == STATE_PAD
+
             padchar = ' '
             state = STATE_WIDTH
           when 0x44 # 'D'
@@ -685,6 +695,7 @@ module Time
             state = STATE_LITERAL
           else # only digits allowed at this point
             raise ArgumentError, bad_format_specifier(str, fstart, position) unless codepoint >= 0x30 && codepoint <= 0x39
+
             if state == STATE_PAD && codepoint == 0x30
               padchar = '0'
             else
@@ -699,7 +710,8 @@ module Time
           end
         end
 
-        raise ArgumentError, bad_format_specifier(str, fstart, position)  unless state == STATE_LITERAL
+        raise ArgumentError, bad_format_specifier(str, fstart, position) unless state == STATE_LITERAL
+
         unless highest == -1
           hc = SEGMENT_CLASS_BY_ORDINAL[highest]
           bld.find { |s| s.instance_of?(hc) }.set_use_total

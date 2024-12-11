@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Returns the absolute value of a Numeric value, for example -34.56 becomes
 # 34.56. Takes a single `Integer` or `Float` value as an argument.
 #
@@ -18,7 +20,7 @@
 # ```puppet
 # abs(Numeric($str_val))
 # ```
-# 
+#
 # It is worth noting that `Numeric` can convert to absolute value
 # directly as in the following examples:
 #
@@ -45,14 +47,15 @@ Puppet::Functions.create_function(:abs) do
 
   def on_string(x)
     Puppet.warn_once('deprecations', 'abs_function_numeric_coerce_string',
-      _("The abs() function's auto conversion of String to Numeric is deprecated - change to convert input before calling"))
+                     _("The abs() function's auto conversion of String to Numeric is deprecated - change to convert input before calling"))
 
     # These patterns for conversion are backwards compatible with the stdlib
     # version of this function.
     #
-    if x =~ %r{^-?(?:\d+)(?:\.\d+){1}$}
+    case x
+    when /^-?(?:\d+)(?:\.\d+){1}$/
       x.to_f.abs
-    elsif x =~ %r{^-?\d+$}
+    when /^-?\d+$/
       x.to_i.abs
     else
       raise(ArgumentError, 'abs(): Requires float or integer to work with - was given non decimal string')

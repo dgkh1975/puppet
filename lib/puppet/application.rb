@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'optparse'
 require_relative '../puppet/util/command_line'
 require_relative '../puppet/util/constant_inflector'
@@ -5,7 +7,6 @@ require_relative '../puppet/error'
 require_relative '../puppet/application_support'
 
 module Puppet
-
 # Defines an abstract Puppet application.
 #
 # # Usage
@@ -108,7 +109,7 @@ class Application
   require_relative '../puppet/util'
   include Puppet::Util
 
-  DOCPATTERN = ::File.expand_path(::File.dirname(__FILE__) + "/util/command_line/*" )
+  DOCPATTERN = ::File.expand_path(::File.dirname(__FILE__) + "/util/command_line/*")
   CommandLineArgs = Struct.new(:subcommand_name, :args)
 
   @loader = Puppet::Util::Autoload.new(self, 'puppet/application')
@@ -169,6 +170,7 @@ class Application
     # Thus, long-running background processes can potentially finish their work before a restart.
     def controlled_run(&block)
       return unless clear?
+
       result = block.call
       Process.kill(:HUP, $PID) if restart_requested?
       result
@@ -176,16 +178,16 @@ class Application
 
     # used to declare code that handle an option
     def option(*options, &block)
-      long = options.find { |opt| opt =~ /^--/ }.gsub(/^--(?:\[no-\])?([^ =]+).*$/, '\1' ).tr('-','_')
+      long = options.find { |opt| opt =~ /^--/ }.gsub(/^--(?:\[no-\])?([^ =]+).*$/, '\1').tr('-', '_')
       fname = "handle_#{long}".intern
-      if (block_given?)
+      if block_given?
         define_method(fname, &block)
       else
         define_method(fname) do |value|
-          self.options["#{long}".to_sym] = value
+          self.options[long.to_s.to_sym] = value
         end
       end
-      self.option_parser_commands << [options, fname]
+      option_parser_commands << [options, fname]
     end
 
     def banner(banner = nil)
@@ -240,7 +242,7 @@ class Application
       ####  eventually we need to issue a deprecation warning here,
       ####  and then get rid of this stanza in a subsequent release.
       ################################################################
-      if (clazz.nil?)
+      if clazz.nil?
         class_name = application_name.capitalize
         clazz = try_load_class(class_name)
       end
@@ -249,17 +251,17 @@ class Application
       ################################################################
 
       if clazz.nil?
-        raise Puppet::Error.new(_("Unable to load application class '%{class_name}' from file 'puppet/application/%{application_name}.rb'") % { class_name: class_name, application_name: application_name })
+        raise Puppet::Error, _("Unable to load application class '%{class_name}' from file 'puppet/application/%{application_name}.rb'") % { class_name: class_name, application_name: application_name }
       end
 
-      return clazz
+      clazz
     end
 
     # Given the fully qualified name of a class, attempt to get the class instance.
     # @param [String] class_name the fully qualified name of the class to try to load
     # @return [Class] the Class instance, or nil? if it could not be loaded.
     def try_load_class(class_name)
-        return self.const_defined?(class_name) ? const_get(class_name) : nil
+      const_defined?(class_name) ? const_get(class_name) : nil
     end
     private :try_load_class
 
@@ -282,10 +284,10 @@ class Application
         Puppet.settings.preferred_run_mode = mode_name
       end
 
-      return @run_mode if @run_mode and not mode_name
+      return @run_mode if @run_mode and !mode_name
 
       require_relative '../puppet/util/run_mode'
-      @run_mode = Puppet::Util::RunMode[ mode_name || Puppet.settings.preferred_run_mode ]
+      @run_mode = Puppet::Util::RunMode[mode_name || Puppet.settings.preferred_run_mode]
     end
 
     # Sets environment_mode name. When acting as a compiler, the environment mode
@@ -303,6 +305,7 @@ class Application
     # @api public
     def environment_mode(mode_name)
       raise Puppet::Error, _("Invalid environment mode '%{mode_name}'") % { mode_name: mode_name } unless [:local, :remote, :not_required].include?(mode_name)
+
       @environment_mode = mode_name
     end
 
@@ -326,13 +329,13 @@ class Application
   # Every app responds to --version
   # See also `lib/puppet/util/command_line.rb` for some special case early
   # handling of this.
-  option("--version", "-V") do |arg|
-    puts "#{Puppet.version}"
+  option("--version", "-V") do |_arg|
+    puts Puppet.version
     exit(0)
   end
 
   # Every app responds to --help
-  option("--help", "-h") do |v|
+  option("--help", "-h") do |_v|
     puts help
     exit(0)
   end
@@ -362,14 +365,14 @@ class Application
   # @api public
   def app_defaults
     Puppet::Settings.app_defaults_for_run_mode(self.class.run_mode).merge(
-        :name => name
+      :name => name
     )
   end
 
   # Initialize application defaults. It's usually not necessary to override this method.
   # @return [void]
   # @api public
-  def initialize_app_defaults()
+  def initialize_app_defaults
     Puppet.settings.initialize_app_defaults(app_defaults)
   end
 
@@ -398,7 +401,6 @@ class Application
   # @return [void]
   # @api public
   def run
-
     # I don't really like the names of these lifecycle phases.  It would be nice to change them to some more meaningful
     # names, and make deprecated aliases.  --cprice 2012-03-16
 
@@ -450,7 +452,7 @@ class Application
   # @return [void]
   # @api public
   def setup_logs
-    handle_logdest_arg(Puppet[:logdest]) if !options[:setdest]
+    handle_logdest_arg(Puppet[:logdest]) unless options[:setdest]
 
     unless options[:setdest]
       if options[:debug] || options[:verbose]
@@ -479,12 +481,10 @@ class Application
     Puppet[:logdest] = arg
 
     logdest.each do |dest|
-      begin
-        Puppet::Util::Log.newdestination(dest)
-        options[:setdest] = true
-      rescue => detail
-        Puppet.log_and_raise(detail, _("Could not set logdest to %{dest}.") % { dest: arg })
-      end
+      Puppet::Util::Log.newdestination(dest)
+      options[:setdest] = true
+    rescue => detail
+      Puppet.log_and_raise(detail, _("Could not set logdest to %{dest}.") % { dest: arg })
     end
   end
 
@@ -499,16 +499,20 @@ class Application
   #   to log. Intended to be passed to super by subclasses.
   # @return [void]
   # @api public
-  def log_runtime_environment(extra_info=nil)
+  def log_runtime_environment(extra_info = nil)
     runtime_info = {
       'puppet_version' => Puppet.version,
-      'ruby_version'   => RUBY_VERSION,
-      'run_mode'       => self.class.run_mode.name,
+      'ruby_version' => RUBY_VERSION,
+      'run_mode' => self.class.run_mode.name
     }
+    unless Puppet::Util::Platform.jruby_fips?
+      runtime_info['openssl_version'] = "'#{OpenSSL::OPENSSL_VERSION}'"
+      runtime_info['openssl_fips'] = OpenSSL::OPENSSL_FIPS
+    end
     runtime_info['default_encoding'] = Encoding.default_external
     runtime_info.merge!(extra_info) unless extra_info.nil?
 
-    Puppet.debug 'Runtime environment: ' + runtime_info.map{|k,v| k + '=' + v.to_s}.join(', ')
+    Puppet.debug 'Runtime environment: ' + runtime_info.map { |k, v| k + '=' + v.to_s }.join(', ')
   end
 
   # Options defined with the `option` method are parsed from settings and the command line.
@@ -549,14 +553,14 @@ class Application
     self.class.option_parser_commands.each do |options, fname|
       option_parser.on(*options) do |value|
         # Call the method that "option()" created.
-        self.send(fname, value)
+        send(fname, value)
       end
     end
 
     # Scan command line.  We just hand any exceptions to our upper levels,
     # rather than printing help and exiting, so that we can meaningfully
     # respond with context-sensitive help if we want to. --daniel 2011-04-12
-    option_parser.parse!(self.command_line.args)
+    option_parser.parse!(command_line.args)
   end
 
   def handlearg(opt, val)
@@ -570,7 +574,7 @@ class Application
   end
 
   def name
-    self.class.to_s.sub(/.*::/,"").downcase.to_sym
+    self.class.to_s.sub(/.*::/, "").downcase.to_sym
   end
 
   # Return the text to display when running `puppet help`.

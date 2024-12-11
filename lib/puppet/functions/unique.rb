@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Produces a unique set of values from an `Iterable` argument.
 #
 # * If the argument is a `String`, the unique set of characters are returned as a new `String`.
@@ -56,15 +58,16 @@
 # ['aBc', 'AbC', 'bbb'].unique |$x| { String($x,'%d') }
 #
 # # will produce {[a] => [10], [b, c, d, e] => [11, 12, 100]}
-# {a => 10, b => 11, c => 12, d => 100, e => 11}.unique |$v| { if $v > 10 { big } else { $v } } 
+# {a => 10, b => 11, c => 12, d => 100, e => 11}.unique |$v| { if $v > 10 { big } else { $v } }
 # ```
 #
 # Note that for `Hash` the result is slightly different than for the other data types. For those the result contains the
 # *first-found* unique value, but for `Hash` it contains associations from a set of keys to the set of values clustered by the
 # equality lambda (or the default value equality if no lambda was given). This makes the `unique` function more versatile for hashes
 # in general, while requiring that the simple computation of "hash's unique set of values" is performed as `$hsh.map |$k, $v| { $v }.unique`.
-# (A unique set of hash keys is in general meaningless (since they are unique by definition) - although if processed with a different
-# lambda for equality that would be different. First map the hash to an array of its keys if such a unique computation is wanted). 
+# (Generally, it's meaningless to compute the unique set of hash keys because they are unique by definition. However, the
+# situation can change if the hash keys are processed with a different lambda for equality. For this unique computation,
+# first map the hash to an array of its keys.)
 # If the more advanced clustering is wanted for one of the other data types, simply transform it into a `Hash` as shown in the
 # following example.
 #
@@ -109,20 +112,20 @@ Puppet::Functions.create_function(:unique) do
   end
 
   def unique_hash(hash, &block)
-    block = lambda {|v| v } unless block_given?
-    result = Hash.new {|h, k| h[k] = {:keys =>[], :values =>[]} }
-    hash.each_pair do |k,v|
-      rc = result[ block.call(v) ]
+    block = ->(v) { v } unless block_given?
+    result = Hash.new { |h, k| h[k] = { :keys => [], :values => [] } }
+    hash.each_pair do |k, v|
+      rc = result[block.call(v)]
       rc[:keys] << k
       rc[:values] << v
     end
     # reduce the set of possibly duplicated value entries
     inverted = {}
-    result.each_pair {|k,v| inverted[v[:keys]] = v[:values].uniq }
+    result.each_pair { |_k, v| inverted[v[:keys]] = v[:values].uniq }
     inverted
   end
 
-  def unique_array(array,&block)
+  def unique_array(array, &block)
     array.uniq(&block)
   end
 

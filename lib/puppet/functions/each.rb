@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Runs a [lambda](https://puppet.com/docs/puppet/latest/lang_lambdas.html)
 # repeatedly using each value in a data structure, then returns the values unchanged.
 #
@@ -116,10 +118,9 @@ Puppet::Functions.create_function(:each) do
   end
 
   def foreach_Hash_1(hash)
-    enumerator = hash.each_pair
     begin
-      hash.size.times do
-        yield(enumerator.next)
+      hash.each_pair do |pair|
+        yield(pair)
       end
     rescue StopIteration
     end
@@ -128,10 +129,9 @@ Puppet::Functions.create_function(:each) do
   end
 
   def foreach_Hash_2(hash)
-    enumerator = hash.each_pair
     begin
-      hash.size.times do
-        yield(*enumerator.next)
+      hash.each_pair do |pair|
+        yield(*pair)
       end
     rescue StopIteration
     end
@@ -141,10 +141,12 @@ Puppet::Functions.create_function(:each) do
 
   def foreach_Enumerable_1(enumerable)
     enum = Puppet::Pops::Types::Iterable.asserted_iterable(self, enumerable)
-      begin
-        loop { yield(enum.next) }
-      rescue StopIteration
+    begin
+      enum.each do |value|
+        yield value
       end
+    rescue StopIteration
+    end
     # produces the receiver
     enumerable
   end
@@ -155,10 +157,8 @@ Puppet::Functions.create_function(:each) do
       enum.each { |entry| yield(*entry) }
     else
       begin
-        index = 0
-        loop do
-          yield(index, enum.next)
-          index += 1
+        enum.each_with_index do |value, index|
+          yield(index, value)
         end
       rescue StopIteration
       end

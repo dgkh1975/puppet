@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/file_bucket'
 require_relative '../../puppet/indirector'
 require_relative '../../puppet/util/checksums'
@@ -11,7 +13,7 @@ class Puppet::FileBucket::File
   extend Puppet::Indirector
   indirects :file_bucket_file, :terminus_class => :selector
 
-  attr :bucket_path
+  attr_reader :bucket_path
 
   def self.supported_formats
     [:binary]
@@ -24,12 +26,12 @@ class Puppet::FileBucket::File
     when Pathname
       @contents = FileContents.new(contents)
     else
-      raise ArgumentError.new(_("contents must be a String or Pathname, got a %{contents_class}") % { contents_class: contents.class })
+      raise ArgumentError, _("contents must be a String or Pathname, got a %{contents_class}") % { contents_class: contents.class }
     end
 
     @bucket_path = options.delete(:bucket_path)
     @checksum_type = Puppet[:digest_algorithm].to_sym
-    raise ArgumentError.new(_("Unknown option(s): %{opts}") % { opts: options.keys.join(', ') }) unless options.empty?
+    raise ArgumentError, _("Unknown option(s): %{opts}") % { opts: options.keys.join(', ') } unless options.empty?
   end
 
   # @return [Num] The size of the contents
@@ -71,7 +73,7 @@ class Puppet::FileBucket::File
   end
 
   def self.from_binary(contents)
-    self.new(contents)
+    new(contents)
   end
 
   class StringContents
@@ -100,7 +102,7 @@ class Puppet::FileBucket::File
     def to_binary
       # This is not so horrible as for FileContent, but still possible to mutate the content that the
       # checksum is based on... so semi horrible...
-      return @contents;
+      @contents;
     end
   end
 
@@ -123,7 +125,7 @@ class Puppet::FileBucket::File
     end
 
     def to_binary
-      Puppet::FileSystem::binread(@path)
+      Puppet::FileSystem.binread(@path)
     end
   end
 end

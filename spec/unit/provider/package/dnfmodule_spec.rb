@@ -24,18 +24,18 @@ describe Puppet::Type.type(:package).provider(:dnfmodule) do
   before(:each) { allow(Puppet::Util).to receive(:which).with('/usr/bin/dnf').and_return(dnf_path) }
 
   it "should have lower specificity" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:redhat)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:redhat)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return('8')
+    allow(Facter).to receive(:value).with('os.family').and_return(:redhat)
+    allow(Facter).to receive(:value).with('os.name').and_return(:redhat)
+    allow(Facter).to receive(:value).with('os.release.major').and_return('8')
     expect(described_class.specificity).to be < 200
   end
 
   describe "should be an opt-in provider" do
     Array(4..8).each do |ver|
       it "should not be default for redhat #{ver}" do
-        allow(Facter).to receive(:value).with(:operatingsystem).and_return('redhat')
-        allow(Facter).to receive(:value).with(:osfamily).and_return('redhat')
-        allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return(ver.to_s)
+        allow(Facter).to receive(:value).with('os.name').and_return('redhat')
+        allow(Facter).to receive(:value).with('os.family').and_return('redhat')
+        allow(Facter).to receive(:value).with('os.release.major').and_return(ver.to_s)
         expect(described_class).not_to be_default
       end
     end
@@ -123,7 +123,7 @@ describe Puppet::Type.type(:package).provider(:dnfmodule) do
         provider.install
       end
 
-      it "should just enable the module if it has no default profile(missing groups or modules)" do
+      it "should just enable the module if it has no default profile (missing groups or modules)" do
         dnf_exception = Puppet::ExecutionFailure.new("Error: Problems in request:\nmissing groups or modules: #{resource[:name]}")
         allow(provider).to receive(:execute).with(array_including('install')).and_raise(dnf_exception)
         resource[:ensure] = :present
@@ -132,10 +132,30 @@ describe Puppet::Type.type(:package).provider(:dnfmodule) do
         provider.install
       end
 
-      it "should just enable the module if it has no default profile(broken groups or modules)" do
+      it "should just enable the module with the right stream if it has no default profile (missing groups or modules)" do
+        stream = '12.3'
+        dnf_exception = Puppet::ExecutionFailure.new("Error: Problems in request:\nmissing groups or modules: #{resource[:name]}:#{stream}")
+        allow(provider).to receive(:execute).with(array_including('install')).and_raise(dnf_exception)
+        resource[:ensure] = stream
+        expect(provider).to receive(:execute).with(array_including('install')).ordered
+        expect(provider).to receive(:execute).with(array_including('enable')).ordered
+        provider.install
+      end
+
+      it "should just enable the module if it has no default profile (broken groups or modules)" do
         dnf_exception = Puppet::ExecutionFailure.new("Error: Problems in request:\nbroken groups or modules: #{resource[:name]}")
         allow(provider).to receive(:execute).with(array_including('install')).and_raise(dnf_exception)
         resource[:ensure] = :present
+        expect(provider).to receive(:execute).with(array_including('install')).ordered
+        expect(provider).to receive(:execute).with(array_including('enable')).ordered
+        provider.install
+      end
+
+      it "should just enable the module with the right stream if it has no default profile (broken groups or modules)" do
+        stream = '12.3'
+        dnf_exception = Puppet::ExecutionFailure.new("Error: Problems in request:\nbroken groups or modules: #{resource[:name]}:#{stream}")
+        allow(provider).to receive(:execute).with(array_including('install')).and_raise(dnf_exception)
+        resource[:ensure] = stream
         expect(provider).to receive(:execute).with(array_including('install')).ordered
         expect(provider).to receive(:execute).with(array_including('enable')).ordered
         provider.install
@@ -221,7 +241,7 @@ describe Puppet::Type.type(:package).provider(:dnfmodule) do
       it "does not try to disable if package is already disabled" do
         allow(described_class).to receive(:command).with(:dnf).and_return(dnf_path)
         allow(Puppet::Util::Execution).to receive(:execute)
-          .with("/usr/bin/dnf module list -d 0 -e 1")
+          .with("/usr/bin/dnf module list -y -d 0 -e 1")
           .and_return("baz 1.2 [d][x] common [d], complete  Package Description")
         resource[:ensure] = :disabled
         expect(provider).to be_insync(:disabled)
@@ -234,7 +254,7 @@ describe Puppet::Type.type(:package).provider(:dnfmodule) do
 
     it "returns an array of enabled modules" do
       allow(Puppet::Util::Execution).to receive(:execute)
-        .with("/usr/bin/dnf module list -d 0 -e 1")
+        .with("/usr/bin/dnf module list -y -d 0 -e 1")
         .and_return(packages)
 
       enabled_packages = described_class.instances.map { |package| package.properties }

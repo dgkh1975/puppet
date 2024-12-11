@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Digs into a value with dot notation to get a value from within a structure.
 #
 # **To dig into a given value**, call the function with (at least) two arguments:
@@ -131,12 +133,12 @@ Puppet::Functions.create_function(:get, Puppet::Functions::InternalFunction) do
     # like '0.1' the wanted result is `[0,1]`, not `["0", 1]`. The workaround here is to
     # prefix the navigation with `"x."` thus giving split_key a first segment that is a string.
     # The fake segment is then dropped.
-    segments = split_key("x." + navigation) {|err| _("Syntax error in dotted-navigation string")}
+    segments = split_key("x." + navigation) { |_err| _("Syntax error in dotted-navigation string") }
     segments.shift
 
     begin
       result = call_function('dig', value, *segments)
-      return result.nil? ? default_value : result
+      result.nil? ? default_value : result
     rescue Puppet::ErrorWithData => e
       if block_given?
         yield(e.error_data)

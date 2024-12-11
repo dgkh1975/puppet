@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/trusted_external'
 
 # @api private
@@ -52,9 +54,9 @@ class Puppet::Context::TrustedInformation
       if certificate.nil?
         Puppet.info(_('TrustedInformation expected a certificate, but none was given.'))
       else
-        extensions = Hash[certificate.custom_extensions.collect do |ext|
+        extensions = certificate.custom_extensions.to_h do |ext|
           [ext['oid'].freeze, ext['value'].freeze]
-        end]
+        end
       end
       new('remote', node_name, extensions, external)
     else
@@ -91,10 +93,10 @@ class Puppet::Context::TrustedInformation
   def self.deep_freeze(object)
     case object
     when Array
-      object.each {|v| deep_freeze(v) }
+      object.each { |v| deep_freeze(v) }
       object.freeze
     when Hash
-      object.each {|k, v| deep_freeze(k); deep_freeze(v) }
+      object.each { |k, v| deep_freeze(k); deep_freeze(v) }
       object.freeze
     when NilClass, Numeric, TrueClass, FalseClass
       # do nothing
@@ -109,12 +111,12 @@ class Puppet::Context::TrustedInformation
 
   def to_h
     {
-      'authenticated'.freeze => authenticated,
-      'certname'.freeze => certname,
-      'extensions'.freeze => extensions,
-      'hostname'.freeze => hostname,
-      'domain'.freeze => domain,
-      'external'.freeze => external,
+      'authenticated' => authenticated,
+      'certname' => certname,
+      'extensions' => extensions,
+      'hostname' => hostname,
+      'domain' => domain,
+      'external' => external,
     }.freeze
   end
 end

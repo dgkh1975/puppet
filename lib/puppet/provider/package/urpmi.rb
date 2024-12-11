@@ -1,14 +1,16 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:package).provide :urpmi, :parent => :rpm, :source => :rpm do
   desc "Support via `urpmi`."
   commands :urpmi => "urpmi", :urpmq => "urpmq", :rpm => "rpm", :urpme => "urpme"
 
-  defaultfor :operatingsystem => [:mandriva, :mandrake]
+  defaultfor 'os.name' => [:mandriva, :mandrake]
 
   has_feature :versionable
 
   def install
     should = @resource.should(:ensure)
-    self.debug "Ensuring => #{should}"
+    debug "Ensuring => #{should}"
     wanted = @resource[:name]
 
     # XXX: We don't actually deal with epochs here.
@@ -22,8 +24,8 @@ Puppet::Type.type(:package).provide :urpmi, :parent => :rpm, :source => :rpm do
 
     urpmi "--auto", wanted
 
-    unless self.query
-      raise Puppet::Error, _("Package %{name} was not present after trying to install it") % { name: self.name }
+    unless query
+      raise Puppet::Error, _("Package %{name} was not present after trying to install it") % { name: name }
     end
   end
 
@@ -32,17 +34,17 @@ Puppet::Type.type(:package).provide :urpmi, :parent => :rpm, :source => :rpm do
     output = urpmq "-S", @resource[:name]
 
     if output =~ /^#{Regexp.escape @resource[:name]}\s+:\s+.*\(\s+(\S+)\s+\)/
-      return $1
+      Regexp.last_match(1)
     else
       # urpmi didn't find updates, pretend the current
       # version is the latest
-      return @resource[:ensure]
+      @resource[:ensure]
     end
   end
 
   def update
     # Install in urpmi can be used for update, too
-    self.install
+    install
   end
 
   # For normal package removal the urpmi provider will delegate to the RPM

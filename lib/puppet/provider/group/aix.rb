@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Group Puppet provider for AIX. It uses standard commands to manage groups:
 #  mkgroup, rmgroup, lsgroup, chgroup
 require_relative '../../../puppet/provider/aix_object'
@@ -6,8 +8,8 @@ Puppet::Type.type(:group).provide :aix, :parent => Puppet::Provider::AixObject d
   desc "Group management for AIX."
 
   # This will the default provider for this platform
-  defaultfor :operatingsystem => :aix
-  confine :operatingsystem => :aix
+  defaultfor 'os.name' => :aix
+  confine 'os.name' => :aix
 
   # Commands that manage the element
   commands :list      => "/usr/sbin/lsgroup"

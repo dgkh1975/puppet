@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 # Configuration settings for a single directory Environment.
 # @api private
 class Puppet::Settings::EnvironmentConf
-
   ENVIRONMENT_CONF_ONLY_SETTINGS = [:modulepath, :manifest, :config_version].freeze
   VALID_SETTINGS = (ENVIRONMENT_CONF_ONLY_SETTINGS + [:environment_timeout, :environment_data_provider, :static_catalogs, :rich_data]).freeze
 
@@ -57,18 +58,18 @@ class Puppet::Settings::EnvironmentConf
     disable_per_environment_manifest = Puppet.settings.value(:disable_per_environment_manifest)
 
     fallback_manifest_directory =
-    if puppet_conf_manifest.absolute?
-      puppet_conf_manifest.to_s
-    else
-      File.join(@path_to_env, puppet_conf_manifest.to_s)
-    end
+      if puppet_conf_manifest.absolute?
+        puppet_conf_manifest.to_s
+      else
+        File.join(@path_to_env, puppet_conf_manifest.to_s)
+      end
 
     if disable_per_environment_manifest
       environment_conf_manifest = absolute(raw_setting(:manifest))
       if environment_conf_manifest && fallback_manifest_directory != environment_conf_manifest
-        #TRANSLATORS 'disable_per_environment_manifest' is a setting and 'environment.conf' is a file name and should not be translated
+        # TRANSLATORS 'disable_per_environment_manifest' is a setting and 'environment.conf' is a file name and should not be translated
         message = _("The 'disable_per_environment_manifest' setting is true, but the environment located at %{path_to_env} has a manifest setting in its environment.conf of '%{environment_conf}' which does not match the default_manifest setting '%{puppet_conf}'.") %
-            { path_to_env: @path_to_env, environment_conf: environment_conf_manifest, puppet_conf: puppet_conf_manifest }
+                  { path_to_env: @path_to_env, environment_conf: environment_conf_manifest, puppet_conf: puppet_conf_manifest }
         message += ' ' + _("If this environment is expecting to find modules in '%{environment_conf}', they will not be available!") % { environment_conf: environment_conf_manifest }
         Puppet.err(message)
       end
@@ -99,7 +100,7 @@ class Puppet::Settings::EnvironmentConf
   def modulepath
     default_modulepath = [File.join(@path_to_env, "modules")] + @global_module_path
     get_setting(:modulepath, default_modulepath) do |modulepath|
-      path = modulepath.kind_of?(String) ?
+      path = modulepath.is_a?(String) ?
         modulepath.split(File::PATH_SEPARATOR) :
         modulepath
       path.map { |p| expand_glob(absolute(p)) }.flatten.join(File::PATH_SEPARATOR)
@@ -142,23 +143,25 @@ class Puppet::Settings::EnvironmentConf
         _("Invalid sections in environment.conf at '%{path_to_conf_file}'. Environment conf may not have sections. The following sections are being ignored: '%{sections}'") % {
           path_to_conf_file: path_to_conf_file,
           sections: (section_keys - [:main]).join(',')
-        })
+        }
+      )
       valid = false
     end
 
     extraneous_settings = main.settings.map(&:name) - VALID_SETTINGS
-    if !extraneous_settings.empty?
+    unless extraneous_settings.empty?
       # warn once per config file path
       Puppet.warn_once(
         :invalid_settings, "EnvironmentConf-settings:#{path_to_conf_file}",
         _("Invalid settings in environment.conf at '%{path_to_conf_file}'. The following unknown setting(s) are being ignored: %{ignored_settings}") % {
           path_to_conf_file: path_to_conf_file,
           ignored_settings: extraneous_settings.join(', ')
-        })
+        }
+      )
       valid = false
     end
 
-    return valid
+    valid
   end
   private_class_method :validate
 
@@ -170,7 +173,8 @@ class Puppet::Settings::EnvironmentConf
 
   def expand_glob(path)
     return nil if path.nil?
-    if path =~ /[*?\[\{]/
+
+    if path =~ /[*?\[{]/
       Dir.glob(path)
     else
       path
@@ -179,6 +183,7 @@ class Puppet::Settings::EnvironmentConf
 
   def absolute(path)
     return nil if path.nil?
+
     if path =~ /^\$/
       # Path begins with $something interpolatable
       path
@@ -220,5 +225,4 @@ class Puppet::Settings::EnvironmentConf
       @environment.config_version
     end
   end
-
 end

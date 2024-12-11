@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/ffi/windows'
 
 module Puppet::Util::Windows
-
   # The Daemon class, based on the chef/win32-service implementation
   class Daemon
     include Puppet::FFI::Windows::Constants
@@ -73,16 +74,16 @@ module Puppet::Util::Windows
     NO_ERROR = 0
 
     # Wraps SetServiceStatus.
-    SetTheServiceStatus = Proc.new do |dwCurrentState, dwWin32ExitCode, dwCheckPoint, dwWaitHint|
-      ss = SERVICE_STATUS.new  # Current status of the service.
+    SetTheServiceStatus = proc do |dwCurrentState, dwWin32ExitCode, dwCheckPoint, dwWaitHint|
+      ss = SERVICE_STATUS.new # Current status of the service.
 
       # Disable control requests until the service is started.
       if dwCurrentState == SERVICE_START_PENDING
         ss[:dwControlsAccepted] = 0
       else
         ss[:dwControlsAccepted] =
-        SERVICE_ACCEPT_STOP|SERVICE_ACCEPT_SHUTDOWN|
-        SERVICE_ACCEPT_PAUSE_CONTINUE|SERVICE_ACCEPT_PARAMCHANGE
+          SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN |
+          SERVICE_ACCEPT_PAUSE_CONTINUE | SERVICE_ACCEPT_PARAMCHANGE
       end
 
       # Initialize ss structure.
@@ -96,7 +97,7 @@ module Puppet::Util::Windows
       @@dwServiceState = dwCurrentState
 
       # Send status of the service to the Service Controller.
-      if !SetServiceStatus(@@ssh, ss)
+      unless SetServiceStatus(@@ssh, ss)
         SetEvent(@@hStopEvent)
       end
     end
@@ -104,7 +105,7 @@ module Puppet::Util::Windows
     ERROR_CALL_NOT_IMPLEMENTED = 0x78
 
     # Handles control signals from the service control manager.
-    Service_Ctrl_ex = Proc.new do |dwCtrlCode, dwEventType, lpEventData, lpContext|
+    Service_Ctrl_ex = proc do |dwCtrlCode, _dwEventType, _lpEventData, _lpContext|
       @@waiting_control_code = dwCtrlCode;
       return_value = NO_ERROR
 
@@ -112,16 +113,16 @@ module Puppet::Util::Windows
         dwState = SERVICE_RUNNING
 
         case dwCtrlCode
-          when SERVICE_CONTROL_STOP
-            dwState = SERVICE_STOP_PENDING
-          when SERVICE_CONTROL_SHUTDOWN
-            dwState = SERVICE_STOP_PENDING
-          when SERVICE_CONTROL_PAUSE
-            dwState = SERVICE_PAUSED
-          when SERVICE_CONTROL_CONTINUE
-            dwState = SERVICE_RUNNING
-          #else
-            # TODO: Handle other control codes? Retain the current state?
+        when SERVICE_CONTROL_STOP
+          dwState = SERVICE_STOP_PENDING
+        when SERVICE_CONTROL_SHUTDOWN
+          dwState = SERVICE_STOP_PENDING
+        when SERVICE_CONTROL_PAUSE
+          dwState = SERVICE_PAUSED
+        when SERVICE_CONTROL_CONTINUE
+          dwState = SERVICE_RUNNING
+          # else
+          # TODO: Handle other control codes? Retain the current state?
         end
 
         # Set the status of the service except on interrogation.
@@ -144,73 +145,52 @@ module Puppet::Util::Windows
 
     # Called by the service control manager after the call to StartServiceCtrlDispatcher.
     Service_Main = FFI::Function.new(:void, [:ulong, :pointer], :blocking => false) do |dwArgc, lpszArgv|
-      begin
-        # Obtain the name of the service.
-        if lpszArgv.address != 0
-          argv = lpszArgv.get_array_of_string(0, dwArgc)
-          lpszServiceName = argv[0]
-        else
-          lpszServiceName = ''
-        end
-
-        # Args passed to Service.start
-        if(dwArgc > 1)
-          @@Argv = argv[1..-1]
-        else
-          @@Argv = nil
-        end
-
-        # Register the service ctrl handler.
-        @@ssh = RegisterServiceCtrlHandlerExW(
-          lpszServiceName,
-          Service_Ctrl_ex,
-          nil
-        )
-
-        # No service to stop, no service handle to notify, nothing to do but exit.
-        break if @@ssh == 0
-
-        # The service has started.
-        SetTheServiceStatus.call(SERVICE_RUNNING, NO_ERROR, 0, 0)
-
-        SetEvent(@@hStartEvent)
-
-        # Main loop for the service.
-        while(WaitForSingleObject(@@hStopEvent, 1000) != WAIT_OBJECT_0) do
-        end
-
-        # Main loop for the service.
-        while(WaitForSingleObject(@@hStopCompletedEvent, 1000) != WAIT_OBJECT_0) do
-        end
-      ensure
-        # Stop the service.
-        SetTheServiceStatus.call(SERVICE_STOPPED, NO_ERROR, 0, 0)
-      end
-    end
-
-    ThreadProc = FFI::Function.new(:ulong,[:pointer]) do |lpParameter|
-      ste = FFI::MemoryPointer.new(SERVICE_TABLE_ENTRYW, 2)
-
-      s = SERVICE_TABLE_ENTRYW.new(ste[0])
-      s[:lpServiceName] = FFI::MemoryPointer.from_string('')
-      s[:lpServiceProc] = lpParameter
-
-      s = SERVICE_TABLE_ENTRYW.new(ste[1])
-      s[:lpServiceName] = nil
-      s[:lpServiceProc] = nil
-
-      # No service to step, no service handle, no ruby exceptions, just terminate the thread..
-      if !StartServiceCtrlDispatcherW(ste)
-        return 1
+      # Obtain the name of the service.
+      if lpszArgv.address != 0
+        argv = lpszArgv.get_array_of_string(0, dwArgc)
+        lpszServiceName = argv[0]
+      else
+        lpszServiceName = ''
       end
 
-      return 0
+      # Args passed to Service.start
+      if dwArgc > 1
+        @@Argv = argv[1..]
+      else
+        @@Argv = nil
+      end
+
+      # Register the service ctrl handler.
+      @@ssh = RegisterServiceCtrlHandlerExW(
+        lpszServiceName,
+        Service_Ctrl_ex,
+        nil
+      )
+
+      # No service to stop, no service handle to notify, nothing to do but exit.
+      break if @@ssh == 0
+
+      # The service has started.
+      SetTheServiceStatus.call(SERVICE_RUNNING, NO_ERROR, 0, 0)
+
+      SetEvent(@@hStartEvent)
+
+      # Main loop for the service.
+      while WaitForSingleObject(@@hStopEvent, 1000) != WAIT_OBJECT_0
+      end
+
+      # Main loop for the service.
+      while WaitForSingleObject(@@hStopCompletedEvent, 1000) != WAIT_OBJECT_0
+      end
+    ensure
+      # Stop the service.
+      SetTheServiceStatus.call(SERVICE_STOPPED, NO_ERROR, 0, 0)
     end
 
     # This is a shortcut for Daemon.new + Daemon#mainloop.
     #
     def self.mainloop
-      self.new.mainloop
+      new.mainloop
     end
 
     # This is the method that actually puts your code into a loop and allows it
@@ -256,59 +236,59 @@ module Puppet::Util::Windows
         raise SystemCallError.new('CreateEvent', FFI.errno)
       end
 
-      hThread = CreateThread(nil, 0, ThreadProc, Service_Main, 0, nil)
+      hThread = Thread.new do
+        ste = FFI::MemoryPointer.new(SERVICE_TABLE_ENTRYW, 2)
 
-      if hThread == 0
-        raise SystemCallError.new('CreateThread', FFI.errno)
+        s = SERVICE_TABLE_ENTRYW.new(ste[0])
+        s[:lpServiceName] = FFI::MemoryPointer.from_string("")
+        s[:lpServiceProc] = Service_Main
+
+        s = SERVICE_TABLE_ENTRYW.new(ste[1])
+        s[:lpServiceName] = nil
+        s[:lpServiceProc] = nil
+
+        # No service to step, no service handle, no ruby exceptions, just terminate the thread..
+        StartServiceCtrlDispatcherW(ste)
       end
 
-      events = FFI::MemoryPointer.new(:pointer, 2)
-      events.put_pointer(0, FFI::Pointer.new(hThread))
-      events.put_pointer(FFI::Pointer.size, FFI::Pointer.new(@@hStartEvent))
-
-      while ((index = WaitForMultipleObjects(2, events, 0, 1000)) == WAIT_TIMEOUT) do
+      while (index = WaitForSingleObject(@@hStartEvent, 1000)) == WAIT_TIMEOUT
+        # The thread exited, so the show is off.
+        raise "Service_Main thread exited abnormally" unless hThread.alive?
       end
 
       if index == WAIT_FAILED
-        raise SystemCallError.new('WaitForMultipleObjects', FFI.errno)
-      end
-
-      # The thread exited, so the show is off.
-      if index == WAIT_OBJECT_0
-        raise "Service_Main thread exited abnormally"
+        raise SystemCallError.new("WaitForSingleObject", FFI.errno)
       end
 
       thr = Thread.new do
-        begin
-          while(WaitForSingleObject(@@hStopEvent, 1000) == WAIT_TIMEOUT)
-            # Check to see if anything interesting has been signaled
-            case @@waiting_control_code
-              when SERVICE_CONTROL_PAUSE
-                service_pause() if respond_to?('service_pause')
-              when SERVICE_CONTROL_CONTINUE
-                service_resume() if respond_to?('service_resume')
-              when SERVICE_CONTROL_INTERROGATE
-                service_interrogate() if respond_to?('service_interrogate')
-              when SERVICE_CONTROL_SHUTDOWN
-                service_shutdown() if respond_to?('service_shutdown')
-              when SERVICE_CONTROL_PARAMCHANGE
-                service_paramchange() if respond_to?('service_paramchange')
-              when SERVICE_CONTROL_NETBINDADD
-                service_netbindadd() if respond_to?('service_netbindadd')
-              when SERVICE_CONTROL_NETBINDREMOVE
-                service_netbindremove() if respond_to?('service_netbindremove')
-              when SERVICE_CONTROL_NETBINDENABLE
-                service_netbindenable() if respond_to?('service_netbindenable')
-              when SERVICE_CONTROL_NETBINDDISABLE
-                service_netbinddisable() if respond_to?('service_netbinddisable')
-            end
-            @@waiting_control_code = IDLE_CONTROL_CODE
+        while WaitForSingleObject(@@hStopEvent, 1000) == WAIT_TIMEOUT
+          # Check to see if anything interesting has been signaled
+          case @@waiting_control_code
+          when SERVICE_CONTROL_PAUSE
+            service_pause() if respond_to?('service_pause')
+          when SERVICE_CONTROL_CONTINUE
+            service_resume() if respond_to?('service_resume')
+          when SERVICE_CONTROL_INTERROGATE
+            service_interrogate() if respond_to?('service_interrogate')
+          when SERVICE_CONTROL_SHUTDOWN
+            service_shutdown() if respond_to?('service_shutdown')
+          when SERVICE_CONTROL_PARAMCHANGE
+            service_paramchange() if respond_to?('service_paramchange')
+          when SERVICE_CONTROL_NETBINDADD
+            service_netbindadd() if respond_to?('service_netbindadd')
+          when SERVICE_CONTROL_NETBINDREMOVE
+            service_netbindremove() if respond_to?('service_netbindremove')
+          when SERVICE_CONTROL_NETBINDENABLE
+            service_netbindenable() if respond_to?('service_netbindenable')
+          when SERVICE_CONTROL_NETBINDDISABLE
+            service_netbinddisable() if respond_to?('service_netbinddisable')
           end
-
-          service_stop() if respond_to?('service_stop')
-        ensure
-          SetEvent(@@hStopCompletedEvent)
+          @@waiting_control_code = IDLE_CONTROL_CODE
         end
+
+        service_stop() if respond_to?('service_stop')
+      ensure
+        SetEvent(@@hStopCompletedEvent)
       end
 
       if respond_to?('service_main')

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/application'
 require_relative '../../puppet/configurer'
 require_relative '../../puppet/util/profiler/aggregate'
@@ -6,13 +8,13 @@ class Puppet::Application::Apply < Puppet::Application
   require_relative '../../puppet/util/splayer'
   include Puppet::Util::Splayer
 
-  option("--debug","-d")
-  option("--execute EXECUTE","-e") do |arg|
+  option("--debug", "-d")
+  option("--execute EXECUTE", "-e") do |arg|
     options[:code] = arg
   end
-  option("--loadclasses","-L")
-  option("--test","-t")
-  option("--verbose","-v")
+  option("--loadclasses", "-L")
+  option("--test", "-t")
+  option("--verbose", "-v")
   option("--use-nodes")
   option("--detailed-exitcodes")
 
@@ -20,7 +22,7 @@ class Puppet::Application::Apply < Puppet::Application
     Puppet[:write_catalog_summary] = arg
   end
 
-  option("--catalog catalog",  "-c catalog") do |arg|
+  option("--catalog catalog", "-c catalog") do |arg|
     options[:catalog] = arg
   end
 
@@ -28,7 +30,7 @@ class Puppet::Application::Apply < Puppet::Application
     handle_logdest_arg(arg)
   end
 
-  option("--parseonly") do |args|
+  option("--parseonly") do |_args|
     puts "--parseonly has been removed. Please use 'puppet parser validate <manifest>'"
     exit 1
   end
@@ -38,141 +40,142 @@ class Puppet::Application::Apply < Puppet::Application
   end
 
   def help
-    <<-HELP
+    <<~HELP
 
-puppet-apply(8) -- #{summary}
-========
+      puppet-apply(8) -- #{summary}
+      ========
 
-SYNOPSIS
---------
-Applies a standalone Puppet manifest to the local system.
-
-
-USAGE
------
-puppet apply [-h|--help] [-V|--version] [-d|--debug] [-v|--verbose]
-  [-e|--execute] [--detailed-exitcodes] [-L|--loadclasses]
-  [-l|--logdest syslog|eventlog|<ABS FILEPATH>|console] [--noop]
-  [--catalog <catalog>] [--write-catalog-summary] <file>
+      SYNOPSIS
+      --------
+      Applies a standalone Puppet manifest to the local system.
 
 
-DESCRIPTION
------------
-This is the standalone puppet execution tool; use it to apply
-individual manifests.
-
-When provided with a modulepath, via command line or config file, puppet
-apply can effectively mimic the catalog that would be served by puppet
-master with access to the same modules, although there are some subtle
-differences. When combined with scheduling and an automated system for
-pushing manifests, this can be used to implement a serverless Puppet
-site.
-
-Most users should use 'puppet agent' and 'puppet master' for site-wide
-manifests.
+      USAGE
+      -----
+      puppet apply [-h|--help] [-V|--version] [-d|--debug] [-v|--verbose]
+        [-e|--execute] [--detailed-exitcodes] [-L|--loadclasses]
+        [-l|--logdest syslog|eventlog|<ABS FILEPATH>|console] [--noop]
+        [--catalog <catalog>] [--write-catalog-summary] <file>
 
 
-OPTIONS
--------
-Any setting that's valid in the configuration
-file is a valid long argument for puppet apply. For example, 'tags' is a
-valid setting, so you can specify '--tags <class>,<tag>'
-as an argument.
+      DESCRIPTION
+      -----------
+      This is the standalone puppet execution tool; use it to apply
+      individual manifests.
 
-See the configuration file documentation at
-https://puppet.com/docs/puppet/latest/configuration.html for the
-full list of acceptable parameters. You can generate a commented list of all
-configuration options by running puppet with
-'--genconfig'.
+      When provided with a modulepath, via command line or config file, puppet
+      apply can effectively mimic the catalog that would be served by puppet
+      master with access to the same modules, although there are some subtle
+      differences. When combined with scheduling and an automated system for
+      pushing manifests, this can be used to implement a serverless Puppet
+      site.
 
-* --debug:
-  Enable full debugging.
-
-* --detailed-exitcodes:
-  Provide extra information about the run via exit codes. If enabled, 'puppet
-  apply' will use the following exit codes:
-
-  0: The run succeeded with no changes or failures; the system was already in
-  the desired state.
-
-  1: The run failed.
-
-  2: The run succeeded, and some resources were changed.
-
-  4: The run succeeded, and some resources failed.
-
-  6: The run succeeded, and included both changes and failures.
-
-* --help:
-  Print this help message
-
-* --loadclasses:
-  Load any stored classes. 'puppet agent' caches configured classes
-  (usually at /etc/puppetlabs/puppet/classes.txt), and setting this option causes
-  all of those classes to be set in your puppet manifest.
-
-* --logdest:
-  Where to send log messages. Choose between 'syslog' (the POSIX syslog
-  service), 'eventlog' (the Windows Event Log), 'console', or the path to a log
-  file. Defaults to 'console'.
-  Multiple destinations can be set using a comma separated list
-  (eg: `/path/file1,console,/path/file2`)"
-
-  A path ending with '.json' will receive structured output in JSON format. The
-  log file will not have an ending ']' automatically written to it due to the
-  appending nature of logging. It must be appended manually to make the content
-  valid JSON.
-
-  A path ending with '.jsonl' will receive structured output in JSON Lines
-  format.
-
-* --noop:
-  Use 'noop' mode where Puppet runs in a no-op or dry-run mode. This
-  is useful for seeing what changes Puppet will make without actually
-  executing the changes.
-
-* --execute:
-  Execute a specific piece of Puppet code
-
-* --test:
-  Enable the most common options used for testing. These are 'verbose',
-  'detailed-exitcodes' and 'show_diff'.
-
-* --verbose:
-  Print extra information.
-
-* --catalog:
-  Apply a JSON catalog (such as one generated with 'puppet master --compile'). You can
-  either specify a JSON file or pipe in JSON from standard input.
-
-* --write-catalog-summary
-  After compiling the catalog saves the resource list and classes list to the node
-  in the state directory named classes.txt and resources.txt
-
-EXAMPLE
--------
-    $ puppet apply -l /tmp/manifest.log manifest.pp
-    $ puppet apply --modulepath=/root/dev/modules -e "include ntpd::server"
-    $ puppet apply --catalog catalog.json
+      Most users should use 'puppet agent' and 'puppet master' for site-wide
+      manifests.
 
 
-AUTHOR
-------
-Luke Kanies
+      OPTIONS
+      -------
+      Any setting that's valid in the configuration
+      file is a valid long argument for puppet apply. For example, 'tags' is a
+      valid setting, so you can specify '--tags <class>,<tag>'
+      as an argument.
+
+      See the configuration file documentation at
+      https://puppet.com/docs/puppet/latest/configuration.html for the
+      full list of acceptable parameters. You can generate a commented list of all
+      configuration options by running puppet with
+      '--genconfig'.
+
+      * --debug:
+        Enable full debugging.
+
+      * --detailed-exitcodes:
+        Provide extra information about the run via exit codes. If enabled, 'puppet
+        apply' will use the following exit codes:
+
+        0: The run succeeded with no changes or failures; the system was already in
+        the desired state.
+
+        1: The run failed.
+
+        2: The run succeeded, and some resources were changed.
+
+        4: The run succeeded, and some resources failed.
+
+        6: The run succeeded, and included both changes and failures.
+
+      * --help:
+        Print this help message
+
+      * --loadclasses:
+        Load any stored classes. 'puppet agent' caches configured classes
+        (usually at /etc/puppetlabs/puppet/classes.txt), and setting this option causes
+        all of those classes to be set in your puppet manifest.
+
+      * --logdest:
+        Where to send log messages. Choose between 'syslog' (the POSIX syslog
+        service), 'eventlog' (the Windows Event Log), 'console', or the path to a log
+        file. Defaults to 'console'.
+        Multiple destinations can be set using a comma separated list
+        (eg: `/path/file1,console,/path/file2`)"
+
+        A path ending with '.json' will receive structured output in JSON format. The
+        log file will not have an ending ']' automatically written to it due to the
+        appending nature of logging. It must be appended manually to make the content
+        valid JSON.
+
+        A path ending with '.jsonl' will receive structured output in JSON Lines
+        format.
+
+      * --noop:
+        Use 'noop' mode where Puppet runs in a no-op or dry-run mode. This
+        is useful for seeing what changes Puppet will make without actually
+        executing the changes.
+
+      * --execute:
+        Execute a specific piece of Puppet code
+
+      * --test:
+        Enable the most common options used for testing. These are 'verbose',
+        'detailed-exitcodes' and 'show_diff'.
+
+      * --verbose:
+        Print extra information.
+
+      * --catalog:
+        Apply a JSON catalog (such as one generated with 'puppet master --compile'). You can
+        either specify a JSON file or pipe in JSON from standard input.
+
+      * --write-catalog-summary
+        After compiling the catalog saves the resource list and classes list to the node
+        in the state directory named classes.txt and resources.txt
+
+      EXAMPLE
+      -------
+          $ puppet apply -e 'notify { "hello world": }'
+          $ puppet apply -l /tmp/manifest.log manifest.pp
+          $ puppet apply --modulepath=/root/dev/modules -e "include ntpd::server"
+          $ puppet apply --catalog catalog.json
 
 
-COPYRIGHT
----------
-Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
+      AUTHOR
+      ------
+      Luke Kanies
+
+
+      COPYRIGHT
+      ---------
+      Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
     HELP
   end
 
   def app_defaults
     super.merge({
-      :default_file_terminus => :file_server,
-      :write_catalog_summary => false
-    })
+                  :default_file_terminus => :file_server,
+                  :write_catalog_summary => false
+                })
   end
 
   def run_command
@@ -202,14 +205,16 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
   end
 
   def main
+    # rubocop:disable Layout/ExtraSpacing
     manifest          = get_manifest() # Get either a manifest or nil if apply should use content of Puppet[:code]
     splay                              # splay if needed
     facts             = get_facts()    # facts or nil
     node              = get_node()     # node or error
     apply_environment = get_configured_environment(node, manifest)
+    # rubocop:enable Layout/ExtraSpacing
 
     # TRANSLATORS "puppet apply" is a program command and should not be translated
-    Puppet.override({:current_environment => apply_environment, :loaders => create_loaders(apply_environment)}, _("For puppet apply")) do
+    Puppet.override({ :current_environment => apply_environment, :loaders => create_loaders(apply_environment) }, _("For puppet apply")) do
       configure_node_facts(node, facts)
 
       # Allow users to load the classes that puppet agent creates.
@@ -220,7 +225,7 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
             $stderr.puts _("%{file} is not readable") % { file: file }
             exit(63)
           end
-          node.classes = Puppet::FileSystem.read(file, :encoding => 'utf-8').split(/[\s]+/)
+          node.classes = Puppet::FileSystem.read(file, :encoding => 'utf-8').split(/\s+/)
         end
       end
 
@@ -233,15 +238,15 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
         # rule and gets logged.
         #
         catalog =
-        begin
-          Puppet::Resource::Catalog.indirection.find(node.name, :use_node => node)
-        rescue Puppet::Error
-          # already logged and handled by the compiler, including Puppet::ParseErrorWithIssue
-          exit(1)
-        end
+          begin
+            Puppet::Resource::Catalog.indirection.find(node.name, :use_node => node)
+          rescue Puppet::Error
+            # already logged and handled by the compiler, including Puppet::ParseErrorWithIssue
+            exit(1)
+          end
 
         # Resolve all deferred values and replace them / mutate the catalog
-        Puppet::Pops::Evaluator::DeferredResolver.resolve_and_replace(node.facts, catalog, apply_environment)
+        Puppet::Pops::Evaluator::DeferredResolver.resolve_and_replace(node.facts, catalog, apply_environment, Puppet[:preprocess_deferred])
 
         # Translate it to a RAL catalog
         catalog = catalog.to_ral
@@ -272,7 +277,7 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
         exit_status = apply_catalog(catalog)
 
-        if not exit_status
+        if !exit_status
           exit(1)
         elsif options[:detailed_exitcodes] then
           exit(exit_status)
@@ -309,7 +314,6 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
     Puppet.settings.use :main, :agent, :ssl
 
-
     if Puppet[:catalog_cache_terminus]
       Puppet::Resource::Catalog.indirection.cache_class = Puppet[:catalog_cache_terminus]
     end
@@ -337,7 +341,7 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
     configured_environment = get_configured_environment(node)
 
     # TRANSLATORS "puppet apply" is a program command and should not be translated
-    Puppet.override({:current_environment => configured_environment}, _("For puppet apply")) do
+    Puppet.override({ :current_environment => configured_environment }, _("For puppet apply")) do
       configure_node_facts(node, facts)
 
       # NOTE: Does not set rich_data = true automatically (which would ensure always reading catalog with rich data
@@ -350,7 +354,7 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
         raise Puppet::Error, _("Could not deserialize catalog from %{format}: %{detail}") % { format: format, detail: detail }, detail.backtrace
       end
       # Resolve all deferred values and replace them / mutate the catalog
-      Puppet::Pops::Evaluator::DeferredResolver.resolve_and_replace(node.facts, catalog, configured_environment)
+      Puppet::Pops::Evaluator::DeferredResolver.resolve_and_replace(node.facts, catalog, configured_environment, Puppet[:preprocess_deferred])
 
       catalog.to_ral
     end
@@ -363,7 +367,7 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
   # Returns facts or nil
   #
-  def get_facts()
+  def get_facts
     facts = nil
     unless Puppet[:node_name_fact].empty?
       # Collect our facts.
@@ -378,15 +382,16 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
   # Returns the node or raises and error if node not found.
   #
-  def get_node()
+  def get_node
     node = Puppet::Node.indirection.find(Puppet[:node_name_value])
     raise _("Could not find node %{node}") % { node: Puppet[:node_name_value] } unless node
+
     node
   end
 
   # Returns either a manifest (filename) or nil if apply should use content of Puppet[:code]
   #
-  def get_manifest()
+  def get_manifest
     manifest = nil
     # Set our code or file to use.
     if options[:code] or command_line.args.length == 0
@@ -394,6 +399,7 @@ Copyright (c) 2011 Puppet Inc., LLC Licensed under the Apache 2.0 License
     else
       manifest = command_line.args.shift
       raise _("Could not find file %{manifest}") % { manifest: manifest } unless Puppet::FileSystem.exist?(manifest)
+
       Puppet.warning(_("Only one file can be applied per run.  Skipping %{files}") % { files: command_line.args.join(', ') }) if command_line.args.size > 0
     end
     manifest

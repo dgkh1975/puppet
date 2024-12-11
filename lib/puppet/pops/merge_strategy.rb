@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'deep_merge/core'
 
 module Puppet::Pops
@@ -24,9 +26,10 @@ module Puppet::Pops
       if merge.is_a?(Hash)
         merge_strategy = merge['strategy']
         if merge_strategy.nil?
-          #TRANSLATORS 'merge' is a variable name and 'strategy' is a key and should not be translated
+          # TRANSLATORS 'merge' is a variable name and 'strategy' is a key and should not be translated
           raise ArgumentError, _("The hash given as 'merge' must contain the name of a strategy in string form for the key 'strategy'")
         end
+
         merge_options  = merge.size == 1 ? EMPTY_HASH : merge
       else
         merge_strategy = merge
@@ -35,6 +38,7 @@ module Puppet::Pops
       merge_strategy = merge_strategy.to_sym if merge_strategy.is_a?(String)
       strategy_class = strategies[merge_strategy]
       raise ArgumentError, _("Unknown merge strategy: '%{strategy}'") % { strategy: merge_strategy } if strategy_class.nil?
+
       merge_options == EMPTY_HASH ? strategy_class::INSTANCE : strategy_class.new(merge_options)
     end
 
@@ -52,9 +56,9 @@ module Puppet::Pops
     #
     def self.add_strategy(strategy_class)
       unless MergeStrategy > strategy_class
-        #TRANSLATORS 'MergeStrategies.add_strategy' is a method, 'stratgey_class' is a variable and 'MergeStrategy' is a class name and should not be translated
+        # TRANSLATORS 'MergeStrategies.add_strategy' is a method, 'stratgey_class' is a variable and 'MergeStrategy' is a class name and should not be translated
         raise ArgumentError, _("MergeStrategies.add_strategy 'strategy_class' must be a 'MergeStrategy' class. Got %{strategy_class}") %
-            { strategy_class: strategy_class }
+                             { strategy_class: strategy_class }
       end
       strategies[strategy_class.key] = strategy_class
       nil
@@ -91,7 +95,8 @@ module Puppet::Pops
     def merge(e1, e2)
       checked_merge(
         assert_type('The first element of the merge', value_t, e1),
-        assert_type('The second element of the merge', value_t, e2))
+        assert_type('The second element of the merge', value_t, e2)
+      )
     end
 
     # TODO: API 5.0 Remove this method
@@ -179,7 +184,7 @@ module Puppet::Pops
       # @return [Types::PStructType] the puppet type
       #
       def options_t
-        @options_t ||=Types::TypeParser.singleton.parse("Struct[{strategy=>Optional[Pattern[/#{key}/]]}]")
+        @options_t ||= Types::TypeParser.singleton.parse("Struct[{strategy=>Optional[Pattern[/#{key}/]]}]")
       end
     end
 
@@ -203,7 +208,7 @@ module Puppet::Pops
   # Simple strategy that returns the first value found. It never merges any values.
   #
   class FirstFoundStrategy < MergeStrategy
-    INSTANCE = self.new(EMPTY_HASH)
+    INSTANCE = new(EMPTY_HASH)
 
     def self.key
       :first
@@ -233,7 +238,7 @@ module Puppet::Pops
 
   # Same as {FirstFoundStrategy} but used when no strategy has been explicitly given
   class DefaultMergeStrategy < FirstFoundStrategy
-    INSTANCE = self.new(EMPTY_HASH)
+    INSTANCE = new(EMPTY_HASH)
 
     def self.key
       :default
@@ -246,7 +251,7 @@ module Puppet::Pops
   # will be those of e1
   #
   class HashMergeStrategy < MergeStrategy
-    INSTANCE = self.new(EMPTY_HASH)
+    INSTANCE = new(EMPTY_HASH)
 
     def self.key
       :hash
@@ -276,7 +281,7 @@ module Puppet::Pops
   # first contributor of elements and e2 the second.
   #
   class UniqueMergeStrategy < MergeStrategy
-    INSTANCE = self.new(EMPTY_HASH)
+    INSTANCE = new(EMPTY_HASH)
 
     def self.key
       :unique
@@ -358,7 +363,7 @@ module Puppet::Pops
   #   Results: {:x => [{:y => 1, :z => 2}]}
   #
   class DeepMergeStrategy < MergeStrategy
-    INSTANCE = self.new(EMPTY_HASH)
+    INSTANCE = new(EMPTY_HASH)
 
     def self.key
       :deep
@@ -366,18 +371,19 @@ module Puppet::Pops
 
     def checked_merge(e1, e2)
       dm_options = { :preserve_unmergeables => false }
-      options.each_pair { |k,v| dm_options[k.to_sym] = v unless k == 'strategy' }
+      options.each_pair { |k, v| dm_options[k.to_sym] = v unless k == 'strategy' }
       # e2 (the destination) is deep cloned to avoid that the passed in object mutates
       DeepMerge.deep_merge!(e1, deep_clone(e2), dm_options)
     end
 
     def deep_clone(value)
-      if value.is_a?(Hash)
+      case value
+      when Hash
         result = value.clone
-        value.each{ |k, v| result[k] = deep_clone(v) }
+        value.each { |k, v| result[k] = deep_clone(v) }
         result
-      elsif value.is_a?(Array)
-        value.map{ |v| deep_clone(v) }
+      when Array
+        value.map { |v| deep_clone(v) }
       else
         value
       end
@@ -426,7 +432,7 @@ module Puppet::Pops
   # Same as {UnconstrainedDeepMergeStrategy} but with reverse priority of merged elements.
   # (needed for backward compatibility with Hiera v3)
   class ReverseDeepMergeStrategy < UnconstrainedDeepMergeStrategy
-    INSTANCE = self.new(EMPTY_HASH)
+    INSTANCE = new(EMPTY_HASH)
 
     def self.key
       :reverse_deep

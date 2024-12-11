@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pathname'
 require_relative 'interpolation'
 
@@ -41,7 +43,7 @@ module Lookup
     def expand_globs(datadir, declared_globs, lookup_invocation)
       declared_globs.map do |declared_glob|
         glob = datadir + interpolate(declared_glob, lookup_invocation, false)
-        Pathname.glob(glob).reject { |path| path.directory? }.map { |path| ResolvedLocation.new(glob.to_s, path, true) }
+        Pathname.glob(glob).reject(&:directory?).map { |path| ResolvedLocation.new(glob.to_s, path, true) }
       end.flatten
     end
 
@@ -89,7 +91,7 @@ module Lookup
         mapped_vars.map do |var|
           # Need to use parent lookup invocation to avoid adding 'var' to the set of variables to track for changes. The
           # variable that 'var' stems from is added above.
-          path = scope.with_local_scope(var_key => var) {  datadir + interpolate(template, lookup_invocation, false) }
+          path = scope.with_local_scope(var_key => var) { datadir + interpolate(template, lookup_invocation, false) }
           ResolvedLocation.new(template, path, path.exist?)
         end
       end

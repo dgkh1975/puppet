@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/posix'
 
 module Puppet
@@ -23,14 +25,21 @@ module Puppet
       # evaluate this property, because they might be added during the catalog
       # apply.
       @should.map! do |val|
-        provider.name2gid(val) or raise "Could not find group #{val}"
+        gid = provider.name2gid(val)
+        if gid
+          gid
+        elsif provider.resource.noop?
+          return false
+        else
+          raise "Could not find group #{val}"
+        end
       end
 
       @should.include?(current)
     end
 
     # We want to print names, not numbers
-    def is_to_s(currentvalue)
+    def is_to_s(currentvalue) # rubocop:disable Naming/PredicateName
       super(provider.gid2name(currentvalue) || currentvalue)
     end
 

@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 require 'base64'
 module Puppet::Pops
 module Types
-
 # A Puppet Language Type that represents binary data content (a sequence of 8-bit bytes).
 # Instances of this data type can be created from `String` and `Array[Integer[0,255]]`
 # values. Also see the `binary_file` function for reading binary content from a file.
@@ -14,7 +15,6 @@ module Types
 #
 # @api public
 class PBinaryType < PAnyType
-
   # Represents a binary buffer
   # @api public
   class Binary
@@ -76,6 +76,7 @@ class PBinaryType < PAnyType
       unless encoded_string.valid_encoding?
         raise ArgumentError, _("The given string in encoding '%{enc}' is invalid. Cannot create a Binary UTF-8 representation") % { enc: enc }
       end
+
       # Convert to UTF-8 (if not already UTF-8), and then to binary
       encoded_string = (enc == "UTF-8") ? encoded_string.dup : encoded_string.encode('UTF-8')
       encoded_string.force_encoding("ASCII-8BIT")
@@ -121,10 +122,10 @@ class PBinaryType < PAnyType
     end
 
     def ==(o)
-      self.eql?(o)
+      eql?(o)
     end
 
-    def length()
+    def length
       @binary_buffer.length
     end
   end
@@ -224,9 +225,8 @@ class PBinaryType < PAnyType
   protected
 
   def _assignable?(o, guard)
-    o.class == self.class
+    o.instance_of?(self.class)
   end
-
 end
 end
 end

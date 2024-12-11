@@ -29,6 +29,7 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
         allow(FFI::WIN32).to receive(:CloseHandle).with(thread_handle)
       else
         allow(Process).to receive(:waitpid2).with(pid, Process::WNOHANG).and_return(nil, [pid, double('child_status', :exitstatus => exitstatus)])
+        allow(Process).to receive(:waitpid2).with(pid, 0).and_return(nil, [pid, double('child_status', :exitstatus => exitstatus)])
         allow(Process).to receive(:waitpid2).with(pid).and_return([pid, double('child_status', :exitstatus => exitstatus)])
       end
     end
@@ -153,11 +154,11 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
       end
 
       it "should create a new process for the command" do
-        expect(Process).to receive(:create).with(
+        expect(Process).to receive(:create).with({
           :command_line => "test command",
           :startup_info => {:stdin => @stdin, :stdout => @stdout, :stderr => @stderr},
           :close_handles => false
-        ).and_return(proc_info_stub)
+        }).and_return(proc_info_stub)
 
         call_exec_windows('test command', {}, @stdin, @stdout, @stderr)
       end
@@ -165,7 +166,7 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
       context 'cwd option' do
         let(:cwd) { 'cwd' }
         it "should execute the command in the specified working directory" do
-          expect(Process).to receive(:create).with(
+          expect(Process).to receive(:create).with({
             :command_line => "test command",
             :startup_info => {
               :stdin => @stdin,
@@ -174,7 +175,7 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
             },
             :close_handles => false,
             :cwd => cwd
-          )
+          })
 
           call_exec_windows('test command', { :cwd => cwd }, @stdin, @stdout, @stderr)
         end
@@ -192,7 +193,7 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
       context 'suppress_window option' do
         let(:cwd) { 'cwd' }
         it "should execute the command in the specified working directory" do
-          expect(Process).to receive(:create).with(
+          expect(Process).to receive(:create).with({
             :command_line => "test command",
             :startup_info => {
               :stdin => @stdin,
@@ -201,7 +202,7 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
             },
             :close_handles => false,
             :creation_flags => Puppet::Util::Windows::Process::CREATE_NO_WINDOW
-          )
+          })
 
           call_exec_windows('test command', { :suppress_window => true }, @stdin, @stdout, @stderr)
         end
@@ -832,6 +833,15 @@ describe Puppet::Util::Execution, if: !Puppet::Util::Platform.jruby? do
           allow(Puppet::FileSystem::Uniquefile).to receive(:new).and_return(stdout)
 
           Puppet::Util::Execution.execute('test command')
+        end
+
+        it "should raise if it fails to create a Uniquefile for stdout" do
+          allow(Puppet::FileSystem::Uniquefile).to receive(:new)
+            .and_raise(Errno::ENOENT, 'C:\Users\ADMINI~1\AppData\Local\Temp\doesnotexist')
+
+          expect {
+            Puppet::Util::Execution.execute('test command')
+          }.to raise_error(Errno::ENOENT, 'No such file or directory - C:\Users\ADMINI~1\AppData\Local\Temp\doesnotexist')
         end
       end
 

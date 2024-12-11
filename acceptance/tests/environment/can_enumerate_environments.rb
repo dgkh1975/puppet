@@ -59,14 +59,14 @@ end
 
 with_puppet_running_on(master, master_opts) do
   step "Ensure that an unauthenticated client cannot access the environments list" do
-    on master, "curl --tlsv1 -ksv https://#{master}:#{server_port(master)}/puppet/v3/environments", :acceptable_exit_codes => [0,7] do
-      assert_match(/< HTTP\/1\.\d 403/, stderr)
+    on(master, "curl --tlsv1 -ksv https://#{master}:#{server_port(master)}/puppet/v3/environments", :acceptable_exit_codes => [0,7]) do |result|
+      assert_match(/< HTTP\/1\.\d 403/, result.stderr)
     end
   end
 
   step "Ensure that an authenticated client can retrieve the list of environments" do
-    curl_master_from(master, '/puppet/v3/environments') do
-      data = JSON.parse(stdout)
+    curl_master_from(master, '/puppet/v3/environments') do |result|
+      data = JSON.parse(result.stdout)
       assert_equal(["env1", "env2", "production"], data["environments"].keys.sort)
     end
   end

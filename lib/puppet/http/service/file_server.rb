@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/file_serving/metadata'
 
 # The FileServer service is used to retrieve file metadata and content.
@@ -6,10 +8,10 @@ require_relative '../../../puppet/file_serving/metadata'
 #
 class Puppet::HTTP::Service::FileServer < Puppet::HTTP::Service
   # @return [String] Default API for the FileServer service
-  API = '/puppet/v3'.freeze
+  API = '/puppet/v3'
 
   # @return [RegEx] RegEx used to determine if a path contains a leading slash
-  PATH_REGEX = /^\//
+  PATH_REGEX = %r{^/}
 
   # Use `Puppet::HTTP::Session.route_to(:fileserver)` to create or get an instance of this class.
   #
@@ -98,7 +100,7 @@ class Puppet::HTTP::Service::FileServer < Puppet::HTTP::Service
   #
   # @api public
   #
-  def get_file_metadatas(path: nil, environment:, recurse: :false, recurselimit: nil, max_files: nil, ignore: nil, links: :manage, checksum_type: Puppet[:digest_algorithm], source_permissions: :ignore)
+  def get_file_metadatas(environment:, path: nil, recurse: :false, recurselimit: nil, max_files: nil, ignore: nil, links: :manage, checksum_type: Puppet[:digest_algorithm], source_permissions: :ignore) # rubocop:disable Lint/BooleanSymbol
     validate_path(path)
 
     headers = add_puppet_headers('Accept' => get_mime_types(Puppet::FileServing::Metadata).join(', '))

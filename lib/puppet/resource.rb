@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet'
 require_relative '../puppet/util/tagging'
 require_relative '../puppet/parameter'
@@ -11,7 +13,7 @@ class Puppet::Resource
   include Puppet::Util::PsychSupport
 
   include Enumerable
-  attr_accessor :file, :line, :catalog, :exported, :virtual, :strict
+  attr_accessor :file, :line, :catalog, :exported, :virtual, :strict, :kind
   attr_reader :type, :title, :parameters
 
   # @!attribute [rw] sensitive_parameters
@@ -29,15 +31,20 @@ class Puppet::Resource
   EMPTY_ARRAY = [].freeze
   EMPTY_HASH = {}.freeze
 
-  ATTRIBUTES = [:file, :line, :exported].freeze
-  TYPE_CLASS = 'Class'.freeze
-  TYPE_NODE  = 'Node'.freeze
+  ATTRIBUTES = [:file, :line, :exported, :kind].freeze
+  TYPE_CLASS = 'Class'
+  TYPE_NODE  = 'Node'
 
-  PCORE_TYPE_KEY = '__ptype'.freeze
-  VALUE_KEY = 'value'.freeze
+  CLASS_STRING = 'class'
+  DEFINED_TYPE_STRING = 'defined_type'
+  COMPILABLE_TYPE_STRING = 'compilable_type'
+  UNKNOWN_TYPE_STRING = 'unknown'
+
+  PCORE_TYPE_KEY = '__ptype'
+  VALUE_KEY = 'value'
 
   def self.from_data_hash(data)
-    resource = self.allocate
+    resource = allocate
     resource.initialize_from_hash(data)
     resource
   end
@@ -45,8 +52,10 @@ class Puppet::Resource
   def initialize_from_hash(data)
     type = data['type']
     raise ArgumentError, _('No resource type provided in serialized data') unless type
+
     title = data['title']
     raise ArgumentError, _('No resource title provided in serialized data') unless title
+
     @type, @title = self.class.type_and_title(type, title)
 
     params = data['parameters']
@@ -103,11 +112,11 @@ class Puppet::Resource
     # To get stringified parameter values the flag :stringify_rich can be set
     # in the puppet context.
     #
-    stringify = Puppet.lookup(:stringify_rich) { false }
+    stringify = Puppet.lookup(:stringify_rich)
     converter = stringify ? Puppet::Pops::Serialization::ToStringifiedConverter.new : nil
 
     params = {}
-    self.to_hash.each_pair do |param, value|
+    to_hash.each_pair do |param, value|
       # Don't duplicate the title as the namevar
       unless param == namevar && value == title
         if stringify
@@ -119,14 +128,17 @@ class Puppet::Resource
     end
 
     unless params.empty?
-      data['parameters'] = Puppet::Pops::Serialization::ToDataConverter.convert(params, {
-        :rich_data => Puppet.lookup(:rich_data),
-        :symbol_as_string => true,
-        :local_reference => false,
-        :type_by_reference => true,
-        :message_prefix => ref,
-        :semantic => self
-      })
+      data['parameters'] =
+        Puppet::Pops::Serialization::ToDataConverter
+        .convert(params,
+                 {
+                   :rich_data => Puppet.lookup(:rich_data),
+                   :symbol_as_string => true,
+                   :local_reference => false,
+                   :type_by_reference => true,
+                   :message_prefix => ref,
+                   :semantic => self
+                 })
     end
 
     data['sensitive_parameters'] = sensitive_parameters.map(&:to_s) unless sensitive_parameters.empty?
@@ -135,7 +147,7 @@ class Puppet::Resource
 
   def self.value_to_json_data(value)
     if value.is_a?(Array)
-      value.map{|v| value_to_json_data(v) }
+      value.map { |v| value_to_json_data(v) }
     elsif value.is_a?(Hash)
       result = {}
       value.each_pair { |k, v| result[value_to_json_data(k)] = value_to_json_data(v) }
@@ -150,12 +162,12 @@ class Puppet::Resource
   end
 
   def yaml_property_munge(x)
-    self.value.to_json_data(x)
+    value.to_json_data(x)
   end
 
   # Proxy these methods to the parameters hash.  It's likely they'll
   # be overridden at some point, but this works for now.
-  %w{has_key? keys length delete empty? <<}.each do |method|
+  %w[has_key? keys length delete empty? <<].each do |method|
     define_method(method) do |*args|
       parameters.send(method, *args)
     end
@@ -175,9 +187,10 @@ class Puppet::Resource
   end
 
   def ==(other)
-    return false unless other.respond_to?(:title) and self.type == other.type and self.title == other.title
+    return false unless other.respond_to?(:title) and type == other.type and title == other.title
 
     return false unless to_hash == other.to_hash
+
     true
   end
 
@@ -193,18 +206,30 @@ class Puppet::Resource
     resource_type.is_a?(Puppet::CompilableResourceType)
   end
 
+  def self.to_kind(resource_type)
+    if resource_type == CLASS_STRING
+      CLASS_STRING
+    elsif resource_type.is_a?(Puppet::Resource::Type) && resource_type.type == :definition
+      DEFINED_TYPE_STRING
+    elsif resource_type.is_a?(Puppet::CompilableResourceType)
+      COMPILABLE_TYPE_STRING
+    else
+      UNKNOWN_TYPE_STRING
+    end
+  end
+
   # Iterate over each param/value pair, as required for Enumerable.
   def each
-    parameters.each { |p,v| yield p, v }
+    parameters.each { |p, v| yield p, v }
   end
 
   def include?(parameter)
-    super || parameters.keys.include?( parameter_name(parameter) )
+    super || parameters.keys.include?(parameter_name(parameter))
   end
 
-  %w{exported virtual strict}.each do |m|
-    define_method(m+"?") do
-      self.send(m)
+  %w[exported virtual strict].each do |m|
+    define_method(m + "?") do
+      send(m)
     end
   end
 
@@ -247,18 +272,20 @@ class Puppet::Resource
       src = type
       self.file = src.file
       self.line = src.line
+      self.kind = src.kind
       self.exported = src.exported
       self.virtual = src.virtual
-      self.set_tags(src)
+      set_tags(src)
       self.environment = src.environment
       @rstype = src.resource_type
       @type = src.type
       @title = src.title
 
       src.to_hash.each do |p, v|
-        if v.is_a?(Puppet::Resource)
+        case v
+        when Puppet::Resource
           v = v.copy_as_resource
-        elsif v.is_a?(Array)
+        when Array
           # flatten resource references arrays
           v = v.flatten if v.flatten.find { |av| av.is_a?(Puppet::Resource) }
           v = v.collect do |av|
@@ -272,10 +299,10 @@ class Puppet::Resource
       @sensitive_parameters.replace(type.sensitive_parameters)
     else
       if type.is_a?(Hash)
-        #TRANSLATORS 'Puppet::Resource.new' should not be translated
+        # TRANSLATORS 'Puppet::Resource.new' should not be translated
         raise ArgumentError, _("Puppet::Resource.new does not take a hash as the first argument.") + ' ' +
-          _("Did you mean (%{type}, %{title}) ?") %
-              { type: (type[:type] || type["type"]).inspect, title: (type[:title] || type["title"]).inspect }
+                             _("Did you mean (%{type}, %{title}) ?") %
+                             { type: (type[:type] || type["type"]).inspect, title: (type[:title] || type["title"]).inspect }
       end
 
       # In order to avoid an expensive search of 'known_resource_types" and
@@ -302,15 +329,21 @@ class Puppet::Resource
       # Set things like environment, strictness first.
       attributes.each do |attr, value|
         next if attr == :parameters
+
         send(attr.to_s + "=", value)
+      end
+
+      if environment.is_a?(Puppet::Node::Environment) && environment != Puppet::Node::Environment::NONE
+        self.file = environment.externalize_path(attributes[:file])
       end
 
       @type, @title = self.class.type_and_title(type, title)
 
       rt = resource_type
 
+      self.kind = self.class.to_kind(rt) unless kind
       if strict? && rt.nil?
-        if self.class?
+        if class?
           raise ArgumentError, _("Could not find declared class %{title}") % { title: title }
         else
           raise ArgumentError, _("Invalid resource type %{type}") % { type: type }
@@ -355,7 +388,7 @@ class Puppet::Resource
     when TYPE_NODE; environment.known_resource_types.node(title)
     else
       result = Puppet::Type.type(type)
-      if !result
+      unless result
         krt = environment.known_resource_types
         result = krt.definition(type)
       end
@@ -395,11 +428,11 @@ class Puppet::Resource
 
   def uniqueness_key
     # Temporary kludge to deal with inconsistent use patterns; ensure we don't return nil for namevar/:name
-    h = self.to_hash
+    h = to_hash
     name = h[namevar] || h[:name] || self.name
     h[namevar] ||= name
     h[:name]   ||= name
-    h.values_at(*key_attributes.sort_by { |k| k.to_s })
+    h.values_at(*key_attributes.sort_by(&:to_s))
   end
 
   def key_attributes
@@ -412,20 +445,22 @@ class Puppet::Resource
   def to_hierayaml
     # Collect list of attributes to align => and move ensure first
     attr = parameters.keys
-    attr_max = attr.inject(0) { |max,k| k.to_s.length > max ? k.to_s.length : max }
+    attr_max = attr.inject(0) { |max, k| k.to_s.length > max ? k.to_s.length : max }
 
     attr.sort!
-    if attr.first != :ensure  && attr.include?(:ensure)
+    if attr.first != :ensure && attr.include?(:ensure)
       attr.delete(:ensure)
       attr.unshift(:ensure)
     end
 
+    # rubocop:disable Lint/FormatParameterMismatch
     attributes = attr.collect { |k|
       v = parameters[k]
       "    %-#{attr_max}s: %s\n" % [k, Puppet::Parameter.format_value_for_display(v)]
     }.join
+    # rubocop:enable Lint/FormatParameterMismatch
 
-    "  %s:\n%s" % [self.title, attributes]
+    "  %s:\n%s" % [title, attributes]
   end
 
   # Convert our resource to a hiera hash suitable for serialization.
@@ -438,40 +473,56 @@ class Puppet::Resource
 
     res = {}
     res['ensure'] = value if value
-    res.merge!(Hash[params.sort])
+    res.merge!(params.sort.to_h)
 
-    return { h['title'] => res }
+    { h['title'] => res }
   end
 
   # Convert our resource to Puppet code.
   def to_manifest
     # Collect list of attributes to align => and move ensure first
     attr = parameters.keys
-    attr_max = attr.inject(0) { |max,k| k.to_s.length > max ? k.to_s.length : max }
+    attr_max = attr.inject(0) { |max, k| k.to_s.length > max ? k.to_s.length : max }
 
     attr.sort!
-    if attr.first != :ensure  && attr.include?(:ensure)
+    if attr.first != :ensure && attr.include?(:ensure)
       attr.delete(:ensure)
       attr.unshift(:ensure)
     end
 
+    # rubocop:disable Lint/FormatParameterMismatch
     attributes = attr.collect { |k|
       v = parameters[k]
       "  %-#{attr_max}s => %s,\n" % [k, Puppet::Parameter.format_value_for_display(v)]
     }.join
+    # rubocop:enable Lint/FormatParameterMismatch
 
-    escaped = self.title.gsub(/'/,"\\\\'")
-    "%s { '%s':\n%s}" % [self.type.to_s.downcase, escaped, attributes]
+    escaped = title.gsub(/'/, "\\\\'")
+    "%s { '%s':\n%s}" % [type.to_s.downcase, escaped, attributes]
   end
 
   def to_ref
     ref
   end
 
-  # Convert our resource to a RAL resource instance.  Creates component
-  # instances for resource types that don't exist.
+  # Convert our resource to a RAL resource instance. Creates component
+  # instances for resource types that are not of a compilable_type kind. In case
+  # the resource doesn’t exist and it’s compilable_type kind, raise an error.
+  # There are certain cases where a resource won't be in a catalog, such as
+  # when we create a resource directly by using Puppet::Resource.new(...), so we
+  # must check its kind before deciding whether the catalog format is of an older
+  # version or not.
   def to_ral
-    typeklass = Puppet::Type.type(self.type) || Puppet::Type.type(:component)
+    if kind == COMPILABLE_TYPE_STRING
+      typeklass = Puppet::Type.type(type)
+    elsif catalog && catalog.catalog_format >= 2
+      typeklass = Puppet::Type.type(:component)
+    else
+      typeklass = Puppet::Type.type(type) || Puppet::Type.type(:component)
+    end
+
+    raise(Puppet::Error, "Resource type '#{type}' was not found") unless typeklass
+
     typeklass.new(self)
   end
 
@@ -479,11 +530,11 @@ class Puppet::Resource
     # this is potential namespace conflict
     # between the notion of an "indirector name"
     # and a "resource name"
-    [ type, title ].join('/')
+    [type, title].join('/')
   end
 
   def missing_arguments
-    resource_type.arguments.select do |param, default|
+    resource_type.arguments.select do |param, _default|
       the_param = parameters[param.to_sym]
       the_param.nil? || the_param.value.nil? || the_param.value == :undef
     end
@@ -536,15 +587,14 @@ class Puppet::Resource
     [type, title]
   end
 
-
   def self.extract_type_and_title(argtype, argtitle)
     if (argtype.nil? || argtype == :component || argtype == :whit) &&
-          argtitle =~ /^([^\[\]]+)\[(.+)\]$/m                  then [ $1,                 $2            ]
+       argtitle =~ /^([^\[\]]+)\[(.+)\]$/m                  then [::Regexp.last_match(1), ::Regexp.last_match(2)]
     elsif argtitle.nil? && argtype.is_a?(String) &&
-          argtype =~ /^([^\[\]]+)\[(.+)\]$/m                   then [ $1,                 $2            ]
-    elsif argtitle                                             then [ argtype,            argtitle      ]
-    elsif argtype.is_a?(Puppet::Type)                          then [ argtype.class.name, argtype.title ]
-    else  raise ArgumentError, _("No title provided and %{type} is not a valid resource reference") % { type: argtype.inspect }
+          argtype =~ /^([^\[\]]+)\[(.+)\]$/m                   then [::Regexp.last_match(1), ::Regexp.last_match(2)]
+    elsif argtitle                                             then [argtype,            argtitle]
+    elsif argtype.is_a?(Puppet::Type)                          then [argtype.class.name, argtype.title]
+    else  raise ArgumentError, _("No title provided and %{type} is not a valid resource reference") % { type: argtype.inspect } # rubocop:disable Lint/ElseLayout
     end
   end
   private_class_method :extract_type_and_title
@@ -552,6 +602,7 @@ class Puppet::Resource
   def self.munge_type_name(value)
     return :main if value == :main
     return TYPE_CLASS if value == '' || value.nil? || value.to_s.casecmp('component') == 0
+
     Puppet::Pops::Types::TypeFormatter.singleton.capitalize_segments(value.to_s)
   end
   private_class_method :munge_type_name
@@ -594,33 +645,33 @@ class Puppet::Resource
     type = resource_type
     if type.respond_to?(:title_patterns) && !type.title_patterns.nil?
       type.title_patterns.each do |regexp, symbols_and_lambdas|
-        captures = regexp.match(title.to_s)  
-        if captures
-          symbols_and_lambdas.zip(captures[1..-1]).each do |symbol_and_lambda,capture|
-            symbol, proc = symbol_and_lambda
-            # Many types pass "identity" as the proc; we might as well give
-            # them a shortcut to delivering that without the extra cost.
-            #
-            # Especially because the global type defines title_patterns and
-            # uses the identity patterns.
-            #
-            # This was worth about 8MB of memory allocation saved in my
-            # testing, so is worth the complexity for the API.
-            if proc then
-              h[symbol] = proc.call(capture)
-            else
-              h[symbol] = capture
-            end
+        captures = regexp.match(title.to_s)
+        next unless captures
+
+        symbols_and_lambdas.zip(captures[1..]).each do |symbol_and_lambda, capture|
+          symbol, proc = symbol_and_lambda
+          # Many types pass "identity" as the proc; we might as well give
+          # them a shortcut to delivering that without the extra cost.
+          #
+          # Especially because the global type defines title_patterns and
+          # uses the identity patterns.
+          #
+          # This was worth about 8MB of memory allocation saved in my
+          # testing, so is worth the complexity for the API.
+          if proc then
+            h[symbol] = proc.call(capture)
+          else
+            h[symbol] = capture
           end
-          return h
         end
+        return h
       end
       # If we've gotten this far, then none of the provided title patterns
       # matched. Since there's no way to determine the title then the
       # resource should fail here.
       raise Puppet::Error, _("No set of title patterns matched the title \"%{title}\".") % { title: title }
     else
-      return { :name => title.to_s }
+      { :name => title.to_s }
     end
   end
 end

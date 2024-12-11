@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 module Puppet
   require_relative '../../puppet/file_bucket/dipper'
 
   Type.newtype(:filebucket) do
     @doc = <<-EOT
-      A repository for storing and retrieving file content by MD5 checksum. Can
+      A repository for storing and retrieving file content by cryptographic checksum. Can
       be local to each agent node, or centralized on a primary Puppet server. All
       puppet servers provide a filebucket service that agent nodes can access
       via HTTP, but you must declare a filebucket resource before any agents
@@ -73,7 +75,7 @@ module Puppet
           raise ArgumentError, _("You can only have one filebucket path")
         end
 
-        if value.is_a? String and not Puppet::Util.absolute_path?(value)
+        if value.is_a? String and !Puppet::Util.absolute_path?(value)
           raise ArgumentError, _("Filebucket paths must be absolute")
         end
 
@@ -111,11 +113,11 @@ module Puppet
         @bucket = Puppet::FileBucket::Dipper.new(args)
       rescue => detail
         message = _("Could not create %{type} filebucket: %{detail}") % { type: type, detail: detail }
-        self.log_exception(detail, message)
+        log_exception(detail, message)
         self.fail(message)
       end
 
-      @bucket.name = self.name
+      @bucket.name = name
     end
   end
 end

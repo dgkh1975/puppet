@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/terminus'
 require_relative '../../puppet/util'
 
@@ -23,9 +25,9 @@ class Puppet::Indirector::Exec < Puppet::Indirector::Terminus
 
     if output =~ /\A\s*\Z/ # all whitespace
       Puppet.debug { "Empty response for #{name} from #{self.name} terminus" }
-      return nil
+      nil
     else
-      return output
+      output
     end
   end
 
@@ -33,6 +35,6 @@ class Puppet::Indirector::Exec < Puppet::Indirector::Terminus
 
   # Proxy the execution, so it's easier to test.
   def execute(command, arguments)
-    Puppet::Util::Execution.execute(command,arguments)
+    Puppet::Util::Execution.execute(command, arguments)
   end
 end

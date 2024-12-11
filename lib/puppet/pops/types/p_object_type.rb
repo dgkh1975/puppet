@@ -1,78 +1,88 @@
+# frozen_string_literal: true
+
 require_relative 'ruby_generator'
 require_relative 'type_with_members'
 
 module Puppet::Pops
 module Types
-
-KEY_ATTRIBUTES = 'attributes'.freeze
-KEY_CHECKS = 'checks'.freeze
-KEY_CONSTANTS = 'constants'.freeze
-KEY_EQUALITY = 'equality'.freeze
-KEY_EQUALITY_INCLUDE_TYPE = 'equality_include_type'.freeze
-KEY_FINAL = 'final'.freeze
-KEY_FUNCTIONS = 'functions'.freeze
-KEY_KIND = 'kind'.freeze
-KEY_OVERRIDE = 'override'.freeze
-KEY_PARENT = 'parent'.freeze
-KEY_TYPE_PARAMETERS = 'type_parameters'.freeze
+KEY_ATTRIBUTES = 'attributes'
+KEY_CHECKS = 'checks'
+KEY_CONSTANTS = 'constants'
+KEY_EQUALITY = 'equality'
+KEY_EQUALITY_INCLUDE_TYPE = 'equality_include_type'
+KEY_FINAL = 'final'
+KEY_FUNCTIONS = 'functions'
+KEY_KIND = 'kind'
+KEY_OVERRIDE = 'override'
+KEY_PARENT = 'parent'
+KEY_TYPE_PARAMETERS = 'type_parameters'
 
 # @api public
 class PObjectType < PMetaType
   include TypeWithMembers
 
-  ATTRIBUTE_KIND_CONSTANT = 'constant'.freeze
-  ATTRIBUTE_KIND_DERIVED = 'derived'.freeze
-  ATTRIBUTE_KIND_GIVEN_OR_DERIVED = 'given_or_derived'.freeze
-  ATTRIBUTE_KIND_REFERENCE = 'reference'.freeze
+  ATTRIBUTE_KIND_CONSTANT = 'constant'
+  ATTRIBUTE_KIND_DERIVED = 'derived'
+  ATTRIBUTE_KIND_GIVEN_OR_DERIVED = 'given_or_derived'
+  ATTRIBUTE_KIND_REFERENCE = 'reference'
   TYPE_ATTRIBUTE_KIND = TypeFactory.enum(ATTRIBUTE_KIND_CONSTANT, ATTRIBUTE_KIND_DERIVED, ATTRIBUTE_KIND_GIVEN_OR_DERIVED, ATTRIBUTE_KIND_REFERENCE)
 
   TYPE_OBJECT_NAME = Pcore::TYPE_QUALIFIED_REFERENCE
 
-  TYPE_ATTRIBUTE = TypeFactory.struct({
-    KEY_TYPE => PTypeType::DEFAULT,
-    TypeFactory.optional(KEY_FINAL) => PBooleanType::DEFAULT,
-    TypeFactory.optional(KEY_OVERRIDE) => PBooleanType::DEFAULT,
-    TypeFactory.optional(KEY_KIND) => TYPE_ATTRIBUTE_KIND,
-    KEY_VALUE => PAnyType::DEFAULT,
-    TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
-  })
+  TYPE_ATTRIBUTE =
+    TypeFactory
+    .struct({
+              KEY_TYPE => PTypeType::DEFAULT,
+              TypeFactory.optional(KEY_FINAL) => PBooleanType::DEFAULT,
+              TypeFactory.optional(KEY_OVERRIDE) => PBooleanType::DEFAULT,
+              TypeFactory.optional(KEY_KIND) => TYPE_ATTRIBUTE_KIND,
+              KEY_VALUE => PAnyType::DEFAULT,
+              TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
+            })
 
-  TYPE_PARAMETER = TypeFactory.struct({
-    KEY_TYPE => PTypeType::DEFAULT,
-    TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
-  })
+  TYPE_PARAMETER =
+    TypeFactory
+    .struct({
+              KEY_TYPE => PTypeType::DEFAULT,
+              TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
+            })
 
   TYPE_CONSTANTS = TypeFactory.hash_kv(Pcore::TYPE_MEMBER_NAME, PAnyType::DEFAULT)
   TYPE_ATTRIBUTES = TypeFactory.hash_kv(Pcore::TYPE_MEMBER_NAME, TypeFactory.not_undef)
   TYPE_PARAMETERS = TypeFactory.hash_kv(Pcore::TYPE_MEMBER_NAME, TypeFactory.not_undef)
-  TYPE_ATTRIBUTE_CALLABLE = TypeFactory.callable(0,0)
+  TYPE_ATTRIBUTE_CALLABLE = TypeFactory.callable(0, 0)
 
   TYPE_FUNCTION_TYPE = PTypeType.new(PCallableType::DEFAULT)
 
-  TYPE_FUNCTION = TypeFactory.struct({
-    KEY_TYPE => TYPE_FUNCTION_TYPE,
-    TypeFactory.optional(KEY_FINAL) => PBooleanType::DEFAULT,
-    TypeFactory.optional(KEY_OVERRIDE) => PBooleanType::DEFAULT,
-    TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
-  })
+  TYPE_FUNCTION =
+    TypeFactory
+    .struct({
+              KEY_TYPE => TYPE_FUNCTION_TYPE,
+              TypeFactory.optional(KEY_FINAL) => PBooleanType::DEFAULT,
+              TypeFactory.optional(KEY_OVERRIDE) => PBooleanType::DEFAULT,
+              TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
+            })
+
   TYPE_FUNCTIONS = TypeFactory.hash_kv(PVariantType.new([Pcore::TYPE_MEMBER_NAME, PStringType.new('[]')]), TypeFactory.not_undef)
 
   TYPE_EQUALITY = TypeFactory.variant(Pcore::TYPE_MEMBER_NAME, TypeFactory.array_of(Pcore::TYPE_MEMBER_NAME))
 
   TYPE_CHECKS = PAnyType::DEFAULT # TBD
 
-  TYPE_OBJECT_I12N = TypeFactory.struct({
-    TypeFactory.optional(KEY_NAME) => TYPE_OBJECT_NAME,
-    TypeFactory.optional(KEY_PARENT) => PTypeType::DEFAULT,
-    TypeFactory.optional(KEY_TYPE_PARAMETERS) => TYPE_PARAMETERS,
-    TypeFactory.optional(KEY_ATTRIBUTES) => TYPE_ATTRIBUTES,
-    TypeFactory.optional(KEY_CONSTANTS) => TYPE_CONSTANTS,
-    TypeFactory.optional(KEY_FUNCTIONS) => TYPE_FUNCTIONS,
-    TypeFactory.optional(KEY_EQUALITY) => TYPE_EQUALITY,
-    TypeFactory.optional(KEY_EQUALITY_INCLUDE_TYPE) => PBooleanType::DEFAULT,
-    TypeFactory.optional(KEY_CHECKS) =>  TYPE_CHECKS,
-    TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
-  })
+  TYPE_OBJECT_I12N =
+    TypeFactory
+    .struct({
+              TypeFactory.optional(KEY_NAME) => TYPE_OBJECT_NAME,
+              TypeFactory.optional(KEY_PARENT) => PTypeType::DEFAULT,
+              TypeFactory.optional(KEY_TYPE_PARAMETERS) => TYPE_PARAMETERS,
+              TypeFactory.optional(KEY_ATTRIBUTES) => TYPE_ATTRIBUTES,
+              TypeFactory.optional(KEY_CONSTANTS) => TYPE_CONSTANTS,
+              TypeFactory.optional(KEY_FUNCTIONS) => TYPE_FUNCTIONS,
+              TypeFactory.optional(KEY_EQUALITY) => TYPE_EQUALITY,
+              TypeFactory.optional(KEY_EQUALITY_INCLUDE_TYPE) => PBooleanType::DEFAULT,
+              TypeFactory.optional(KEY_CHECKS) => TYPE_CHECKS,
+              TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
+            })
 
   def self.register_ptype(loader, ir)
     type = create_ptype(loader, ir, 'AnyType', '_pcore_init_hash' => TYPE_OBJECT_I12N)
@@ -145,7 +155,7 @@ class PObjectType < PMetaType
       if parent_member.nil?
         if @override
           raise Puppet::ParseError, _("expected %{label} to override an inherited %{feature_type}, but no such %{feature_type} was found") %
-              { label: label, feature_type: feature_type }
+                                    { label: label, feature_type: feature_type }
         end
         self
       else
@@ -160,19 +170,20 @@ class PObjectType < PMetaType
     # @raises [Puppet::ParseError] if the assertion fails
     # @api private
     def assert_can_be_overridden(member)
-      unless self.class == member.class
+      unless instance_of?(member.class)
         raise Puppet::ParseError, _("%{member} attempts to override %{label}") % { member: member.label, label: label }
       end
       if @final && !(constant? && member.constant?)
         raise Puppet::ParseError, _("%{member} attempts to override final %{label}") % { member: member.label, label: label }
       end
       unless member.override?
-        #TRANSLATOR 'override => true' is a puppet syntax and should not be translated
+        # TRANSLATOR 'override => true' is a puppet syntax and should not be translated
         raise Puppet::ParseError, _("%{member} attempts to override %{label} without having override => true") % { member: member.label, label: label }
       end
       unless @type.assignable?(member.type)
         raise Puppet::ParseError, _("%{member} attempts to override %{label} with a type that does not match") % { member: member.label, label: label }
       end
+
       member
     end
 
@@ -243,13 +254,14 @@ class PObjectType < PMetaType
       args_type = TypeCalculator.infer_set(block_given? ? args + [block] : args)
       found = @dispatch.find { |d| d.type.callable?(args_type) }
       raise ArgumentError, TypeMismatchDescriber.describe_signatures(label, @dispatch, args_type) if found.nil?
+
       found.invoke(receiver, scope, args, &block)
     end
 
     # @api private
     def create_dispatch(instance)
       # TODO: Assumes Ruby implementation for now
-      if(callable_type.is_a?(PVariantType))
+      if callable_type.is_a?(PVariantType)
         callable_type.types.map do |ct|
           Functions::Dispatch.new(ct, RubyGenerator.protect_reserved_name(name), [], false, ct.block_type.nil? ? nil : 'block')
         end
@@ -271,7 +283,6 @@ class PObjectType < PMetaType
   # Describes a named Attribute in an Object type
   # @api public
   class PAttribute < PAnnotatedMember
-
     # @return [String,nil] The attribute kind as defined by #TYPE_ATTRIBUTE_KIND, or `nil`
     attr_reader :kind
 
@@ -285,14 +296,16 @@ class PObjectType < PMetaType
     def initialize(name, container, init_hash)
       super(name, container, TypeAsserter.assert_instance_of(nil, TYPE_ATTRIBUTE, init_hash) { "initializer for #{self.class.label(container, name)}" })
       if name == Serialization::PCORE_TYPE_KEY || name == Serialization::PCORE_VALUE_KEY
-        raise Puppet::ParseError, _("The attribute '%{name}' is reserved and cannot be used") % { name: name}
+        raise Puppet::ParseError, _("The attribute '%{name}' is reserved and cannot be used") % { name: name }
       end
+
       @kind = init_hash[KEY_KIND]
       if @kind == ATTRIBUTE_KIND_CONSTANT # final is implied
         if init_hash.include?(KEY_FINAL) && !@final
-          #TRANSLATOR 'final => false' is puppet syntax and should not be translated
+          # TRANSLATOR 'final => false' is puppet syntax and should not be translated
           raise Puppet::ParseError, _("%{label} of kind 'constant' cannot be combined with final => false") % { label: label }
         end
+
         @final = true
       end
 
@@ -300,10 +313,12 @@ class PObjectType < PMetaType
         if @kind == ATTRIBUTE_KIND_DERIVED || @kind == ATTRIBUTE_KIND_GIVEN_OR_DERIVED
           raise Puppet::ParseError, _("%{label} of kind '%{kind}' cannot be combined with an attribute value") % { label: label, kind: @kind }
         end
+
         v = init_hash[KEY_VALUE]
-        @value = v == :default ? v : TypeAsserter.assert_instance_of(nil, type, v) {"#{label} #{KEY_VALUE}" }
+        @value = v == :default ? v : TypeAsserter.assert_instance_of(nil, type, v) { "#{label} #{KEY_VALUE}" }
       else
         raise Puppet::ParseError, _("%{label} of kind 'constant' requires a value") % { label: label } if @kind == ATTRIBUTE_KIND_CONSTANT
+
         @value = :undef # Not to be confused with nil or :default
       end
     end
@@ -353,6 +368,7 @@ class PObjectType < PMetaType
     def value
       # An error must be raised here since `nil` is a valid value and it would be bad to leak the :undef symbol
       raise Puppet::Error, "#{label} has no value" if @value == :undef
+
       @value
     end
 
@@ -381,7 +397,6 @@ class PObjectType < PMetaType
   # Describes a named Function in an Object type
   # @api public
   class PFunction < PAnnotatedMember
-
     # @param name [String] The name of the attribute
     # @param container [PObjectType] The containing object type
     # @param init_hash [Hash{String=>Object}] Hash containing function options
@@ -423,7 +438,7 @@ class PObjectType < PMetaType
   #   @param loader [Loaders::Loader,nil] the loader that loaded the type
   #
   # @api private
-  def initialize(_pcore_init_hash, init_hash_expression = nil)
+  def initialize(_pcore_init_hash, init_hash_expression = nil) # rubocop:disable Lint/UnderscorePrefixedVariableName
     if _pcore_init_hash.is_a?(Hash)
       _pcore_init_from_hash(_pcore_init_hash)
       @loader = init_hash_expression unless init_hash_expression.nil?
@@ -442,6 +457,7 @@ class PObjectType < PMetaType
     else
       name = o.class.name
       return false if name.nil? # anonymous class that doesn't implement PuppetObject is not an instance
+
       ir = Loaders.implementation_registry
       type = ir.nil? ? nil : ir.type_for_module(name)
       !type.nil? && assignable?(type, guard)
@@ -484,7 +500,7 @@ class PObjectType < PMetaType
     writer.write(self, value, serializer)
   end
 
-    # @api private
+  # @api private
   def create_new_function
     impl_class = implementation_class
     return impl_class.create_new_function(self) if impl_class.respond_to?(:create_new_function)
@@ -497,7 +513,6 @@ class PObjectType < PMetaType
 
     # Create and return a #new_XXX function where the dispatchers are added programmatically.
     Puppet::Functions.create_loaded_function(:"new_#{name}", loader) do
-
       # The class that creates new instances must be available to the constructor methods
       # and is therefore declared as a variable and accessor on the class that represents
       # this added function.
@@ -557,6 +572,7 @@ class PObjectType < PMetaType
   # @api private
   def implementation_class=(cls)
     raise ArgumentError, "attempt to redefine implementation class for #{label}" unless @implementation_class.nil?
+
     @implementation_class = cls
   end
 
@@ -572,6 +588,7 @@ class PObjectType < PMetaType
     if !@implementation_class.nil? || instance_variable_defined?(:@implementation_override)
       raise ArgumentError, "attempt to redefine implementation override for #{label}"
     end
+
     @implementation_override = block
   end
 
@@ -630,6 +647,7 @@ class PObjectType < PMetaType
       if init_param_names.size < param_count || init_non_opt_count > param_count
         raise Serialization::SerializationError, "Initializer for class #{impl_class.name} does not match the attributes of #{name}"
       end
+
       init_param_names = init_param_names[0, param_count] if init_param_names.size > param_count
       unless init_param_names == param_names
         # Reorder needed to match initialize method arguments
@@ -638,7 +656,7 @@ class PObjectType < PMetaType
           index = param_names.index(ip)
           if index.nil?
             raise Serialization::SerializationError,
-              "Initializer for class #{impl_class.name} parameter '#{ip}' does not match any of the the attributes of type #{name}"
+                  "Initializer for class #{impl_class.name} parameter '#{ip}' does not match any of the attributes of type #{name}"
           end
           new_param_types << param_types[index]
         end
@@ -685,6 +703,7 @@ class PObjectType < PMetaType
       check_self_recursion(self)
       rp = resolved_parent
       raise Puppet::ParseError, _("reference to unresolved type '%{name}'") % { :name => rp.type_string } if rp.is_a?(PTypeReferenceType)
+
       if rp.is_a?(PObjectType)
         parent_object_type = rp
         parent_members = rp.members(true)
@@ -715,13 +734,14 @@ class PObjectType < PMetaType
       attr_specs = {}
     else
       # attr_specs might be frozen
-      attr_specs = Hash[attr_specs]
+      attr_specs = attr_specs.to_h
     end
     unless constants.nil? || constants.empty?
       constants.each do |key, value|
         if attr_specs.include?(key)
           raise Puppet::ParseError, _("attribute %{label}[%{key}] is defined as both a constant and an attribute") % { label: label, key: key }
         end
+
         attr_spec = {
           # Type must be generic here, or overrides would become impossible
           KEY_TYPE => TypeCalculator.infer(value).generalize,
@@ -735,7 +755,7 @@ class PObjectType < PMetaType
     end
 
     unless attr_specs.empty?
-      @attributes = Hash[attr_specs.map do |key, attr_spec|
+      @attributes = attr_specs.to_h do |key, attr_spec|
         unless attr_spec.is_a?(Hash)
           attr_type = TypeAsserter.assert_instance_of(nil, PTypeType::DEFAULT, attr_spec) { "attribute #{label}[#{key}]" }
           attr_spec = { KEY_TYPE => attr_type }
@@ -743,18 +763,19 @@ class PObjectType < PMetaType
         end
         attr = PAttribute.new(key, self, attr_spec)
         [attr.name, attr.assert_override(parent_members)]
-      end].freeze
+      end.freeze
     end
 
     func_specs = init_hash[KEY_FUNCTIONS]
     unless func_specs.nil? || func_specs.empty?
-      @functions = Hash[func_specs.map do |key, func_spec|
+      @functions = func_specs.to_h do |key, func_spec|
         func_spec = { KEY_TYPE => TypeAsserter.assert_instance_of(nil, TYPE_FUNCTION_TYPE, func_spec) { "function #{label}[#{key}]" } } unless func_spec.is_a?(Hash)
         func = PFunction.new(key, self, func_spec)
         name = func.name
         raise Puppet::ParseError, _("%{label} conflicts with attribute with the same name") % { label: func.label } if @attributes.include?(name)
+
         [name, func.assert_override(parent_members)]
-      end].freeze
+      end.freeze
     end
 
     @equality_include_type = init_hash[KEY_EQUALITY_INCLUDE_TYPE]
@@ -764,11 +785,11 @@ class PObjectType < PMetaType
     equality = [equality] if equality.is_a?(String)
     if equality.is_a?(Array)
       unless equality.empty?
-        #TRANSLATORS equality_include_type = false should not be translated
+        # TRANSLATORS equality_include_type = false should not be translated
         raise Puppet::ParseError, _('equality_include_type = false cannot be combined with non empty equality specification') unless @equality_include_type
+
         parent_eq_attrs = nil
         equality.each do |attr_name|
-
           attr = parent_members[attr_name]
           if attr.nil?
             attr = @attributes[attr_name] || @functions[attr_name]
@@ -778,7 +799,7 @@ class PObjectType < PMetaType
             if parent_eq_attrs.include?(attr_name)
               including_parent = find_equality_definer_of(attr)
               raise Puppet::ParseError, _("%{label} equality is referencing %{attribute} which is included in equality of %{including_parent}") %
-                  { label: label, attribute: attr.label, including_parent: including_parent.label }
+                                        { label: label, attribute: attr.label, including_parent: including_parent.label }
             end
           end
 
@@ -786,12 +807,13 @@ class PObjectType < PMetaType
             if attr.nil?
               raise Puppet::ParseError, _("%{label} equality is referencing non existent attribute '%{attribute}'") % { label: label, attribute: attr_name }
             end
+
             raise Puppet::ParseError, _("%{label} equality is referencing %{attribute}. Only attribute references are allowed") %
-                { label: label, attribute: attr.label }
+                                      { label: label, attribute: attr.label }
           end
           if attr.kind == ATTRIBUTE_KIND_CONSTANT
             raise Puppet::ParseError, _("%{label} equality is referencing constant %{attribute}.") % { label: label, attribute: attr.label } + ' ' +
-                _("Reference to constant is not allowed in equality")
+                                      _("Reference to constant is not allowed in equality")
           end
         end
       end
@@ -879,7 +901,7 @@ class PObjectType < PMetaType
       tc = TypeCalculator.singleton
       constants, others = @attributes.partition do |_, a|
         a.kind == ATTRIBUTE_KIND_CONSTANT && a.type == tc.infer(a.value).generalize
-      end.map { |ha| Hash[ha] }
+      end.map(&:to_h)
 
       result[KEY_ATTRIBUTES] = compressed_members_hash(others) unless others.empty?
       unless constants.empty?
@@ -909,7 +931,7 @@ class PObjectType < PMetaType
     @name.nil? ? [@parent, @type_parameters, @attributes, @functions].hash : @name.hash
   end
 
-  def kind_of_callable?(optional=true, guard = nil)
+  def kind_of_callable?(optional = true, guard = nil)
     @parent.nil? ? false : @parent.kind_of_callable?(optional, guard)
   end
 
@@ -981,6 +1003,7 @@ class PObjectType < PMetaType
   def check_self_recursion(originator)
     unless @parent.nil?
       raise Puppet::Error, "The Object type '#{originator.label}' inherits from itself" if @parent.equal?(originator)
+
       @parent.check_self_recursion(originator)
     end
   end
@@ -1020,14 +1043,15 @@ class PObjectType < PMetaType
   # An Object type is only assignable from another Object type. The other type
   # or one of its parents must be equal to this type.
   def _assignable?(o, guard)
-    if o.is_a?(PObjectType)
+    case o
+    when PObjectType
       if DEFAULT == self || self == o
         true
       else
         op = o.parent
         op.nil? ? false : assignable?(op, guard)
       end
-    elsif o.is_a?(PObjectTypeExtension)
+    when PObjectTypeExtension
       assignable?(o.base_type, guard)
     else
       false
@@ -1057,7 +1081,7 @@ class PObjectType < PMetaType
       # All attributes except constants participate
       collector.merge!(@attributes.reject { |_, attr| attr.kind == ATTRIBUTE_KIND_CONSTANT })
     else
-      collector.merge!(Hash[@equality.map { |attr_name| [attr_name, @attributes[attr_name]] }])
+      collector.merge!(@equality.to_h { |attr_name| [attr_name, @attributes[attr_name]] })
     end
     nil
   end
@@ -1074,23 +1098,24 @@ class PObjectType < PMetaType
   private
 
   def compressed_members_hash(features)
-    Hash[features.values.map do |feature|
+    features.values.to_h do |feature|
       fh = feature._pcore_init_hash
       if fh.size == 1
         type = fh[KEY_TYPE]
         fh = type unless type.nil?
       end
       [feature.name, fh]
-    end]
+    end
   end
 
   # @return [PObjectType] the topmost parent who's #equality_attributes include the given _attr_
   def find_equality_definer_of(attr)
     type = self
-    while !type.nil? do
+    until type.nil?
       p = type.resolved_parent
       return type unless p.is_a?(PObjectType)
       return type unless p.equality_attributes.include?(attr.name)
+
       type = p
     end
     nil

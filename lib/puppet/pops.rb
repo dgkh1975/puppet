@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet
   # The Pops language system. This includes the parser, evaluator, AST model, and
   # Binder.
@@ -12,13 +14,13 @@ module Puppet
   module Pops
     EMPTY_HASH = {}.freeze
     EMPTY_ARRAY = [].freeze
-    EMPTY_STRING = ''.freeze
+    EMPTY_STRING = ''
 
     MAX_INTEGER =  0x7fffffffffffffff
     MIN_INTEGER = -0x8000000000000000
 
-    DOUBLE_COLON = '::'.freeze
-    USCORE = '_'.freeze
+    DOUBLE_COLON = '::'
+    USCORE = '_'
 
     require 'semantic_puppet'
 
@@ -60,6 +62,7 @@ module Puppet
     module Resource
       require_relative 'pops/resource/resource_type_impl'
     end
+
     module Evaluator
       require_relative 'pops/evaluator/literal_evaluator'
       require_relative 'pops/evaluator/callable_signature'

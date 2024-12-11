@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 # The Compiler service is used to submit and retrieve data from the
 # puppetserver.
 #
 # @api public
 class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
   # @return [String] Default API for the Compiler service
-  API = '/puppet/v3'.freeze
+  API = '/puppet/v3'
 
   # Use `Puppet::HTTP::Session.route_to(:puppet)` to create or get an instance of this class.
   #
@@ -116,8 +118,12 @@ class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
       body,
       headers: headers,
       # for legacy reasons we always send environment as a query parameter too
-      params: { environment: environment },
+      params: { environment: environment }
     )
+
+    if (compiler = response['X-Puppet-Compiler-Name'])
+      Puppet.notice("Catalog compiled by #{compiler}")
+    end
 
     process_response(response)
 
@@ -143,7 +149,7 @@ class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
   #    report submission.
   # @param [String] job_id The id of the orchestrator job that triggered this run.
   # @param [Hash] options A hash of options beyond direct input to catalogs. Options:
-  #    - prefer_requested_environment Whether to always override a node's classified 
+  #    - prefer_requested_environment Whether to always override a node's classified
   #      environment with the one supplied in the request. If this is true and no environment
   #      is supplied, fall back to the classified environment, or finally, 'production'.
   #    - capture_logs Whether to return the errors and warnings that occurred during
@@ -157,9 +163,10 @@ class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
   #
   def post_catalog4(certname, persistence:, environment:, facts: nil, trusted_facts: nil, transaction_uuid: nil, job_id: nil, options: nil)
     unless persistence.is_a?(Hash) && (missing = [:facts, :catalog] - persistence.keys.map(&:to_sym)).empty?
-      raise ArgumentError.new("The 'persistence' hash is missing the keys: #{missing.join(', ')}")
+      raise ArgumentError, "The 'persistence' hash is missing the keys: #{missing.join(', ')}"
     end
-    raise ArgumentError.new("Facts must be a Hash not a #{facts.class}") unless facts.nil? || facts.is_a?(Hash)
+    raise ArgumentError, "Facts must be a Hash not a #{facts.class}" unless facts.nil? || facts.is_a?(Hash)
+
     body = {
       certname: certname,
       persistence: persistence,
@@ -188,7 +195,7 @@ class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
     rescue => err
       raise Puppet::HTTP::SerializationError.new("Failed to deserialize catalog from puppetserver response: #{err.message}", err)
     end
-    
+
     logs = response_body['logs'] || []
     [response, catalog, logs]
   end
@@ -241,7 +248,7 @@ class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
       with_base_url("/facts/#{name}"),
       serialize(formatter, facts),
       headers: headers,
-      params: { environment: environment },
+      params: { environment: environment }
     )
 
     process_response(response)
@@ -301,9 +308,9 @@ class Puppet::HTTP::Service::Compiler < Puppet::HTTP::Service
   # @api public
   def put_filebucket_file(path, body:, environment:)
     headers = add_puppet_headers({
-      'Accept' => 'application/octet-stream',
-      'Content-Type' => 'application/octet-stream'
-      })
+                                   'Accept' => 'application/octet-stream',
+                                   'Content-Type' => 'application/octet-stream'
+                                 })
 
     response = @client.put(
       with_base_url("/file_bucket_file/#{path}"),

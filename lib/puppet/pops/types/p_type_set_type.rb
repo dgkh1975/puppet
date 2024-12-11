@@ -1,15 +1,15 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
-
-KEY_NAME_AUTHORITY = 'name_authority'.freeze
-KEY_TYPES = 'types'.freeze
-KEY_ALIAS = 'alias'.freeze
-KEY_VERSION = 'version'.freeze
-KEY_VERSION_RANGE = 'version_range'.freeze
-KEY_REFERENCES = 'references'.freeze
+KEY_NAME_AUTHORITY = 'name_authority'
+KEY_TYPES = 'types'
+KEY_ALIAS = 'alias'
+KEY_VERSION = 'version'
+KEY_VERSION_RANGE = 'version_range'
+KEY_REFERENCES = 'references'
 
 class PTypeSetType < PMetaType
-
   # A Loader that makes the types known to the TypeSet visible
   #
   # @api private
@@ -39,23 +39,27 @@ class PTypeSetType < PMetaType
   TYPE_STRING_OR_VERSION = TypeFactory.variant(PStringType::NON_EMPTY, TypeFactory.sem_ver)
   TYPE_STRING_OR_RANGE = TypeFactory.variant(PStringType::NON_EMPTY, TypeFactory.sem_ver_range)
 
-  TYPE_TYPE_REFERENCE_I12N = TypeFactory.struct({
-    KEY_NAME => Pcore::TYPE_QUALIFIED_REFERENCE,
-    KEY_VERSION_RANGE => TYPE_STRING_OR_RANGE,
-    TypeFactory.optional(KEY_NAME_AUTHORITY) => Pcore::TYPE_URI,
-    TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
-  })
+  TYPE_TYPE_REFERENCE_I12N =
+    TypeFactory
+    .struct({
+              KEY_NAME => Pcore::TYPE_QUALIFIED_REFERENCE,
+              KEY_VERSION_RANGE => TYPE_STRING_OR_RANGE,
+              TypeFactory.optional(KEY_NAME_AUTHORITY) => Pcore::TYPE_URI,
+              TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS
+            })
 
-  TYPE_TYPESET_I12N = TypeFactory.struct({
-    TypeFactory.optional(Pcore::KEY_PCORE_URI) => Pcore::TYPE_URI,
-    Pcore::KEY_PCORE_VERSION => TYPE_STRING_OR_VERSION,
-    TypeFactory.optional(KEY_NAME_AUTHORITY) => Pcore::TYPE_URI,
-    TypeFactory.optional(KEY_NAME) => Pcore::TYPE_QUALIFIED_REFERENCE,
-    TypeFactory.optional(KEY_VERSION) => TYPE_STRING_OR_VERSION,
-    TypeFactory.optional(KEY_TYPES) => TypeFactory.hash_kv(Pcore::TYPE_SIMPLE_TYPE_NAME, PVariantType.new([PTypeType::DEFAULT, PObjectType::TYPE_OBJECT_I12N]), PCollectionType::NOT_EMPTY_SIZE),
-    TypeFactory.optional(KEY_REFERENCES) => TypeFactory.hash_kv(Pcore::TYPE_SIMPLE_TYPE_NAME, TYPE_TYPE_REFERENCE_I12N, PCollectionType::NOT_EMPTY_SIZE),
-    TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS,
-  })
+  TYPE_TYPESET_I12N =
+    TypeFactory
+    .struct({
+              TypeFactory.optional(Pcore::KEY_PCORE_URI) => Pcore::TYPE_URI,
+              Pcore::KEY_PCORE_VERSION => TYPE_STRING_OR_VERSION,
+              TypeFactory.optional(KEY_NAME_AUTHORITY) => Pcore::TYPE_URI,
+              TypeFactory.optional(KEY_NAME) => Pcore::TYPE_QUALIFIED_REFERENCE,
+              TypeFactory.optional(KEY_VERSION) => TYPE_STRING_OR_VERSION,
+              TypeFactory.optional(KEY_TYPES) => TypeFactory.hash_kv(Pcore::TYPE_SIMPLE_TYPE_NAME, PVariantType.new([PTypeType::DEFAULT, PObjectType::TYPE_OBJECT_I12N]), PCollectionType::NOT_EMPTY_SIZE),
+              TypeFactory.optional(KEY_REFERENCES) => TypeFactory.hash_kv(Pcore::TYPE_SIMPLE_TYPE_NAME, TYPE_TYPE_REFERENCE_I12N, PCollectionType::NOT_EMPTY_SIZE),
+              TypeFactory.optional(KEY_ANNOTATIONS) => TYPE_ANNOTATIONS,
+            })
 
   def self.register_ptype(loader, ir)
     create_ptype(loader, ir, 'AnyType', '_pcore_init_hash' => TYPE_TYPESET_I12N.resolve(loader))
@@ -112,7 +116,7 @@ class PTypeSetType < PMetaType
     @pcore_version = PSemVerType.convert(init_hash[Pcore::KEY_PCORE_VERSION]).freeze
     unless Pcore::PARSABLE_PCORE_VERSIONS.include?(@pcore_version)
       raise ArgumentError,
-        "The pcore version for TypeSet '#{@name}' is not understood by this runtime. Expected range #{Pcore::PARSABLE_PCORE_VERSIONS}, got #{@pcore_version}"
+            "The pcore version for TypeSet '#{@name}' is not understood by this runtime. Expected range #{Pcore::PARSABLE_PCORE_VERSIONS}, got #{@pcore_version}"
     end
 
     @pcore_uri = init_hash[Pcore::KEY_PCORE_URI].freeze
@@ -145,6 +149,7 @@ class PTypeSetType < PMetaType
           unless ranges.all? { |range| (range & ref.version_range).nil? }
             raise ArgumentError, "TypeSet '#{@name}' references TypeSet '#{ref_na}/#{ref_name}' more than once using overlapping version ranges"
           end
+
           ranges << ref.version_range
         end
 
@@ -154,6 +159,7 @@ class PTypeSetType < PMetaType
         if @types.has_key?(ref_alias)
           raise ArgumentError, "TypeSet '#{@name}' references a TypeSet using alias '#{ref_alias}'. The alias collides with the name of a declared type"
         end
+
         ref_map[ref_alias] = ref
 
         @dc_to_cc_map[ref_alias.downcase] = ref_alias
@@ -172,12 +178,12 @@ class PTypeSetType < PMetaType
   def _pcore_init_hash
     result = super()
     result[Pcore::KEY_PCORE_URI] = @pcore_uri unless @pcore_uri.nil?
-    result[Pcore::KEY_PCORE_VERSION] =  @pcore_version.to_s
+    result[Pcore::KEY_PCORE_VERSION] = @pcore_version.to_s
     result[KEY_NAME_AUTHORITY] = @name_authority unless @name_authority.nil?
     result[KEY_NAME] = @name
     result[KEY_VERSION] = @version.to_s unless @version.nil?
     result[KEY_TYPES] = @types unless @types.empty?
-    result[KEY_REFERENCES] = Hash[@references.map { |ref_alias, ref| [ref_alias, ref._pcore_init_hash] }] unless @references.empty?
+    result[KEY_REFERENCES] = @references.transform_values(&:_pcore_init_hash) unless @references.empty?
     result
   end
 
@@ -192,6 +198,7 @@ class PTypeSetType < PMetaType
   def [](qname)
     if qname.is_a?(Loader::TypedName)
       return nil unless qname.type == :type && qname.name_authority == @name_authority
+
       qname = qname.name
     end
 
@@ -231,15 +238,13 @@ class PTypeSetType < PMetaType
   def name_for(t, default_name)
     key = @types.key(t)
     if key.nil?
-      if @references.empty?
-        default_name
-      else
+      unless @references.empty?
         @references.each_pair do |ref_key, ref|
           ref_name = ref.type_set.name_for(t, nil)
           return "#{ref_key}::#{ref_name}" unless ref_name.nil?
         end
-        default_name
       end
+      default_name
     else
       key
     end
@@ -290,7 +295,7 @@ class PTypeSetType < PMetaType
     types = result[KEY_TYPES]
     if types.is_a?(Hash)
       types.each do |type_name, value|
-        full_name = "#{@name}::#{type_name}".freeze
+        full_name = "#{@name}::#{type_name}"
         typed_name = Loader::TypedName.new(:type, full_name, name_auth)
         if value.is_a?(Model::ResourceDefaultsExpression)
           # This is actually a <Parent> { <key-value entries> } notation. Convert to a literal hash that contains the parent
@@ -321,16 +326,16 @@ class PTypeSetType < PMetaType
 
   # @api private
   def resolve_hash(loader, init_hash)
-    result = Hash[init_hash.map do |key, value|
+    result = init_hash.to_h do |key, value|
       key = resolve_type_refs(loader, key)
       value = resolve_type_refs(loader, value) unless key == KEY_TYPES && value.is_a?(Hash)
       [key, value]
-    end]
+    end
     name_auth = resolve_name_authority(result, loader)
     types = result[KEY_TYPES]
     if types.is_a?(Hash)
       types.each do |type_name, value|
-        full_name = "#{@name}::#{type_name}".freeze
+        full_name = "#{@name}::#{type_name}"
         typed_name = Loader::TypedName.new(:type, full_name, name_auth)
         meta_name = value.is_a?(Hash) ? 'Object' : 'TypeAlias'
         type = Loader::TypeDefinitionInstantiator.create_named_type(full_name, meta_name, value, name_auth)
@@ -353,19 +358,21 @@ class PTypeSetType < PMetaType
     o.is_a?(PTypeSetType)
   end
 
-  DEFAULT = self.new({
-    KEY_NAME => 'DefaultTypeSet',
-    KEY_NAME_AUTHORITY => Pcore::RUNTIME_NAME_AUTHORITY,
-    Pcore::KEY_PCORE_URI => Pcore::PCORE_URI,
-    Pcore::KEY_PCORE_VERSION => Pcore::PCORE_VERSION,
-    KEY_VERSION => SemanticPuppet::Version.new(0,0,0)
-  })
+  DEFAULT =
+
+    new({
+          KEY_NAME => 'DefaultTypeSet',
+          KEY_NAME_AUTHORITY => Pcore::RUNTIME_NAME_AUTHORITY,
+          Pcore::KEY_PCORE_URI => Pcore::PCORE_URI,
+          Pcore::KEY_PCORE_VERSION => Pcore::PCORE_VERSION,
+          KEY_VERSION => SemanticPuppet::Version.new(0, 0, 0)
+        })
 
   protected
 
   # @api_private
   def _assignable?(o, guard)
-    self.class == o.class && (self == DEFAULT || eql?(o))
+    instance_of?(o.class) && (self == DEFAULT || eql?(o))
   end
 
   private

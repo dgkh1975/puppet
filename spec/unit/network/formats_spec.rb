@@ -247,7 +247,7 @@ describe "Puppet Network Format" do
     end
   end
 
-  describe "pson" do
+  describe "pson", :if => Puppet.features.pson? do
     let(:pson) { Puppet::Network::FormatHandler.format(:pson) }
 
     it "should include a pson format" do
@@ -504,7 +504,7 @@ EOT
 
     context "when rendering face-related objects" do
       it "pretty prints facts" do
-        tm = Time.new("2016-01-27T19:30:00")
+        tm = Time.new(2016, 1, 27, 19, 30, 0)
         values = {
           "architecture" =>  "x86_64",
           "os" => {

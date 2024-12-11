@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
 # Helper module that makes creation of type objects simpler.
@@ -113,7 +115,7 @@ module TypeFactory
       size_type_or_value.nil? ? PStringType::DEFAULT : PStringType.new(size_type_or_value)
     else
       if Puppet[:strict] != :off
-        #TRANSLATORS 'TypeFactory#string' is a class and method name and should not be translated
+        # TRANSLATORS 'TypeFactory#string' is a class and method name and should not be translated
         message = _("Passing more than one argument to TypeFactory#string is deprecated")
         Puppet.warn_once('deprecations', "TypeFactory#string_multi_args", message)
       end
@@ -155,7 +157,7 @@ module TypeFactory
   # @api public
   #
   def self.variant(*types)
-    PVariantType.maybe_create(types.map {|v| type_of(v) })
+    PVariantType.maybe_create(types.map { |v| type_of(v) })
   end
 
   # Produces the Struct type, either a non parameterized instance representing
@@ -178,6 +180,7 @@ module TypeFactory
       # TODO: Should have stricter name rule
       if key_type.is_a?(String)
         raise ArgumentError, 'Struct element key cannot be an empty String' if key_type.empty?
+
         key_type = string(key_type)
         # Must make key optional if the value can be Undef
         key_type = optional(key_type) if tc.assignable?(value_type, PUndefType::DEFAULT)
@@ -238,14 +241,18 @@ module TypeFactory
   end
 
   def self.tuple(types = [], size_type = nil)
-    PTupleType.new(types.map {|elem| type_of(elem) }, size_type)
+    PTupleType.new(types.map { |elem| type_of(elem) }, size_type)
   end
 
   # Produces the Boolean type
   # @api public
   #
   def self.boolean(value = nil)
-    value.nil? ? PBooleanType::DEFAULT : (value ? PBooleanType::TRUE : PBooleanType::FALSE)
+    if value.nil?
+      PBooleanType::DEFAULT
+    else
+      value ? PBooleanType::TRUE : PBooleanType::FALSE
+    end
   end
 
   # Produces the Any type
@@ -269,7 +276,7 @@ module TypeFactory
       case re
       when String
         re_t = PRegexpType.new(re)
-        re_t.regexp  # compile it to catch errors
+        re_t.regexp # compile it to catch errors
         re_t
 
       when Regexp
@@ -281,8 +288,8 @@ module TypeFactory
       when PPatternType
         re.patterns
 
-     else
-       raise ArgumentError, "Only String, Regexp, Pattern-Type, and Regexp-Type are allowed: got '#{re.class}"
+      else
+        raise ArgumentError, "Only String, Regexp, Pattern-Type, and Regexp-Type are allowed: got '#{re.class}"
       end
     end.flatten.uniq
     PPatternType.new(patterns)
@@ -306,7 +313,7 @@ module TypeFactory
   # @api public
   #
   def self.all_callables
-    return PCallableType::DEFAULT
+    PCallableType::DEFAULT
   end
 
   # Produces a Callable type with one signature without support for a block
@@ -346,7 +353,7 @@ module TypeFactory
       size_type = nil
     end
 
-    types = params.map {|p| type_of(p) }
+    types = params.map { |p| type_of(p) }
 
     # If the specification requires types, and none were given, a Unit type is used
     if types.empty? && !size_type.nil? && size_type.range[1] > 0
@@ -415,7 +422,7 @@ module TypeFactory
 
   # Produces an instance of the SemVer type
   def self.sem_ver(*ranges)
-    ranges.empty? ? PSemVerType::DEFAULT : PSemVerType::new(ranges)
+    ranges.empty? ? PSemVerType::DEFAULT : PSemVerType.new(ranges)
   end
 
   # Produces a PResourceType with a String type_name A PResourceType with a nil
@@ -430,9 +437,11 @@ module TypeFactory
     when String
       type_name = TypeFormatter.singleton.capitalize_segments(type_name)
       raise ArgumentError, "Illegal type name '#{type_name}'" unless type_name =~ Patterns::CLASSREF_EXT
+
       PResourceType.new(type_name, title)
     when nil
       raise ArgumentError, 'The type name cannot be nil, if title is given' unless title.nil?
+
       PResourceType::DEFAULT
     else
       raise ArgumentError, "The type name cannot be a #{type_name.class.name}"
@@ -555,11 +564,12 @@ module TypeFactory
   # a classname.
   #
   def self.type_of(o)
-    if o.is_a?(Class)
+    case o
+    when Class
       @type_calculator.type(o)
-    elsif o.is_a?(PAnyType)
+    when PAnyType
       o
-    elsif o.is_a?(String)
+    when String
       PRuntimeType.new(:ruby, o)
     else
       @type_calculator.infer_generic(o)
@@ -599,7 +609,7 @@ module TypeFactory
   # Generic creator of a RuntimeType - allows creating the type with nil or
   # String runtime_type_name.  Also see ruby_type(o) and ruby(o).
   #
-  def self.runtime(runtime=nil, runtime_type_name = nil)
+  def self.runtime(runtime = nil, runtime_type_name = nil)
     runtime = runtime.to_sym if runtime.is_a?(String)
     PRuntimeType.new(runtime, runtime_type_name)
   end
@@ -617,7 +627,7 @@ module TypeFactory
   # @param type_string [String] the string form of the type
   # @return [PTypeReferenceType] the type reference
   def self.type_reference(type_string = nil)
-    type_string == nil ? PTypeReferenceType::DEFAULT : PTypeReferenceType.new(type_string)
+    type_string.nil? ? PTypeReferenceType::DEFAULT : PTypeReferenceType.new(type_string)
   end
 
   # Returns true if the given type t is of valid range parameter type (integer
@@ -625,7 +635,6 @@ module TypeFactory
   def self.is_range_parameter?(t)
     t.is_a?(Integer) || t == 'default' || :default == t
   end
-
 end
 end
 end

@@ -1,12 +1,14 @@
+# frozen_string_literal: true
+
 module Puppet::Scheduler
   class Scheduler
-    def initialize(timer=Puppet::Scheduler::Timer.new)
+    def initialize(timer = Puppet::Scheduler::Timer.new)
       @timer = timer
     end
 
     def run_loop(jobs)
       mark_start_times(jobs, @timer.now)
-      while not enabled(jobs).empty?
+      until enabled(jobs).empty?
         @timer.wait_for(min_interval_to_next_run_from(jobs, @timer.now))
         run_ready(jobs, @timer.now)
       end

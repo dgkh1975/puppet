@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+
 require 'rubygems'
 require 'rspec'
 require 'rspec/core/formatters/progress_formatter'
@@ -22,6 +24,7 @@ module Parallel
         dump_failure_info(example)
       end
     end
+
     #
     # Responsible for running spec files given a spec file.
     # Can supply an optional list of additional options (used when running in CI).
@@ -51,15 +54,13 @@ def print_usage
   puts 'usage: rspec_runner <spec_list_file> [<rspec_options_string>]'
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   if ARGV.length < 1
     print_usage
+  elsif ARGV.length == 1
+    exit Parallel::RSpec::Runner.new(ARGV[0]).run
   else
-    if ARGV.length == 1
-      exit Parallel::RSpec::Runner.new(ARGV[0]).run
-    else
-      spec_file, *options = ARGV
-      exit Parallel::RSpec::Runner.new(spec_file, options).run
-    end
+    spec_file, *options = ARGV
+    exit Parallel::RSpec::Runner.new(spec_file, options).run
   end
 end

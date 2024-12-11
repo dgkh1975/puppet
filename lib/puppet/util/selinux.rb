@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Provides utility functions to help interface Puppet to SELinux.
 #
 # This requires the very new SELinux Ruby bindings.  These bindings closely
@@ -12,16 +14,16 @@ Puppet.features.selinux? # check, but continue even if it's not
 require 'pathname'
 
 module Puppet::Util::SELinux
-
-  S_IFREG = 0100000
-  S_IFDIR = 0040000
-  S_IFLNK = 0120000
+  S_IFREG = 0o100000
+  S_IFDIR = 0o040000
+  S_IFLNK = 0o120000
 
   def self.selinux_support?
     return false unless defined?(Selinux)
     if Selinux.is_selinux_enabled == 1
       return true
     end
+
     false
   end
 
@@ -33,40 +35,50 @@ module Puppet::Util::SELinux
   # SELinux support or if the SELinux call fails then return nil.
   def get_selinux_current_context(file)
     return nil unless selinux_support?
+
     retval = Selinux.lgetfilecon(file)
     if retval == -1
       return nil
     end
+
     retval[1]
   end
 
   # Retrieve and return the default context of the file.  If we don't have
   # SELinux support or if the SELinux call fails to file a default then return nil.
-  def get_selinux_default_context(file, resource_ensure=nil)
+  # @deprecated matchpathcon is a deprecated method, selabel_lookup is preferred
+  def get_selinux_default_context(file, resource_ensure = nil)
     return nil unless selinux_support?
     # If the filesystem has no support for SELinux labels, return a default of nil
     # instead of what matchpathcon would return
     return nil unless selinux_label_support?(file)
+
     # If the file exists we should pass the mode to matchpathcon for the most specific
     # matching.  If not, we can pass a mode of 0.
-    begin
-      filestat = file_lstat(file)
-      mode = filestat.mode
-    rescue Errno::EACCES
-      mode = 0
-    rescue Errno::ENOENT
-      if resource_ensure
-        mode = get_create_mode(resource_ensure)
-      else
-        mode = 0
-      end
-    end
+    mode = file_mode(file, resource_ensure)
 
     retval = Selinux.matchpathcon(file, mode)
-    if retval == -1
-      return nil
-    end
-    retval[1]
+    retval == -1 ? nil : retval[1]
+  end
+
+  # Retrieve and return the default context of the file using an selinux handle.
+  # If we don't have SELinux support or if the SELinux call fails to file a
+  # default then return nil.
+  def get_selinux_default_context_with_handle(file, handle, resource_ensure = nil)
+    return nil unless selinux_support?
+    # If the filesystem has no support for SELinux labels, return a default of nil
+    # instead of what selabel_lookup would return
+    return nil unless selinux_label_support?(file)
+
+    # Handle is needed for selabel_lookup
+    raise ArgumentError, _("Cannot get default context with nil handle") unless handle
+
+    # If the file exists we should pass the mode to selabel_lookup for the most specific
+    # matching.  If not, we can pass a mode of 0.
+    mode = file_mode(file, resource_ensure)
+
+    retval = Selinux.selabel_lookup(handle, file, mode)
+    retval == -1 ? nil : retval[1]
   end
 
   # Take the full SELinux context returned from the tools and parse it
@@ -76,10 +88,12 @@ module Puppet::Util::SELinux
     if context.nil? or context == "unlabeled"
       return nil
     end
+
     components = /^([^\s:]+):([^\s:]+):([^\s:]+)(?::([\sa-zA-Z0-9:,._-]+))?$/.match(context)
     unless components
       raise Puppet::Error, _("Invalid context to parse: %{context}") % { context: context }
     end
+
     case component
     when :seluser
       components[1]
@@ -116,16 +130,16 @@ module Puppet::Util::SELinux
       end
       context = context.split(':')
       case component
-        when :seluser
-          context[0] = value
-        when :selrole
-          context[1] = value
-        when :seltype
-          context[2] = value
-        when :selrange
-          context[3] = value
-        else
-          raise ArgumentError, _("set_selinux_context component must be one of :seluser, :selrole, :seltype, or :selrange")
+      when :seluser
+        context[0] = value
+      when :selrole
+        context[1] = value
+      when :seltype
+        context[2] = value
+      when :selrange
+        context[3] = value
+      else
+        raise ArgumentError, _("set_selinux_context component must be one of :seluser, :selrole, :seltype, or :selrange")
       end
       context = context.join(':')
     else
@@ -134,10 +148,10 @@ module Puppet::Util::SELinux
 
     retval = Selinux.lsetfilecon(file, context)
     if retval == 0
-      return true
+      true
     else
       Puppet.warning _("Failed to set SELinux context %{context} on %{file}") % { context: context, file: file }
-      return false
+      false
     end
   end
 
@@ -146,9 +160,10 @@ module Puppet::Util::SELinux
   # Puppet uses.  This will set the file's SELinux context to the policy's
   # default context (if any) if it differs from the context currently on
   # the file.
-  def set_selinux_default_context(file, resource_ensure=nil)
+  def set_selinux_default_context(file, resource_ensure = nil)
     new_context = get_selinux_default_context(file, resource_ensure)
     return nil unless new_context
+
     cur_context = get_selinux_current_context(file)
     if new_context != cur_context
       set_selinux_context(file, new_context)
@@ -179,6 +194,7 @@ module Puppet::Util::SELinux
         line.strip!
         next if line.empty?
         next if line[0] == "#" # skip comments
+
         line.gsub!(/[[:space:]]+/m, '')
         mapping = line.split("=", 2)
         if category == mapping[1]
@@ -204,7 +220,8 @@ module Puppet::Util::SELinux
   def selinux_label_support?(file)
     fstype = find_fs(file)
     return false if fstype.nil?
-    filesystems = ['ext2', 'ext3', 'ext4', 'gfs', 'gfs2', 'xfs', 'jfs', 'btrfs', 'tmpfs']
+
+    filesystems = %w[ext2 ext3 ext4 gfs gfs2 xfs jfs btrfs tmpfs zfs]
     filesystems.include?(fstype)
   end
 
@@ -224,14 +241,30 @@ module Puppet::Util::SELinux
     mode
   end
 
+  # If the file/directory/symlink exists, return its mode. Otherwise, get the default mode
+  # that should be used to create the file/directory/symlink taking into account the desired
+  # file type specified in +resource_ensure+.
+  def file_mode(file, resource_ensure)
+    filestat = file_lstat(file)
+    filestat.mode
+  rescue Errno::EACCES
+    0
+  rescue Errno::ENOENT
+    if resource_ensure
+      get_create_mode(resource_ensure)
+    else
+      0
+    end
+  end
+
   # Internal helper function to read and parse /proc/mounts
   def read_mounts
-    mounts = ""
+    mounts = ''.dup
     begin
       if File.method_defined? "read_nonblock"
         # If possible we use read_nonblock in a loop rather than read to work-
         # a linux kernel bug.  See ticket #1963 for details.
-        mountfh = File.open("/proc/mounts")
+        mountfh = File.new("/proc/mounts")
         loop do
           mounts += mountfh.read_nonblock(1024)
         end
@@ -256,6 +289,7 @@ module Puppet::Util::SELinux
     mounts.each_line do |line|
       params = line.split(' ')
       next if params[2] == 'rootfs'
+
       mntpoint[params[1]] = params[2]
     end
     mntpoint
@@ -282,7 +316,7 @@ module Puppet::Util::SELinux
     end
 
     # Should never be reached...
-    return mounts['/']
+    mounts['/']
   end
 
   ##

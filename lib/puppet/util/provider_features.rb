@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Provides feature definitions.
 require_relative '../../puppet/util/docs'
 require_relative '../../puppet/util'
@@ -20,13 +22,13 @@ module Puppet::Util::ProviderFeatures
     # @param obj [Object, Class] the object or class to check if requirements are met
     # @return [Boolean] whether all requirements for this feature are met or not.
     def available?(obj)
-      if self.methods
-        return !!methods_available?(obj)
+      if methods
+        !!methods_available?(obj)
       else
         # In this case, the provider has to declare support for this
         # feature, and that's been checked before we ever get to the
         # method checks.
-        return false
+        false
       end
     end
 
@@ -61,6 +63,7 @@ module Puppet::Util::ProviderFeatures
   def feature(name, docs, hash = {})
     @features ||= {}
     raise Puppet::DevError, _("Feature %{name} is already defined") % { name: name } if @features.include?(name)
+
     begin
       obj = ProviderFeature.new(name, docs, **hash)
       @features[obj.name] = obj
@@ -75,9 +78,10 @@ module Puppet::Util::ProviderFeatures
 
   # @return [String] Returns a string with documentation covering all features.
   def featuredocs
-    str = ""
+    str = ''.dup
     @features ||= {}
     return nil if @features.empty?
+
     names = @features.keys.sort_by(&:to_s)
     names.each do |name|
       doc = @features[name].docs.gsub(/\n\s+/, " ")
@@ -127,6 +131,7 @@ module Puppet::Util::ProviderFeatures
       # Create a method that will list all functional features.
       @feature_module.send(:define_method, :features) do
         return false unless defined?(features)
+
         features.keys.find_all { |n| feature?(n) }.sort_by(&:to_s)
       end
 
@@ -148,7 +153,7 @@ module Puppet::Util::ProviderFeatures
       @features.each do |name, feature|
         method = name.to_s + "?"
         @feature_module.send(:define_method, method) do
-          (is_a?(Class) ?  declared_feature?(name) : self.class.declared_feature?(name)) or feature.available?(self)
+          (is_a?(Class) ? declared_feature?(name) : self.class.declared_feature?(name)) or feature.available?(self)
         end
       end
 
@@ -176,4 +181,3 @@ module Puppet::Util::ProviderFeatures
     @features[name]
   end
 end
-

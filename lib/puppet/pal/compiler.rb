@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 module Puppet
 module Pal
-
   # A configured compiler as obtained in the callback from `Puppet::Pal.with_script_compiler`.
   # (Later, there may also be a catalog compiler available.)
   #
@@ -24,8 +25,8 @@ module Pal
     #
     def call_function(function_name, *args, &block)
       # TRANSLATORS: do not translate variable name strings in these assertions
-      Pal::assert_non_empty_string(function_name, 'function_name', false)
-      Pal::assert_type(Pal::T_ANY_ARRAY, args, 'args', false)
+      Pal.assert_non_empty_string(function_name, 'function_name', false)
+      Pal.assert_type(Pal::T_ANY_ARRAY, args, 'args', false)
       internal_evaluator.evaluator.external_call_function(function_name, args, topscope, &block)
     end
 
@@ -45,6 +46,7 @@ module Pal
       if func
         return FunctionSignature.new(func.class)
       end
+
       # Could not find function
       nil
     end
@@ -86,6 +88,7 @@ module Pal
       unless puppet_code.is_a?(String)
         raise ArgumentError, _("The argument 'puppet_code' must be a String, got %{type}") % { type: puppet_code.class }
       end
+
       evaluate(parse_string(puppet_code, source_file))
     end
 
@@ -140,6 +143,7 @@ module Pal
       unless code_string.is_a?(String)
         raise ArgumentError, _("The argument 'code_string' must be a String, got %{type}") % { type: code_string.class }
       end
+
       internal_evaluator.parse_string(code_string, source_file)
     end
 
@@ -153,6 +157,7 @@ module Pal
       unless file.is_a?(String)
         raise ArgumentError, _("The argument 'file' must be a String, got %{type}") % { type: file.class }
       end
+
       internal_evaluator.parse_file(file)
     end
 
@@ -188,8 +193,9 @@ module Pal
     def create(data_type, *arguments)
       t = data_type.is_a?(String) ? type(data_type) : data_type
       unless t.is_a?(Puppet::Pops::Types::PAnyType)
-        raise ArgumentError, _("Given data_type value is not a data type, got '%{type}'") % {type: t.class}
+        raise ArgumentError, _("Given data_type value is not a data type, got '%{type}'") % { type: t.class }
       end
+
       call_function('new', t, *arguments)
     end
 
@@ -207,7 +213,7 @@ module Pal
       if filter_regex.nil?
         loader.discover(kind, error_collector)
       else
-        loader.discover(kind, error_collector) {|f| f.name =~ filter_regex }
+        loader.discover(kind, error_collector) { |f| f.name =~ filter_regex }
       end
     end
 
@@ -217,6 +223,5 @@ module Pal
       internal_compiler.topscope
     end
   end
-
 end
 end

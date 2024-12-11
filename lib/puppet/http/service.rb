@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Represents an abstract Puppet web service.
 #
 # @abstract Subclass and implement methods for the service's REST APIs.
@@ -90,7 +92,7 @@ class Puppet::HTTP::Service
   #
   # @api public
   def connect(ssl_context: nil)
-    @client.connect(@url, options: {ssl_context: ssl_context})
+    @client.connect(@url, options: { ssl_context: ssl_context })
   end
 
   protected
@@ -105,12 +107,10 @@ class Puppet::HTTP::Service
     Puppet[:http_extra_headers].each do |name, value|
       if modified_headers.keys.find { |key| key.casecmp(name) == 0 }
         Puppet.warning(_('Ignoring extra header "%{name}" as it was previously set.') % { name: name })
+      elsif value.nil? || value.empty?
+        Puppet.warning(_('Ignoring extra header "%{name}" as it has no value.') % { name: name })
       else
-        if value.nil? || value.empty?
-          Puppet.warning(_('Ignoring extra header "%{name}" as it has no value.') % { name: name })
-        else
-          modified_headers[name] = value
-        end
+        modified_headers[name] = value
       end
     end
     modified_headers
@@ -119,8 +119,7 @@ class Puppet::HTTP::Service
   def build_url(api, server, port)
     URI::HTTPS.build(host: server,
                      port: port,
-                     path: api
-                    ).freeze
+                     path: api).freeze
   end
 
   def get_mime_types(model)
@@ -130,30 +129,26 @@ class Puppet::HTTP::Service
 
   def formatter_for_response(response)
     header = response['Content-Type']
-    raise Puppet::HTTP::ProtocolError.new(_("No content type in http response; cannot parse")) unless header
+    raise Puppet::HTTP::ProtocolError, _("No content type in http response; cannot parse") unless header
 
-    header.gsub!(/\s*;.*$/,'') # strip any charset
+    header.gsub!(/\s*;.*$/, '') # strip any charset
 
     formatter = Puppet::Network::FormatHandler.mime(header)
-    raise Puppet::HTTP::ProtocolError.new("Content-Type is unsupported") if EXCLUDED_FORMATS.include?(formatter.name)
+    raise Puppet::HTTP::ProtocolError, "Content-Type is unsupported" if EXCLUDED_FORMATS.include?(formatter.name)
 
     formatter
   end
 
   def serialize(formatter, object)
-    begin
-      formatter.render(object)
-    rescue => err
-      raise Puppet::HTTP::SerializationError.new("Failed to serialize #{object.class} to #{formatter.name}: #{err.message}", err)
-    end
+    formatter.render(object)
+  rescue => err
+    raise Puppet::HTTP::SerializationError.new("Failed to serialize #{object.class} to #{formatter.name}: #{err.message}", err)
   end
 
   def serialize_multiple(formatter, object)
-    begin
-      formatter.render_multiple(object)
-    rescue => err
-      raise Puppet::HTTP::SerializationError.new("Failed to serialize multiple #{object.class} to #{formatter.name}: #{err.message}", err)
-    end
+    formatter.render_multiple(object)
+  rescue => err
+    raise Puppet::HTTP::SerializationError.new("Failed to serialize multiple #{object.class} to #{formatter.name}: #{err.message}", err)
   end
 
   def deserialize(response, model)
@@ -177,6 +172,6 @@ class Puppet::HTTP::Service
   def process_response(response)
     @session.process_response(response)
 
-    raise Puppet::HTTP::ResponseError.new(response) unless response.success?
+    raise Puppet::HTTP::ResponseError, response unless response.success?
   end
 end

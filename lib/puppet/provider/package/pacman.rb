@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require 'set'
 require 'uri'
@@ -17,21 +19,20 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
   # Yaourt is a common AUR helper which, if installed, we can use to query the AUR
   commands :yaourt => "/usr/bin/yaourt" if yaourt?
 
-  confine     :operatingsystem => [:archlinux, :manjarolinux]
-  defaultfor  :operatingsystem => [:archlinux, :manjarolinux]
+  confine     'os.name' => [:archlinux, :manjarolinux, :artix]
+  defaultfor  'os.name' => [:archlinux, :manjarolinux, :artix]
   has_feature :install_options
   has_feature :uninstall_options
   has_feature :upgradeable
   has_feature :virtual_packages
+  has_feature :purgeable
 
   # Checks if a given name is a group
   def self.group?(name)
-    begin
-      !pacman("-Sg", name).empty?
-    rescue Puppet::ExecutionFailure
-      # pacman returns an expected non-zero exit code when the name is not a group
-      false
-    end
+    !pacman('--sync', '--groups', name).empty?
+  rescue Puppet::ExecutionFailure
+    # pacman returns an expected non-zero exit code when the name is not a group
+    false
   end
 
   # Install a package using 'pacman', or 'yaourt' if available.
@@ -44,7 +45,7 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
       install_from_repo
     end
 
-    unless self.query
+    unless query
       fail(_("Could not find package '%{name}'") % { name: @resource[:name] })
     end
   end
@@ -72,24 +73,22 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
 
   # returns a hash package => version of installed packages
   def self.get_installed_packages
-    begin
-      packages = {}
-      execpipe([command(:pacman), "-Q"]) do |pipe|
-        # pacman -Q output is 'packagename version-rel'
-        regex = %r{^(\S+)\s(\S+)}
-        pipe.each_line do |line|
-          match = regex.match(line)
-          if match
-            packages[match.captures[0]] = match.captures[1]
-          else
-            warning(_("Failed to match line '%{line}'") % { line: line })
-          end
+    packages = {}
+    execpipe([command(:pacman), "--query"]) do |pipe|
+      # pacman -Q output is 'packagename version-rel'
+      regex = /^(\S+)\s(\S+)/
+      pipe.each_line do |line|
+        match = regex.match(line)
+        if match
+          packages[match.captures[0]] = match.captures[1]
+        else
+          warning(_("Failed to match line '%{line}'") % { line: line })
         end
       end
-      packages
-    rescue Puppet::ExecutionFailure
-      fail(_("Error getting installed packages"))
     end
+    packages
+  rescue Puppet::ExecutionFailure
+    fail(_("Error getting installed packages"))
   end
 
   # returns a hash of group => version of installed groups
@@ -97,7 +96,7 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
     groups = {}
     begin
       # Build a hash of group name => list of packages
-      command = [command(:pacman), "-Sgg"]
+      command = [command(:pacman), '--sync', '-gg']
       command << filter if filter
       execpipe(command) do |pipe|
         pipe.each_line do |line|
@@ -114,7 +113,7 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
 
       # Replace the list of packages with a version string consisting of packages that make up the group
       groups.each do |name, packages|
-        groups[name] = packages.sort.map {|package| "#{package} #{installed_packages[package]}"}.join ', '
+        groups[name] = packages.sort.map { |package| "#{package} #{installed_packages[package]}" }.join ', '
       end
     rescue Puppet::ExecutionFailure
       # pacman returns an expected non-zero exit code when the filter name is not a group
@@ -127,7 +126,7 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
   # should always result in the newest release.
   def update
     # Install in pacman can be used for update, too
-    self.install
+    install
   end
 
   # We rescue the main check from Pacman with a check on the AUR using yaourt, if installed
@@ -135,15 +134,15 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
     resource_name = @resource[:name]
 
     # If target is a group, construct the group version
-    return pacman("-Sp", "--print-format", "%n %v", resource_name).lines.map{ |line| line.chomp }.sort.join(', ') if self.class.group?(resource_name)
+    return pacman("--sync", "--print", "--print-format", "%n %v", resource_name).lines.map(&:chomp).sort.join(', ') if self.class.group?(resource_name)
 
     # Start by querying with pacman first
     # If that fails, retry using yaourt against the AUR
     pacman_check = true
     begin
       if pacman_check
-        output = pacman "-Sp", "--print-format", "%v", resource_name
-        return output.chomp
+        output = pacman "--sync", "--print", "--print-format", "%v", resource_name
+        output.chomp
       else
         output = yaourt "-Qma", resource_name
         output.split("\n").each do |line|
@@ -185,24 +184,35 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
 
   def self.to_resource_hash(name, version)
     {
-      :name     => name,
-      :ensure   => version,
+      :name => name,
+      :ensure => version,
       :provider => self.name
     }
   end
 
   # Removes a package from the system.
   def uninstall
+    remove_package(false)
+  end
+
+  def purge
+    remove_package(true)
+  end
+
+  private
+
+  def remove_package(purge_configs = false)
     resource_name = @resource[:name]
 
     is_group = self.class.group?(resource_name)
 
     fail(_("Refusing to uninstall package group %{resource_name}, because allow_virtual is false.") % { resource_name: resource_name }) if is_group && !@resource.allow_virtual?
 
-    cmd = %w{--noconfirm --noprogressbar}
+    cmd = %w[--noconfirm --noprogressbar]
     cmd += uninstall_options if @resource[:uninstall_options]
-    cmd << "-R"
-    cmd << '-s' if is_group
+    cmd << "--remove"
+    cmd << '--recursive' if is_group
+    cmd << '--nosave' if purge_configs
     cmd << resource_name
 
     if self.class.yaourt?
@@ -211,8 +221,6 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
       pacman(*cmd)
     end
   end
-
-  private
 
   def install_options
     join_options(@resource[:install_options])
@@ -231,17 +239,16 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
     end
 
     source = case source_uri.scheme
-    when nil then source
-    when /https?/i then source
-    when /ftp/i then source
-    when /file/i then source_uri.path
-    when /puppet/i
-      fail _("puppet:// URL is not supported by pacman")
-    else
-      fail _("Source %{source} is not supported by pacman") % { source: source }
-    end
-    pacman "--noconfirm", "--noprogressbar", "-S"
-    pacman "--noconfirm", "--noprogressbar", "-U", source
+             when nil       then source
+             when /https?/i then source
+             when /ftp/i    then source
+             when /file/i   then source_uri.path
+             when /puppet/i
+               fail _("puppet:// URL is not supported by pacman")
+             else
+               fail _("Source %{source} is not supported by pacman") % { source: source }
+             end
+    pacman "--noconfirm", "--noprogressbar", "--update", source
   end
 
   def install_from_repo
@@ -250,9 +257,9 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
     # Refuse to install if not allowing virtual packages and the resource is a group
     fail(_("Refusing to install package group %{resource_name}, because allow_virtual is false.") % { resource_name: resource_name }) if self.class.group?(resource_name) && !@resource.allow_virtual?
 
-    cmd = %w{--noconfirm --needed --noprogressbar}
+    cmd = %w[--noconfirm --needed --noprogressbar]
     cmd += install_options if @resource[:install_options]
-    cmd << "-S" << resource_name
+    cmd << "--sync" << resource_name
 
     if self.class.yaourt?
       yaourt(*cmd)
@@ -260,5 +267,4 @@ Puppet::Type.type(:package).provide :pacman, :parent => Puppet::Provider::Packag
       pacman(*cmd)
     end
   end
-
 end

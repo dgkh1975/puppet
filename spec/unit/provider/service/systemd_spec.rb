@@ -18,158 +18,167 @@ describe 'Puppet::Type::Service::Provider::Systemd',
     Puppet::Util::Execution::ProcessOutput.new('', 0)
   end
 
-  osfamilies = [ 'archlinux', 'coreos' ]
+  osfamilies = %w[archlinux coreos gentoo]
 
   osfamilies.each do |osfamily|
     it "should be the default provider on #{osfamily}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(osfamily)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(osfamily)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("1234")
+      allow(Facter).to receive(:value).with('os.family').and_return(osfamily)
+      allow(Facter).to receive(:value).with('os.name').and_return(osfamily)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("1234")
       expect(provider_class).to be_default
     end
   end
 
   [7, 8, 9].each do |ver|
     it "should be the default provider on rhel#{ver}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(:redhat)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(:redhat)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return(ver.to_s)
+      allow(Facter).to receive(:value).with('os.family').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.name').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.release.major').and_return(ver.to_s)
       expect(provider_class).to be_default
     end
   end
 
-  [ 4, 5, 6 ].each do |ver|
+  [4, 5, 6].each do |ver|
     it "should not be the default provider on rhel#{ver}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(:redhat)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(:redhat)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("#{ver}")
+      allow(Facter).to receive(:value).with('os.family').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.name').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("#{ver}")
       expect(provider_class).not_to be_default
     end
   end
 
-  [ 17, 18, 19, 20, 21, 22, 23 ].each do |ver|
+  (17..23).to_a.each do |ver|
     it "should be the default provider on fedora#{ver}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(:redhat)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(:fedora)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("#{ver}")
+      allow(Facter).to receive(:value).with('os.family').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.name').and_return(:fedora)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("#{ver}")
       expect(provider_class).to be_default
     end
   end
 
-  it "should be the default provider on Amazon Linux 2.0" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:redhat)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:amazon)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("2")
-    expect(provider_class).to be_default
+  [2, 2023].each do |ver|
+    it "should be the default provider on Amazon Linux #{ver}" do
+      allow(Facter).to receive(:value).with('os.family').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.name').and_return(:amazon)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("#{ver}")
+      expect(provider_class).to be_default
+    end
   end
 
   it "should not be the default provider on Amazon Linux 2017.09" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:redhat)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:amazon)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("2017")
+    allow(Facter).to receive(:value).with('os.family').and_return(:redhat)
+    allow(Facter).to receive(:value).with('os.name').and_return(:amazon)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("2017")
     expect(provider_class).not_to be_default
   end
 
   it "should be the default provider on cumulus3" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return('CumulusLinux')
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("3")
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return('CumulusLinux')
+    allow(Facter).to receive(:value).with('os.release.major').and_return("3")
     expect(provider_class).to be_default
   end
 
   it "should be the default provider on sles12" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("12")
+    allow(Facter).to receive(:value).with('os.family').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.name').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("12")
     expect(provider_class).to be_default
   end
 
   it "should be the default provider on opensuse13" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("13")
+    allow(Facter).to receive(:value).with('os.family').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.name').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("13")
     expect(provider_class).to be_default
   end
 
   # tumbleweed is a rolling release with date-based major version numbers
   it "should be the default provider on tumbleweed" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("20150829")
+    allow(Facter).to receive(:value).with('os.family').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.name').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("20150829")
     expect(provider_class).to be_default
   end
 
   # leap is the next generation suse release
   it "should be the default provider on leap" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:leap)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("42")
+    allow(Facter).to receive(:value).with('os.family').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.name').and_return(:leap)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("42")
     expect(provider_class).to be_default
   end
 
   it "should not be the default provider on debian7" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("7")
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("7")
     expect(provider_class).not_to be_default
   end
 
   it "should be the default provider on debian8" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("8")
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("8")
     expect(provider_class).to be_default
   end
 
   it "should be the default provider on debian11" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("11")
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("11")
     expect(provider_class).to be_default
   end
 
   it "should be the default provider on debian bookworm/sid" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("bookworm/sid")
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("bookworm/sid")
     expect(provider_class).to be_default
   end
 
   it "should not be the default provider on ubuntu14.04" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:ubuntu)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("14.04")
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return(:ubuntu)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("14.04")
     expect(provider_class).not_to be_default
   end
 
-  [ '15.04', '15.10', '16.04', '16.10', '17.04', '17.10', '18.04' ].each do |ver|
+  %w[15.04 15.10 16.04 16.10 17.04 17.10 18.04].each do |ver|
     it "should be the default provider on ubuntu#{ver}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(:ubuntu)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("#{ver}")
+      allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+      allow(Facter).to receive(:value).with('os.name').and_return(:ubuntu)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("#{ver}")
       expect(provider_class).to be_default
     end
   end
 
-  [ '10', '11', '12', '13', '14', '15', '16', '17' ].each do |ver|
+  ('10'..'17').to_a.each do |ver|
     it "should not be the default provider on LinuxMint#{ver}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(:LinuxMint)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("#{ver}")
+      allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+      allow(Facter).to receive(:value).with('os.name').and_return(:LinuxMint)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("#{ver}")
       expect(provider_class).not_to be_default
     end
   end
 
-  [ '18', '19' ].each do |ver|
+  ['18', '19'].each do |ver|
     it "should be the default provider on LinuxMint#{ver}" do
-      allow(Facter).to receive(:value).with(:osfamily).and_return(:debian)
-      allow(Facter).to receive(:value).with(:operatingsystem).and_return(:LinuxMint)
-      allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("#{ver}")
+      allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+      allow(Facter).to receive(:value).with('os.name').and_return(:LinuxMint)
+      allow(Facter).to receive(:value).with('os.release.major').and_return("#{ver}")
       expect(provider_class).to be_default
     end
   end
 
-  [:enabled?, :daemon_reload?, :enable, :disable, :start, :stop, :status, :restart].each do |method|
+  it "should be the default provider on raspbian12" do
+    allow(Facter).to receive(:value).with('os.family').and_return(:debian)
+    allow(Facter).to receive(:value).with('os.name').and_return(:raspbian)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("12")
+    expect(provider_class).to be_default
+  end
+
+  %i[enabled? daemon_reload? enable disable start stop status restart].each do |method|
     it "should have a #{method} method" do
       expect(provider).to respond_to(method)
     end
@@ -217,7 +226,7 @@ describe 'Puppet::Type::Service::Provider::Systemd',
     it "should use the supplied start command if specified" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service', :start => '/bin/foo'))
       expect(provider).to receive(:daemon_reload?).and_return('no')
-      expect(provider).to receive(:execute).with(['/bin/foo'], :failonfail => true, :override_locale => false, :squelch => false, :combine => true)
+      expect(provider).to receive(:execute).with(['/bin/foo'], {:failonfail => true, :override_locale => false, :squelch => false, :combine => true})
       provider.start
     end
 
@@ -249,13 +258,13 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
   describe "#stop" do
     it "should use the supplied stop command if specified" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service', :stop => '/bin/foo'))
-      expect(provider).to receive(:execute).with(['/bin/foo'], :failonfail => true, :override_locale => false, :squelch => false, :combine => true)
+      expect(provider).to receive(:execute).with(['/bin/foo'], {:failonfail => true, :override_locale => false, :squelch => false, :combine => true})
       provider.stop
     end
 
     it "should stop the service with systemctl stop otherwise" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','stop', '--', 'sshd.service'], :failonfail => true, :override_locale => false, :squelch => false, :combine => true)
+      expect(provider).to receive(:execute).with(['/bin/systemctl','stop', '--', 'sshd.service'], {:failonfail => true, :override_locale => false, :squelch => false, :combine => true})
       provider.stop
     end
 
@@ -277,13 +286,13 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
   describe "#daemon_reload?" do
     it "should skip the systemctl daemon_reload if not required by the service" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl', 'show', '--property=NeedDaemonReload', '--', 'sshd.service'], :failonfail => false).and_return("no")
+      expect(provider).to receive(:execute).with(['/bin/systemctl', 'show', '--property=NeedDaemonReload', '--', 'sshd.service'], {:failonfail => false}).and_return("no")
       provider.daemon_reload?
     end
     it "should run a systemctl daemon_reload if the service has been modified" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl', 'show', '--property=NeedDaemonReload', '--', 'sshd.service'], :failonfail => false).and_return("yes")
-      expect(provider).to receive(:execute).with(['/bin/systemctl', 'daemon-reload'], :failonfail => false)
+      expect(provider).to receive(:execute).with(['/bin/systemctl', 'show', '--property=NeedDaemonReload', '--', 'sshd.service'], {:failonfail => false}).and_return("yes")
+      expect(provider).to receive(:execute).with(['/bin/systemctl', 'daemon-reload'], {:failonfail => false})
       provider.daemon_reload?
     end
   end
@@ -291,51 +300,52 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
   describe "#enabled?" do
     it "should return :true if the service is enabled" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], :failonfail => false).
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("enabled\n", 0))
       expect(provider.enabled?).to eq(:true)
     end
 
     it "should return :true if the service is static" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled','--', 'sshd.service'], :failonfail => false).
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled','--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("static\n", 0))
       expect(provider.enabled?).to eq(:true)
     end
 
     it "should return :false if the service is disabled" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], :failonfail => false).
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("disabled\n", 1))
       expect(provider.enabled?).to eq(:false)
     end
 
     it "should return :false if the service is indirect" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], :failonfail => false).
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("indirect\n", 0))
       expect(provider.enabled?).to eq(:false)
     end
 
     it "should return :false if the service is masked and the resource is attempting to be disabled" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service', :enable => false))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], :failonfail => false).
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("masked\n", 1))
       expect(provider.enabled?).to eq(:false)
     end
 
     it "should return :mask if the service is masked and the resource is attempting to be masked" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service', :enable => 'mask'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], :failonfail => false).
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("masked\n", 1))
       expect(provider.enabled?).to eq(:mask)
     end
 
     it "should consider nonexistent services to be disabled" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'doesnotexist'))
-      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'doesnotexist'], :failonfail => false)
+      allow(Facter).to receive(:value).with('os.family').and_return('debian')
+      expect(provider).to receive(:execute).with(['/bin/systemctl','is-enabled', '--', 'doesnotexist'], {:failonfail => false})
                             .and_return(Puppet::Util::Execution::ProcessOutput.new("", 1))
-      expect(provider).to receive(:execute).with(["/usr/sbin/invoke-rc.d", "--quiet", "--query", "doesnotexist", "start"], :failonfail => false)
+      expect(provider).to receive(:execute).with(["/usr/sbin/invoke-rc.d", "--quiet", "--query", "doesnotexist", "start"], {:failonfail => false})
                             .and_return(Puppet::Util::Execution::ProcessOutput.new("", 1))
 
       expect(provider.enabled?).to be(:false)
@@ -363,7 +373,7 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
     it "should run systemctl to disable and mask a service" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
       expect(provider).to receive(:execute).
-                            with(['/bin/systemctl','cat', '--', 'sshd.service'], :failonfail => false).
+                            with(['/bin/systemctl','cat', '--', 'sshd.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("# /lib/systemd/system/sshd.service\n...", 0))
       # :disable is the only call in the provider that uses a symbol instead of
       # a string.
@@ -376,7 +386,7 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
     it "masks a service that doesn't exist" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'doesnotexist.service'))
       expect(provider).to receive(:execute).
-                            with(['/bin/systemctl','cat', '--', 'doesnotexist.service'], :failonfail => false).
+                            with(['/bin/systemctl','cat', '--', 'doesnotexist.service'], {:failonfail => false}).
                             and_return(Puppet::Util::Execution::ProcessOutput.new("No files found for doesnotexist.service.\n", 1))
       expect(provider).to receive(:systemctl).with(:mask, '--', 'doesnotexist.service')
       provider.mask
@@ -389,7 +399,7 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
     it "should return running if the command returns 0" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
       expect(provider).to receive(:execute)
-        .with(['/bin/systemctl','is-active', '--', 'sshd.service'], :failonfail => false, :override_locale => false, :squelch => false, :combine => true)
+        .with(['/bin/systemctl','is-active', '--', 'sshd.service'], {:failonfail => false, :override_locale => false, :squelch => false, :combine => true})
         .and_return(Puppet::Util::Execution::ProcessOutput.new("active\n", 0))
       expect(provider.status).to eq(:running)
     end
@@ -398,7 +408,7 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
       it "should return stopped if the command returns something non-0" do
         provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
         expect(provider).to receive(:execute)
-          .with(['/bin/systemctl','is-active', '--', 'sshd.service'], :failonfail => false, :override_locale => false, :squelch => false, :combine => true)
+          .with(['/bin/systemctl','is-active', '--', 'sshd.service'], {:failonfail => false, :override_locale => false, :squelch => false, :combine => true})
           .and_return(Puppet::Util::Execution::ProcessOutput.new("inactive\n", ec))
         expect(provider.status).to eq(:stopped)
       end
@@ -407,7 +417,7 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
     it "should use the supplied status command if specified" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service', :status => '/bin/foo'))
       expect(provider).to receive(:execute)
-        .with(['/bin/foo'], :failonfail => false, :override_locale => false, :squelch => false, :combine => true)
+        .with(['/bin/foo'], {:failonfail => false, :override_locale => false, :squelch => false, :combine => true})
         .and_return(process_output)
       provider.status
     end
@@ -419,15 +429,15 @@ Jun 14 21:43:23 foo.example.com systemd[1]: sshd.service lacks both ExecStart= a
     it "should use the supplied restart command if specified" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd', :restart => '/bin/foo'))
       expect(provider).to receive(:daemon_reload?).and_return('no')
-      expect(provider).to receive(:execute).with(['/bin/systemctl','restart', '--', 'sshd.service'], :failonfail => true, :override_locale => false, :squelch => false, :combine => true).never
-      expect(provider).to receive(:execute).with(['/bin/foo'], :failonfail => true, :override_locale => false, :squelch => false, :combine => true)
+      expect(provider).to receive(:execute).with(['/bin/systemctl','restart', '--', 'sshd.service'], {:failonfail => true, :override_locale => false, :squelch => false, :combine => true}).never
+      expect(provider).to receive(:execute).with(['/bin/foo'], {:failonfail => true, :override_locale => false, :squelch => false, :combine => true})
       provider.restart
     end
 
     it "should restart the service with systemctl restart" do
       provider = provider_class.new(Puppet::Type.type(:service).new(:name => 'sshd.service'))
       expect(provider).to receive(:daemon_reload?).and_return('no')
-      expect(provider).to receive(:execute).with(['/bin/systemctl','restart','--','sshd.service'], :failonfail => true, :override_locale => false, :squelch => false, :combine => true)
+      expect(provider).to receive(:execute).with(['/bin/systemctl','restart','--','sshd.service'], {:failonfail => true, :override_locale => false, :squelch => false, :combine => true})
       provider.restart
     end
 

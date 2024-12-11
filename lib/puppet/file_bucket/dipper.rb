@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pathname'
 require_relative '../../puppet/file_bucket'
 require_relative '../../puppet/file_bucket/file'
@@ -30,13 +32,14 @@ class Puppet::FileBucket::Dipper
   end
 
   def local?
-    !! @local_path
+    !!@local_path
   end
 
   # Backs up a file to the file bucket
   def backup(file)
     file_handle = Puppet::FileSystem.pathname(file)
     raise(ArgumentError, _("File %{file} does not exist") % { file: file }) unless Puppet::FileSystem.exist?(file_handle)
+
     begin
       file_bucket_file = Puppet::FileBucket::File.new(file_handle, :bucket_path => @local_path)
       files_original_path = absolutize_path(file)
@@ -49,7 +52,7 @@ class Puppet::FileBucket::Dipper
         Puppet::FileBucket::File.indirection.save(file_bucket_file, dest_path)
       end
 
-      return file_bucket_file.checksum_data
+      file_bucket_file.checksum_data
     rescue => detail
       message = _("Could not back up %{file}: %{detail}") % { file: file, detail: detail }
       Puppet.log_exception(detail, message)
@@ -60,13 +63,15 @@ class Puppet::FileBucket::Dipper
   # Diffs two filebucket files identified by their sums
   def diff(checksum_a, checksum_b, file_a, file_b)
     raise RuntimeError, _("Diff is not supported on this platform") if Puppet[:diff] == ""
+
     if checksum_a
       source_path = "#{@rest_path}#{@checksum_type}/#{checksum_a}"
       if checksum_b
         file_diff = Puppet::FileBucket::File.indirection.find(
           source_path,
           :bucket_path => @local_path,
-          :diff_with => checksum_b)
+          :diff_with => checksum_b
+        )
       elsif file_b
         tmp_file = ::Tempfile.new('diff')
         begin
@@ -94,6 +99,7 @@ class Puppet::FileBucket::Dipper
       end
     end
     raise Puppet::Error, _("Failed to diff files") unless file_diff
+
     file_diff.to_s
   end
 
@@ -108,6 +114,7 @@ class Puppet::FileBucket::Dipper
     file_bucket_file = Puppet::FileBucket::File.indirection.find(source_path, :bucket_path => @local_path)
 
     raise Puppet::Error, _("File not found") unless file_bucket_file
+
     file_bucket_file
   end
 
@@ -130,11 +137,11 @@ class Puppet::FileBucket::Dipper
       if newcontents
         newsum = newcontents.checksum_data
         changed = nil
-        if Puppet::FileSystem.exist?(file_handle) and ! Puppet::FileSystem.writable?(file_handle)
+        if Puppet::FileSystem.exist?(file_handle) and !Puppet::FileSystem.writable?(file_handle)
           changed = Puppet::FileSystem.stat(file_handle).mode
-          ::File.chmod(changed | 0200, file)
+          ::File.chmod(changed | 0o200, file)
         end
-        ::File.open(file, ::File::WRONLY|::File::TRUNC|::File::CREAT) { |of|
+        ::File.open(file, ::File::WRONLY | ::File::TRUNC | ::File::CREAT) { |of|
           of.binmode
           newcontents.stream do |source_stream|
             FileUtils.copy_stream(source_stream, of)
@@ -145,9 +152,9 @@ class Puppet::FileBucket::Dipper
         Puppet.err _("Could not find file with checksum %{sum}") % { sum: sum }
         return nil
       end
-      return newsum
+      newsum
     else
-      return nil
+      nil
     end
   end
 
@@ -161,14 +168,16 @@ class Puppet::FileBucket::Dipper
       :bucket_path => @local_path,
       :list_all => true,
       :fromdate => fromdate,
-      :todate => todate)
+      :todate => todate
+    )
     raise Puppet::Error, _("File not found") unless file_bucket_list
+
     file_bucket_list.to_s
   end
 
   private
-  def absolutize_path( path )
+
+  def absolutize_path(path)
     Pathname.new(path).realpath
   end
-
 end

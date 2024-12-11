@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'digest/md5'
 require 'digest/sha1'
 require 'time'
@@ -7,6 +9,7 @@ require 'time'
 module Puppet::Util::Checksums
   module_function
 
+  # If you modify this, update puppet/type/file/checksum.rb too
   KNOWN_CHECKSUMS = [
     :sha256, :sha256lite,
     :md5, :md5lite,
@@ -43,12 +46,12 @@ module Puppet::Util::Checksums
 
   # Strip the checksum type from an existing checksum
   def sumdata(checksum)
-    checksum =~ /^\{(\w+)\}(.+)/ ? $2 : nil
+    checksum =~ /^\{(\w+)\}(.+)/ ? ::Regexp.last_match(2) : nil
   end
 
   # Strip the checksum type from an existing checksum
   def sumtype(checksum)
-    checksum =~ /^\{(\w+)\}/ ? $1 : nil
+    checksum =~ /^\{(\w+)\}/ ? ::Regexp.last_match(1) : nil
   end
 
   # Calculate a checksum using Digest::SHA256.
@@ -65,7 +68,7 @@ module Puppet::Util::Checksums
     require 'digest/sha2'
 
     digest = Digest::SHA256.new
-    checksum_file(digest, filename,  lite)
+    checksum_file(digest, filename, lite)
   end
 
   def sha256_stream(lite = false, &block)
@@ -112,7 +115,7 @@ module Puppet::Util::Checksums
     require 'digest/sha2'
 
     digest = Digest::SHA384.new
-    checksum_file(digest, filename,  lite)
+    checksum_file(digest, filename, lite)
   end
 
   def sha384_stream(lite = false, &block)
@@ -139,7 +142,7 @@ module Puppet::Util::Checksums
     require 'digest/sha2'
 
     digest = Digest::SHA512.new
-    checksum_file(digest, filename,  lite)
+    checksum_file(digest, filename, lite)
   end
 
   def sha512_stream(lite = false, &block)
@@ -155,7 +158,7 @@ module Puppet::Util::Checksums
   # Calculate a checksum using Digest::SHA224.
   def sha224(content)
     require_relative '../../puppet/ssl/openssl_loader'
-    OpenSSL::Digest::SHA224.new.hexdigest(content)
+    OpenSSL::Digest.new('SHA224').hexdigest(content)
   end
 
   def sha224?(string)
@@ -165,13 +168,13 @@ module Puppet::Util::Checksums
   def sha224_file(filename, lite = false)
     require_relative '../../puppet/ssl/openssl_loader'
 
-    digest = OpenSSL::Digest::SHA224.new
-    checksum_file(digest, filename,  lite)
+    digest = OpenSSL::Digest.new('SHA224')
+    checksum_file(digest, filename, lite)
   end
 
   def sha224_stream(lite = false, &block)
     require_relative '../../puppet/ssl/openssl_loader'
-    digest = OpenSSL::Digest::SHA224.new
+    digest = OpenSSL::Digest.new('SHA224')
     checksum_stream(digest, block, lite)
   end
 
@@ -191,7 +194,7 @@ module Puppet::Util::Checksums
   # Calculate a checksum of a file's content using Digest::MD5.
   def md5_file(filename, lite = false)
     digest = Digest::MD5.new
-    checksum_file(digest, filename,  lite)
+    checksum_file(digest, filename, lite)
   end
 
   def md5_stream(lite = false, &block)
@@ -231,6 +234,7 @@ module Puppet::Util::Checksums
 
   def mtime?(string)
     return true if string.is_a? Time
+
     !!DateTime.parse(string)
   rescue
     false
@@ -301,6 +305,7 @@ module Puppet::Util::Checksums
 
   def ctime?(string)
     return true if string.is_a? Time
+
     !!DateTime.parse(string)
   rescue
     false
@@ -359,7 +364,7 @@ module Puppet::Util::Checksums
   def checksum_file(digest, filename, lite = false)
     buffer = lite ? 512 : 4096
     File.open(filename, 'rb') do |file|
-      while content = file.read(buffer) #rubocop:disable Lint/AssignmentInCondition
+      while content = file.read(buffer) # rubocop:disable Lint/AssignmentInCondition
         digest << content
         break if lite
       end
@@ -372,5 +377,4 @@ module Puppet::Util::Checksums
     block.call(DigestLite.new(digest, lite))
     digest.hexdigest
   end
-
 end

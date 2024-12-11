@@ -3,6 +3,7 @@ require 'puppet_spec/files'
 require 'puppet_spec/puppetserver'
 require 'puppet_spec/compiler'
 require 'puppet_spec/https'
+require 'puppet/application/agent'
 
 describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
   include PuppetSpec::Files
@@ -13,6 +14,37 @@ describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
   let(:agent) { Puppet::Application[:agent] }
   let(:node) { Puppet::Node.new(Puppet[:certname], environment: 'production')}
   let(:formatter) { Puppet::Network::FormatHandler.format(:rich_data_json) }
+
+  # Create temp fixtures since the agent will attempt to refresh the CA/CRL
+  before do
+    Puppet[:localcacert] = ca = tmpfile('ca')
+    Puppet[:hostcrl] = crl = tmpfile('crl')
+
+    copy_fixtures(%w[ca.pem intermediate.pem], ca)
+    copy_fixtures(%w[crl.pem intermediate-crl.pem], crl)
+  end
+
+  def copy_fixtures(sources, dest)
+    ssldir = File.join(PuppetSpec::FIXTURE_DIR, 'ssl')
+    File.open(dest, 'w') do |f|
+      sources.each do |s|
+        f.write(File.read(File.join(ssldir, s)))
+      end
+    end
+  end
+
+  context 'server identification' do
+    it 'emits a notice if the server sends the X-Puppet-Compiler-Name header' do
+      server.start_server do |port|
+        Puppet[:serverport] = port
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(0)
+               .and output(%r{Notice: Catalog compiled by test-compiler-hostname}).to_stdout
+      end
+    end
+  end
 
   context 'server_list' do
     it "uses the first server in the list" do
@@ -97,6 +129,18 @@ describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
   end
 
   context 'rich data' do
+    let(:deferred_file) { tmpfile('deferred') }
+    let(:deferred_manifest) do <<~END
+      file { '#{deferred_file}':
+        ensure => file,
+        content => '123',
+      } ->
+      notify { 'deferred':
+        message => Deferred('binary_file', ['#{deferred_file}'])
+      }
+      END
+    end
+
     it "calls a deferred 4x function" do
       catalog_handler = -> (req, res) {
         catalog = compile_to_catalog(<<-MANIFEST, node)
@@ -138,6 +182,43 @@ describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
           agent.run
         }.to exit_with(2)
          .and output(%r{Notice: /Stage\[main\]/Main/Notify\[deferred3x\]/message: defined 'message' as 'I am deferred'}).to_stdout
+      end
+    end
+
+    it "fails to apply a deferred function with an unsatisfied prerequisite" do
+      Puppet[:preprocess_deferred] = true
+
+      catalog_handler = -> (req, res) {
+        catalog = compile_to_catalog(deferred_manifest, node)
+        res.body = formatter.render(catalog)
+        res['Content-Type'] = formatter.mime
+      }
+
+      server.start_server(mounts: {catalog: catalog_handler}) do |port|
+        Puppet[:serverport] = port
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(1)
+         .and output(%r{Using environment}).to_stdout
+         .and output(%r{The given file '#{deferred_file}' does not exist}).to_stderr
+      end
+    end
+
+    it "applies a deferred function and its prerequisite in the same run" do
+      catalog_handler = -> (req, res) {
+        catalog = compile_to_catalog(deferred_manifest, node)
+        res.body = formatter.render(catalog)
+        res['Content-Type'] = formatter.mime
+      }
+
+      server.start_server(mounts: {catalog: catalog_handler}) do |port|
+        Puppet[:serverport] = port
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(2)
+         .and output(%r{defined 'message' as Binary\("MTIz"\)}).to_stdout
       end
     end
 
@@ -477,7 +558,7 @@ describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
       }
 
       # ensure file is written before yielding
-      until File.exists?(path) && File.size(path) > 0 do
+      until File.exist?(path) && File.size(path) > 0 do
         sleep 0.1
       end
 
@@ -645,6 +726,34 @@ describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
   end
 
   context "environment convergence" do
+    it "falls back to making a node request if the last server-specified environment cannot be loaded" do
+      mounts = {}
+      mounts[:node] = -> (req, res) {
+        node = Puppet::Node.new('test', environment: Puppet::Node::Environment.remote('doesnotexistonagent'))
+        res.body = formatter.render(node)
+        res['Content-Type'] = formatter.mime
+      }
+
+      server.start_server(mounts: mounts) do |port|
+        Puppet[:serverport] = port
+        Puppet[:log_level] = 'debug'
+
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(0)
+         .and output(a_string_matching(%r{Debug: Requesting environment from the server})).to_stdout
+
+        Puppet::Application.clear!
+
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(0)
+         .and output(a_string_matching(%r{Debug: Successfully loaded last environment from the lastrunfile})).to_stdout
+      end
+    end
+
     it "switches to 'newenv' environment and retries the run" do
       first_run = true
       libdir = File.join(my_fixture_dir, 'lib')
@@ -709,6 +818,249 @@ describe "puppet agent", unless: Puppet::Util::Platform.jruby? do
         }.to exit_with(2)
          .and output(a_string_matching(%r{Notice: Local environment: 'production' doesn't match server specified environment 'newenv', restarting agent run with environment 'newenv'})
          .and matching(%r{defined 'message' as 'web'})).to_stdout
+      end
+    end
+  end
+
+  context "ssl" do
+    context "bootstrapping" do
+      before :each do
+        # reconfigure ssl to non-existent dir and files to force bootstrapping
+        dir = tmpdir('ssl')
+        Puppet[:ssldir] = dir
+        Puppet[:localcacert] = File.join(dir, 'ca.pem')
+        Puppet[:hostcrl] = File.join(dir, 'crl.pem')
+        Puppet[:hostprivkey] = File.join(dir, 'cert.pem')
+        Puppet[:hostcert] = File.join(dir, 'key.pem')
+
+        Puppet[:daemonize] = false
+        Puppet[:logdest] = 'console'
+        Puppet[:log_level] = 'info'
+      end
+
+      it "exits if the agent is not allowed to wait" do
+        Puppet[:waitforcert] = 0
+
+        server.start_server do |port|
+          Puppet[:serverport] = port
+          expect {
+            agent.run
+          }.to exit_with(1)
+           .and output(%r{Exiting now because the waitforcert setting is set to 0}).to_stdout
+           .and output(%r{Failed to submit the CSR, HTTP response was 404}).to_stderr
+        end
+      end
+
+      it "exits if the maxwaitforcert time is exceeded" do
+        Puppet[:waitforcert] = 1
+        Puppet[:maxwaitforcert] = 1
+
+        server.start_server do |port|
+          Puppet[:serverport] = port
+          expect {
+            agent.run
+          }.to exit_with(1)
+            .and output(%r{Couldn't fetch certificate from CA server; you might still need to sign this agent's certificate \(127.0.0.1\). Exiting now because the maxwaitforcert timeout has been exceeded.}).to_stdout
+            .and output(%r{Failed to submit the CSR, HTTP response was 404}).to_stderr
+        end
+      end
+    end
+
+    it "reloads the CRL between runs" do
+      Puppet[:hostcert] = cert = tmpfile('cert')
+      Puppet[:hostprivkey] = key = tmpfile('key')
+
+      copy_fixtures(%w[127.0.0.1.pem], cert)
+      copy_fixtures(%w[127.0.0.1-key.pem], key)
+
+      revoked = cert_fixture('revoked.pem')
+      revoked_key = key_fixture('revoked-key.pem')
+
+      mounts = {}
+      mounts[:catalog] = -> (req, res) {
+        catalog = compile_to_catalog(<<~MANIFEST, node)
+          file { '#{cert}':
+            ensure => file,
+            content => '#{revoked}'
+          }
+          file { '#{key}':
+            ensure => file,
+            content => '#{revoked_key}'
+          }
+        MANIFEST
+
+        res.body = formatter.render(catalog)
+        res['Content-Type'] = formatter.mime
+      }
+
+      server.start_server(mounts: mounts) do |port|
+        Puppet[:serverport] = port
+        Puppet[:daemonize] = false
+        Puppet[:runinterval] = 1
+        Puppet[:waitforcert] = 1
+        Puppet[:maxwaitforcert] = 1
+
+        # simulate two runs of the agent, then return so we don't infinite loop
+        allow_any_instance_of(Puppet::Daemon).to receive(:run_event_loop) do |instance|
+          instance.agent.run(splay: false)
+          instance.agent.run(splay: false)
+        end
+
+        agent.command_line.args << '--verbose'
+        expect {
+          agent.run
+        }.to exit_with(1)
+         .and output(%r{Exiting now because the maxwaitforcert timeout has been exceeded}).to_stdout
+         .and output(%r{Certificate 'CN=revoked' is revoked}).to_stderr
+      end
+    end
+
+    it "refreshes the CA and CRL" do
+      now = Time.now
+      yesterday = now - (60 * 60 * 24)
+      Puppet::FileSystem.touch(Puppet[:localcacert], mtime: yesterday)
+      Puppet::FileSystem.touch(Puppet[:hostcrl], mtime: yesterday)
+
+      server.start_server do |port|
+        Puppet[:serverport] = port
+        Puppet[:ca_refresh_interval] = 1
+
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(0)
+         .and output(/Info: Refreshed CA certificate: /).to_stdout
+      end
+
+      # If the CA is updated, then the CRL must be updated too
+      expect(Puppet::FileSystem.stat(Puppet[:localcacert]).mtime).to be >= now
+      expect(Puppet::FileSystem.stat(Puppet[:hostcrl]).mtime).to be >= now
+    end
+
+    it "refreshes only the CRL" do
+      now = Time.now
+      tomorrow = now + (60 * 60 * 24)
+      Puppet::FileSystem.touch(Puppet[:localcacert], mtime: tomorrow)
+
+      yesterday = now - (60 * 60 * 24)
+      Puppet::FileSystem.touch(Puppet[:hostcrl], mtime: yesterday)
+
+      server.start_server do |port|
+        Puppet[:serverport] = port
+        Puppet[:crl_refresh_interval] = 1
+
+        expect {
+          agent.command_line.args << '--test'
+          agent.run
+        }.to exit_with(0)
+         .and output(/Info: Refreshed CRL: /).to_stdout
+      end
+
+      expect(Puppet::FileSystem.stat(Puppet[:hostcrl]).mtime).to be >= now
+    end
+  end
+
+  context "legacy facts" do
+    let(:mod_dir) { tmpdir('module_dir') }
+    let(:custom_dir) { File.join(mod_dir, 'lib') }
+    let(:external_dir) { File.join(mod_dir, 'facts.d') }
+
+    before(:each) do
+      # don't stub facter behavior, since we're relying on
+      # `Facter.resolve` to omit legacy facts
+      Puppet::Node::Facts.indirection.terminus_class = :facter
+
+      # need to use `Facter::OptionStore.reset` in order to reset
+      # Facter::OptionStore since Facter.clear does not reset it.
+      # Specifically, Options[:show_legacy] needs to be reset to
+      # true for legacy facts test below
+      Facter.clear
+      Facter::OptionStore.reset
+
+      facter_dir = File.join(custom_dir, 'facter')
+      FileUtils.mkdir_p(facter_dir)
+      File.write(File.join(facter_dir, 'custom.rb'), <<~END)
+        Facter.add(:custom) { setcode { 'a custom value' } }
+      END
+
+      FileUtils.mkdir_p(external_dir)
+      File.write(File.join(external_dir, 'external.json'), <<~END)
+        {"external":"an external value"}
+      END
+
+      # avoid pluginsync'ing contents
+      FileUtils.mkdir_p(Puppet[:vardir])
+      FileUtils.cp_r(custom_dir, Puppet[:vardir])
+      FileUtils.cp_r(external_dir, Puppet[:vardir])
+    end
+
+    def mounts
+      {
+        # the server needs to provide metadata that matches what the agent has
+        # so that the agent doesn't delete them during pluginsync
+        file_metadatas: -> (req, res) {
+          path = case req.path
+                 when /pluginfacts/
+                   external_dir
+                 when /plugins/
+                   custom_dir
+                 else
+                   raise "Unknown mount #{req.path}"
+                 end
+          request = Puppet::FileServing::Metadata.indirection.request(
+            :search, path, nil, recurse: true
+          )
+          data = Puppet::FileServing::Metadata.indirection.terminus(:file).search(request)
+          res.body = formatter.render(data)
+          res['Content-Type'] = formatter.mime
+        },
+        catalog: -> (req, res) {
+          data = CGI.unescape(req.query['facts'])
+          facts = Puppet::Node::Facts.convert_from('json', data)
+          node.fact_merge(facts)
+
+          catalog = compile_to_catalog(<<~MANIFEST, node)
+            notify { "legacy $osfamily": }
+            notify { "custom ${facts['custom']}": }
+            notify { "external ${facts['external']}": }
+          MANIFEST
+
+          res.body = formatter.render(catalog)
+          res['Content-Type'] = formatter.mime
+        }
+      }
+    end
+
+    it "can include legacy facts" do
+      server.start_server(mounts: mounts) do |port|
+        Puppet[:serverport] = port
+        Puppet[:include_legacy_facts] = true
+
+        agent.command_line.args << '--test'
+        expect {
+          agent.run
+        }.to exit_with(2)
+          .and output(
+            match(/defined 'message' as 'legacy [A-Za-z]+'/)
+              .and match(/defined 'message' as 'custom a custom value'/)
+              .and match(/defined 'message' as 'external an external value'/)
+          ).to_stdout
+      end
+    end
+
+    it "excludes legacy facts by default" do
+      server.start_server(mounts: mounts) do |port|
+        Puppet[:serverport] = port
+
+        agent.command_line.args << '--test'
+        expect {
+          agent.run
+        }.to exit_with(1)
+          .and output(/Info: Loading facts/).to_stdout
+          .and output(
+            match(/Error: Evaluation Error: Unknown variable: 'osfamily'/)
+              .and match(/Error: Could not retrieve catalog from remote server: Error 500 on SERVER:/)
+          ).to_stderr
       end
     end
   end

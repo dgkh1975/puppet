@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util'
 
 module Puppet
@@ -16,7 +18,8 @@ module SymbolicFileMode
     value = normalize_symbolic_mode(value)
     return true if value =~ /^0?[0-7]{1,4}$/
     return true if value =~ /^([ugoa]*[-=+][-=+rstwxXugo]*)(,[ugoa]*[-=+][-=+rstwxXugo]*)*$/
-    return false
+
+    false
   end
 
   def display_mode(value)
@@ -35,9 +38,10 @@ module SymbolicFileMode
     # "A numeric mode is from one to four octal digits (0-7), derived by adding
     # up the bits with values 4, 2, and 1. Omitted digits are assumed to be
     # leading zeros."
-    if value.is_a? Numeric
+    case value
+    when Numeric
       value.to_s(8)
-    elsif value =~ /^0?[0-7]{1,4}$/
+    when /^0?[0-7]{1,4}$/
       value.to_i(8).to_s(8) # strip leading 0's
     else
       value
@@ -56,12 +60,12 @@ module SymbolicFileMode
     fail _("non-numeric current mode (%{mode})") % { mode: to_mode.inspect } unless to_mode.is_a?(Numeric)
 
     original_mode = {
-      's' => (to_mode & 07000) >> 9,
-      'u' => (to_mode & 00700) >> 6,
-      'g' => (to_mode & 00070) >> 3,
-      'o' => (to_mode & 00007) >> 0,
+      's' => (to_mode & 0o7000) >> 9,
+      'u' => (to_mode & 0o0700) >> 6,
+      'g' => (to_mode & 0o0070) >> 3,
+      'o' => (to_mode & 0o0007) >> 0,
       # Are there any execute bits set in the original mode?
-      'any x?' => (to_mode & 00111) != 0
+      'any x?' => (to_mode & 0o0111) != 0
     }
     final_mode = {
       's' => original_mode['s'],
@@ -71,85 +75,81 @@ module SymbolicFileMode
     }
 
     modification.split(/\s*,\s*/).each do |part|
-      begin
-        _, to, dsl = /^([ugoa]*)([-+=].*)$/.match(part).to_a
-        if dsl.nil? then raise Puppet::Error, _('Missing action') end
-        to = "a" unless to and to.length > 0
+      _, to, dsl = /^([ugoa]*)([-+=].*)$/.match(part).to_a
+      if dsl.nil? then raise Puppet::Error, _('Missing action') end
 
-        # We want a snapshot of the mode before we start messing with it to
-        # make actions like 'a-g' atomic.  Various parts of the DSL refer to
-        # the original mode, the final mode, or the current snapshot of the
-        # mode, for added fun.
-        snapshot_mode = {}
-        final_mode.each {|k,v| snapshot_mode[k] = v }
+      to = "a" unless to and to.length > 0
 
-        to.gsub('a', 'ugo').split('').uniq.each do |who|
-          value = snapshot_mode[who]
+      # We want a snapshot of the mode before we start messing with it to
+      # make actions like 'a-g' atomic.  Various parts of the DSL refer to
+      # the original mode, the final mode, or the current snapshot of the
+      # mode, for added fun.
+      snapshot_mode = {}
+      final_mode.each { |k, v| snapshot_mode[k] = v }
 
-          action = '!'
-          actions = {
-            '!' => lambda {|_,_| raise Puppet::Error, _('Missing operation (-, =, or +)') },
-            '=' => lambda {|m,v| m | v },
-            '+' => lambda {|m,v| m | v },
-            '-' => lambda {|m,v| m & ~v },
-          }
+      to.gsub('a', 'ugo').split('').uniq.each do |who|
+        value = snapshot_mode[who]
 
-          dsl.split('').each do |op|
-            case op
-            when /[-+=]/
-              action = op
-              # Clear all bits, if this is assignment
-              value  = 0 if op == '='
+        action = '!'
+        actions = {
+          '!' => ->(_, _) { raise Puppet::Error, _('Missing operation (-, =, or +)') },
+          '=' => ->(m, v) { m | v },
+          '+' => ->(m, v) { m | v },
+          '-' => ->(m, v) { m & ~v },
+        }
 
-            when /[ugo]/
-              value = actions[action].call(value, snapshot_mode[op])
+        dsl.split('').each do |op|
+          case op
+          when /[-+=]/
+            action = op
+            # Clear all bits, if this is assignment
+            value  = 0 if op == '='
 
-            when /[rwx]/
-              value = actions[action].call(value, SymbolicMode[op])
+          when /[ugo]/
+            value = actions[action].call(value, snapshot_mode[op])
 
-            when 'X'
-              # Only meaningful in combination with "set" actions.
-              if action != '+'
-                raise Puppet::Error, _("X only works with the '+' operator")
-              end
+          when /[rwx]/
+            value = actions[action].call(value, SymbolicMode[op])
 
-              # As per the BSD manual page, set if this is a directory, or if
-              # any execute bit is set on the original (unmodified) mode.
-              # Ignored otherwise; it is "add if", not "add or clear".
-              if is_a_directory or original_mode['any x?']
-                value = actions[action].call(value, ExecBit)
-              end
-
-            when /[st]/
-              bit = SymbolicSpecialToBit[op][who] or fail _("internal error")
-              final_mode['s'] = actions[action].call(final_mode['s'], bit)
-
-            else
-              raise Puppet::Error, _('Unknown operation')
+          when 'X'
+            # Only meaningful in combination with "set" actions.
+            if action != '+'
+              raise Puppet::Error, _("X only works with the '+' operator")
             end
+
+            # As per the BSD manual page, set if this is a directory, or if
+            # any execute bit is set on the original (unmodified) mode.
+            # Ignored otherwise; it is "add if", not "add or clear".
+            if is_a_directory or original_mode['any x?']
+              value = actions[action].call(value, ExecBit)
+            end
+
+          when /[st]/
+            bit = SymbolicSpecialToBit[op][who] or fail _("internal error")
+            final_mode['s'] = actions[action].call(final_mode['s'], bit)
+
+          else
+            raise Puppet::Error, _('Unknown operation')
           end
-
-          # Now, assign back the value.
-          final_mode[who] = value
         end
 
-      rescue Puppet::Error => e
-        if part.inspect != modification.inspect
-          rest = " at #{part.inspect}"
-        else
-          rest = ''
-        end
-
-        raise Puppet::Error, _("%{error}%{rest} in symbolic mode %{modification}") % { error: e, rest: rest, modification: modification.inspect }, e.backtrace
+        # Now, assign back the value.
+        final_mode[who] = value
       end
+    rescue Puppet::Error => e
+      if part.inspect != modification.inspect
+        rest = " at #{part.inspect}"
+      else
+        rest = ''
+      end
+
+      raise Puppet::Error, _("%{error}%{rest} in symbolic mode %{modification}") % { error: e, rest: rest, modification: modification.inspect }, e.backtrace
     end
 
-    result =
-      final_mode['s'] << 9 |
+    final_mode['s'] << 9 |
       final_mode['u'] << 6 |
       final_mode['g'] << 3 |
       final_mode['o'] << 0
-    return result
   end
 end
 end

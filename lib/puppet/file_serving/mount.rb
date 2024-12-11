@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/logging'
 require_relative '../../puppet/file_serving'
 require_relative '../../puppet/file_serving/metadata'
@@ -16,9 +18,10 @@ class Puppet::FileServing::Mount
 
   # Create our object.  It must have a name.
   def initialize(name)
-    unless name =~ %r{^[-\w]+$}
+    unless name =~ /^[-\w]+$/
       raise ArgumentError, _("Invalid mount name format '%{name}'") % { name: name }
     end
+
     @name = name
 
     super()

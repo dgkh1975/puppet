@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/vendor'
 Puppet::Vendor.load_vendored
 
@@ -15,10 +17,10 @@ class Puppet::Forge < SemanticPuppet::Dependency::Source
 
   include Puppet::Forge::Errors
 
-  USER_AGENT = "PMT/1.1.1 (v3; Net::HTTP)".freeze
+  USER_AGENT = "PMT/1.1.1 (v3; Net::HTTP)"
 
   # From https://forgeapi.puppet.com/#!/release/getReleases
-  MODULE_RELEASE_EXCLUSIONS=%w[readme changelog license uri module tags supported file_size downloads created_at updated_at deleted_at].join(',').freeze
+  MODULE_RELEASE_EXCLUSIONS = %w[readme changelog license uri module tags supported file_size downloads created_at updated_at deleted_at].join(',').freeze
 
   attr_reader :host, :repository
 
@@ -112,7 +114,7 @@ class Puppet::Forge < SemanticPuppet::Dependency::Source
       uri = decode_uri(response['pagination']['next'])
     end
 
-    return releases
+    releases
   end
 
   def make_http_request(*args)
@@ -132,23 +134,21 @@ class Puppet::Forge < SemanticPuppet::Dependency::Source
 
       if meta['dependencies']
         dependencies = meta['dependencies'].collect do |dep|
-          begin
-            Puppet::ModuleTool::Metadata.new.add_dependency(dep['name'], dep['version_requirement'], dep['repository'])
-            Puppet::ModuleTool.parse_module_dependency(release, dep)[0..1]
-          rescue ArgumentError => e
-            raise ArgumentError, _("Malformed dependency: %{name}.") % { name: dep['name'] } +
-                ' ' + _("Exception was: %{detail}") % { detail: e }
-          end
+          Puppet::ModuleTool::Metadata.new.add_dependency(dep['name'], dep['version_requirement'], dep['repository'])
+          Puppet::ModuleTool.parse_module_dependency(release, dep)[0..1]
+        rescue ArgumentError => e
+          raise ArgumentError, _("Malformed dependency: %{name}.") % { name: dep['name'] } +
+                               ' ' + _("Exception was: %{detail}") % { detail: e }
         end
       else
         dependencies = []
       end
 
-      super(source, name, version, Hash[dependencies])
+      super(source, name, version, dependencies.to_h)
     end
 
     def install(dir)
-      staging_dir = self.prepare
+      staging_dir = prepare
 
       module_dir = dir + name[/-(.*)/, 1]
       module_dir.rmtree if module_dir.exist?
@@ -161,7 +161,7 @@ class Puppet::Forge < SemanticPuppet::Dependency::Source
 
       # Return the Pathname object representing the directory where the
       # module release archive was unpacked the to.
-      return module_dir
+      module_dir
     ensure
       staging_dir.rmtree if staging_dir.exist?
     end
@@ -194,15 +194,15 @@ class Puppet::Forge < SemanticPuppet::Dependency::Source
     # Obtain a suitable temporary path for unpacking tarballs
     #
     # @return [Pathname] path to temporary unpacking location
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     def tmpdir
       @dir ||= Dir.mktmpdir(name, Puppet::Forge::Cache.base_path)
     end
 
     def tmpfile
-      @file ||= Tempfile.new(name, Puppet::Forge::Cache.base_path).tap do |f|
-        f.binmode
-      end
+      @file ||= Tempfile.new(name, Puppet::Forge::Cache.base_path).tap(&:binmode)
     end
+    # rubocop:enable Naming/MemoizedInstanceVariableName
 
     def download(uri, destination)
       response = @source.make_http_request(uri, destination)
@@ -223,15 +223,13 @@ class Puppet::Forge < SemanticPuppet::Dependency::Source
     end
 
     def unpack(file, destination)
-      begin
-        Puppet::ModuleTool::Applications::Unpacker.unpack(file.path, destination)
-      rescue Puppet::ExecutionFailure => e
-        raise RuntimeError, _("Could not extract contents of module archive: %{message}") % { message: e.message }
-      end
+      Puppet::ModuleTool::Applications::Unpacker.unpack(file.path, destination)
+    rescue Puppet::ExecutionFailure => e
+      raise RuntimeError, _("Could not extract contents of module archive: %{message}") % { message: e.message }
     end
 
     def deprecated?
-      @data['module'] && (@data['module']['deprecated_at'] != nil)
+      @data['module'] && !@data['module']['deprecated_at'].nil?
     end
   end
 

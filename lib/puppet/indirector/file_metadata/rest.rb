@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/file_serving/metadata'
 require_relative '../../../puppet/indirector/file_metadata'
 require_relative '../../../puppet/indirector/rest'
@@ -44,7 +46,7 @@ class Puppet::Indirector::FileMetadata::Rest < Puppet::Indirector::REST
       ignore: request.options[:ignore],
       links: request.options[:links],
       checksum_type: request.options[:checksum_type],
-      source_permissions: request.options[:source_permissions],
+      source_permissions: request.options[:source_permissions]
     )
     file_metadatas
   rescue Puppet::HTTP::ResponseError => e

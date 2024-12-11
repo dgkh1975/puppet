@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl/openssl_loader'
 require 'digest/sha1'
 require 'uri'
@@ -29,6 +31,7 @@ class Puppet::Forge
     # Return a Net::HTTPResponse read for this +path+.
     def make_http_request(path, io = nil)
       raise ArgumentError, "Path must start with forward slash" unless path.start_with?('/')
+
       begin
         str = @uri.to_s
         str.chomp!('/')
@@ -44,7 +47,7 @@ class Puppet::Forge
         end
 
         http = Puppet.runtime[:http]
-        response = http.get(uri, headers: headers, options: {ssl_context: @ssl_context})
+        response = http.get(uri, headers: headers, options: { ssl_context: @ssl_context })
         io.write(response.body) if io.respond_to?(:write)
         response
       rescue Puppet::SSL::CertVerifyError => e
@@ -66,7 +69,7 @@ class Puppet::Forge
     # repository at +release+ (e.g. "myuser-mymodule").
     def retrieve(release)
       path = @host.chomp('/') + release
-      return cache.retrieve(path)
+      cache.retrieve(path)
     end
 
     # Return the URI string for this repository.
@@ -77,7 +80,7 @@ class Puppet::Forge
     # Return the cache key for this repository, this a hashed string based on
     # the URI.
     def cache_key
-      return @cache_key ||= [
+      @cache_key ||= [
         @host.to_s.gsub(/[^[:alnum:]]+/, '_').sub(/_$/, ''),
         Digest::SHA1.hexdigest(@host.to_s)
       ].join('-').freeze

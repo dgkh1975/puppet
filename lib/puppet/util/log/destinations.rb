@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Util::Log.newdesttype :syslog do
   def self.suitable?(obj)
     Puppet.features.syslog?
@@ -17,8 +19,8 @@ Puppet::Util::Log.newdesttype :syslog do
     str = Puppet[:syslogfacility]
     begin
       facility = Syslog.const_get("LOG_#{str.upcase}")
-    rescue NameError
-      raise Puppet::Error, _("Invalid syslog facility %{str}") % { str: str }, $!.backtrace
+    rescue NameError => e
+      raise Puppet::Error, _("Invalid syslog facility %{str}") % { str: str }, e.backtrace
     end
 
     @syslog = Syslog.open(name, options, facility)
@@ -35,9 +37,7 @@ Puppet::Util::Log.newdesttype :syslog do
     else
       msg.to_s.split("\n").each do |line|
         @syslog.send(msg.level, "(%s) %s" % [msg.source.to_s.delete("%"),
-            line.gsub("%", '%%')
-          ]
-        )
+                                             line.gsub("%", '%%')])
       end
     end
   end
@@ -72,7 +72,7 @@ Puppet::Util::Log.newdesttype :file do
     # We can't just use 'Config.use' here, because they've
     # specified a "special" destination.
     unless Puppet::FileSystem.exist?(Puppet::FileSystem.dir(path))
-      FileUtils.mkdir_p(File.dirname(path), :mode => 0755)
+      FileUtils.mkdir_p(File.dirname(path), :mode => 0o755)
       Puppet.info _("Creating log directory %{dir}") % { dir: File.dirname(path) }
     end
 
@@ -91,7 +91,7 @@ Puppet::Util::Log.newdesttype :file do
       end
     end
 
-    file = File.open(path, File::WRONLY|File::CREAT|File::APPEND)
+    file = File.new(path, File::WRONLY | File::CREAT | File::APPEND)
     file.puts('[') if need_array_start
 
     @file = file
@@ -146,15 +146,15 @@ Puppet::Util::Log.newdesttype :console do
 
   def handle(msg)
     levels = {
-      :emerg   => { :name => 'Emergency', :color => :hred,     :stream => $stderr },
-      :alert   => { :name => 'Alert',     :color => :hred,     :stream => $stderr },
-      :crit    => { :name => 'Critical',  :color => :hred,     :stream => $stderr },
-      :err     => { :name => 'Error',     :color => :hred,     :stream => $stderr },
-      :warning => { :name => 'Warning',   :color => :hyellow,  :stream => $stderr },
+      :emerg => { :name => 'Emergency', :color => :hred,     :stream => $stderr },
+      :alert => { :name => 'Alert',     :color => :hred,     :stream => $stderr },
+      :crit => { :name => 'Critical', :color => :hred, :stream => $stderr },
+      :err => { :name => 'Error', :color => :hred, :stream => $stderr },
+      :warning => { :name => 'Warning', :color => :hyellow, :stream => $stderr },
 
-      :notice  => { :name => 'Notice',    :color => :reset,    :stream => $stdout },
-      :info    => { :name => 'Info',      :color => :green,    :stream => $stdout },
-      :debug   => { :name => 'Debug',     :color => :cyan,     :stream => $stdout },
+      :notice => { :name => 'Notice', :color => :reset, :stream => $stdout },
+      :info => { :name => 'Info', :color => :green, :stream => $stdout },
+      :debug => { :name => 'Debug', :color => :cyan, :stream => $stdout },
     }
 
     str = msg.respond_to?(:multiline) ? msg.multiline : msg.to_s
@@ -211,7 +211,7 @@ Puppet::Util::Log.newdesttype :eventlog do
   Puppet::Util::Log::DestEventlog::EVENTLOG_ERROR_TYPE       = 0x0001
   Puppet::Util::Log::DestEventlog::EVENTLOG_WARNING_TYPE     = 0x0002
   Puppet::Util::Log::DestEventlog::EVENTLOG_INFORMATION_TYPE = 0x0004
-  Puppet::Util::Log::DestEventlog::EVENTLOG_CHARACTER_LIMIT  = 31838
+  Puppet::Util::Log::DestEventlog::EVENTLOG_CHARACTER_LIMIT  = 31_838
 
   def self.suitable?(obj)
     Puppet::Util::Platform.windows?
@@ -238,9 +238,9 @@ Puppet::Util::Log.newdesttype :eventlog do
     end
 
     @eventlog.report_event(
-      :event_type  => native_type,
-      :event_id    => native_id,
-      :data        => (msg.source && msg.source != 'Puppet' ? "#{msg.source}: " : '') + msg.to_s
+      :event_type => native_type,
+      :event_id => native_id,
+      :data => (msg.source && msg.source != 'Puppet' ? "#{msg.source}: " : '') + msg.to_s
     )
   end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'ffi'
 
 # Puppet::Util::Windows::EventLog needs to be requirable without having loaded
@@ -8,7 +10,7 @@ require 'ffi'
 # - Define Puppet::Util::Windows
 # - Replicate logic that exists elsewhere in puppet/util/windows
 # - Raise generic RuntimeError instead of Puppet::Util::Windows::Error if its not defined
-module Puppet; module Util; module Windows ; end ; end ; end
+module Puppet; module Util; module Windows; end; end; end
 
 class Puppet::Util::Windows::EventLog
   extend FFI::Library
@@ -31,7 +33,7 @@ class Puppet::Util::Windows::EventLog
   def initialize(source_name = 'Puppet')
     @eventlog_handle = RegisterEventSourceW(FFI::Pointer::NULL, wide_string(source_name))
     if @eventlog_handle == NULL_HANDLE
-      #TRANSLATORS 'Windows' is the operating system and 'RegisterEventSourceW' is a API call and should not be translated
+      # TRANSLATORS 'Windows' is the operating system and 'RegisterEventSourceW' is a API call and should not be translated
       raise EventLogError.new(_("RegisterEventSourceW failed to open Windows eventlog"), FFI.errno)
     end
   end
@@ -59,6 +61,7 @@ class Puppet::Util::Windows::EventLog
     unless args[:data].is_a?(String)
       raise ArgumentError, _("data must be a string, not %{class_name}") % { class_name: args[:data].class }
     end
+
     from_string_to_wide_string(args[:data]) do |message_ptr|
       FFI::MemoryPointer.new(:pointer) do |message_array_ptr|
         message_array_ptr.write_pointer(message_ptr)
@@ -68,11 +71,11 @@ class Puppet::Util::Windows::EventLog
         num_strings = 1
         eventlog_category = 0
         report_result = ReportEventW(@eventlog_handle, args[:event_type],
-          eventlog_category, args[:event_id], user_sid,
-          num_strings, raw_data_size, message_array_ptr, raw_data)
+                                     eventlog_category, args[:event_id], user_sid,
+                                     num_strings, raw_data_size, message_array_ptr, raw_data)
 
         if report_result == WIN32_FALSE
-          #TRANSLATORS 'Windows' is the operating system and 'ReportEventW' is a API call and should not be translated
+          # TRANSLATORS 'Windows' is the operating system and 'ReportEventW' is a API call and should not be translated
           raise EventLogError.new(_("ReportEventW failed to report event to Windows eventlog"), FFI.errno)
         end
       end
@@ -89,11 +92,11 @@ class Puppet::Util::Windows::EventLog
     # @api public
     def to_native(level)
       case level
-      when :debug,:info,:notice
+      when :debug, :info, :notice
         [EVENTLOG_INFORMATION_TYPE, 0x01]
       when :warning
         [EVENTLOG_WARNING_TYPE, 0x02]
-      when :err,:alert,:emerg,:crit
+      when :err, :alert, :emerg, :crit
         [EVENTLOG_ERROR_TYPE, 0x03]
       else
         raise ArgumentError, _("Invalid log level %{level}") % { level: level }
@@ -102,6 +105,7 @@ class Puppet::Util::Windows::EventLog
   end
 
   private
+
   # For the purposes of allowing this class to be standalone, the following are
   # duplicate definitions from elsewhere in Puppet:
 
@@ -114,8 +118,8 @@ class Puppet::Util::Windows::EventLog
   else
     class EventLogError < RuntimeError
       def initialize(msg, code)
-        #TRANSLATORS 'Win32' is the Windows API and should not be translated
-        super(msg + ' ' + _("(Win32 error: %{detail})") % { detail: code})
+        # TRANSLATORS 'Win32' is the Windows API and should not be translated
+        super(msg + ' ' + _("(Win32 error: %{detail})") % { detail: code })
       end
     end
   end

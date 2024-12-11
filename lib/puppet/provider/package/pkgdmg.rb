@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Motivation: DMG files provide a true HFS file system
 # and are easier to manage and .pkg bundles.
@@ -35,9 +37,9 @@ Puppet::Type.type(:package).provide :pkgdmg, :parent => Puppet::Provider::Packag
       whether a package has been installed. Thus, to install new a version of a
       package, you must create a new DMG with a different filename."
 
-  confine :operatingsystem => :darwin
-  confine :feature         => :cfpropertylist
-  defaultfor :operatingsystem => :darwin
+  confine 'os.name' => :darwin
+  confine :feature => :cfpropertylist
+  defaultfor 'os.name' => :darwin
   commands :installer => "/usr/sbin/installer"
   commands :hdiutil => "/usr/bin/hdiutil"
   commands :curl => "/usr/bin/curl"
@@ -75,26 +77,27 @@ Puppet::Type.type(:package).provide :pkgdmg, :parent => Puppet::Provider::Packag
     end
 
     unless source =~ /\.dmg$/i || source =~ /\.pkg$/i
-      raise Puppet::Error.new(_("Mac OS X PKG DMGs must specify a source string ending in .dmg or flat .pkg file"))
+      raise Puppet::Error, _("Mac OS X PKG DMGs must specify a source string ending in .dmg or flat .pkg file")
     end
+
     require 'open-uri' # Dead code; this is never used. The File.open call 20-ish lines south of here used to be Kernel.open but changed in '09. -NF
     cached_source = source
     tmpdir = Dir.mktmpdir
     ext = /(\.dmg|\.pkg)$/i.match(source)[0]
     begin
-      if %r{\A[A-Za-z][A-Za-z0-9+\-\.]*://} =~ cached_source
+      if %r{\A[A-Za-z][A-Za-z0-9+\-.]*://} =~ cached_source
         cached_source = File.join(tmpdir, "#{name}#{ext}")
-        args = [ "-o", cached_source, "-C", "-", "-L", "-s", "--fail", "--url", source ]
+        args = ["-o", cached_source, "-C", "-", "-L", "-s", "--fail", "--url", source]
         if http_proxy_host and http_proxy_port
           args << "--proxy" << "#{http_proxy_host}:#{http_proxy_port}"
-        elsif http_proxy_host and not http_proxy_port
+        elsif http_proxy_host and !http_proxy_port
           args << "--proxy" << http_proxy_host
         end
         begin
           curl(*args)
-            Puppet.debug "Success: curl transferred [#{name}] (via: curl #{args.join(" ")})"
+          Puppet.debug "Success: curl transferred [#{name}] (via: curl #{args.join(' ')})"
         rescue Puppet::ExecutionFailure
-          Puppet.debug "curl #{args.join(" ")} did not transfer [#{name}].  Falling back to local file." # This used to fall back to open-uri. -NF
+          Puppet.debug "curl #{args.join(' ')} did not transfer [#{name}].  Falling back to local file." # This used to fall back to open-uri. -NF
           cached_source = source
         end
       end
@@ -104,10 +107,11 @@ Puppet::Type.type(:package).provide :pkgdmg, :parent => Puppet::Provider::Packag
         File.open(cached_source) do |dmg|
           xml_str = hdiutil "mount", "-plist", "-nobrowse", "-readonly", "-mountrandom", "/tmp", dmg.path
           hdiutil_info = Puppet::Util::Plist.parse_plist(xml_str)
-          raise Puppet::Error.new(_("No disk entities returned by mount at %{path}") % { path: dmg.path }) unless hdiutil_info.has_key?("system-entities")
-          mounts = hdiutil_info["system-entities"].collect { |entity|
+          raise Puppet::Error, _("No disk entities returned by mount at %{path}") % { path: dmg.path } unless hdiutil_info.has_key?("system-entities")
+
+          mounts = hdiutil_info["system-entities"].filter_map { |entity|
             entity["mount-point"]
-          }.compact
+          }
           begin
             mounts.each do |mountpoint|
               Dir.entries(mountpoint).select { |f|
@@ -133,21 +137,23 @@ Puppet::Type.type(:package).provide :pkgdmg, :parent => Puppet::Provider::Packag
   def query
     if Puppet::FileSystem.exist?("/var/db/.puppet_pkgdmg_installed_#{@resource[:name]}")
       Puppet.debug "/var/db/.puppet_pkgdmg_installed_#{@resource[:name]} found"
-      return {:name => @resource[:name], :ensure => :present}
+      { :name => @resource[:name], :ensure => :present }
     else
-      return nil
+      nil
     end
   end
 
   def install
     source = @resource[:source]
     unless source
-      raise Puppet::Error.new(_("Mac OS X PKG DMGs must specify a package source."))
+      raise Puppet::Error, _("Mac OS X PKG DMGs must specify a package source.")
     end
+
     name = @resource[:name]
     unless name
-      raise Puppet::Error.new(_("Mac OS X PKG DMGs must specify a package name."))
+      raise Puppet::Error, _("Mac OS X PKG DMGs must specify a package name.")
     end
-    self.class.installpkgdmg(source,name)
+
+    self.class.installpkgdmg(source, name)
   end
 end

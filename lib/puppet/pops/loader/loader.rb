@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Loader
 # ===
 # A Loader is responsible for loading "entities" ("instantiable and executable objects in the puppet language" which
@@ -21,9 +23,8 @@
 #
 module Puppet::Pops
 module Loader
-
-ENVIRONMENT = 'environment'.freeze
-ENVIRONMENT_PRIVATE = 'environment private'.freeze
+ENVIRONMENT = 'environment'
+ENVIRONMENT_PRIVATE = 'environment private'
 
 class Loader
   attr_reader :environment, :loader_name
@@ -53,7 +54,7 @@ class Loader
   # @yieldreturn [Boolean] `true` to keep the entry, `false` to discard it.
   # @return [Array<TypedName>] the list of names of discovered values
   def discover(type, error_collector = nil, name_authority = Pcore::RUNTIME_NAME_AUTHORITY, &block)
-    return EMPTY_ARRAY
+    EMPTY_ARRAY
   end
 
   # Produces the value associated with the given name if already loaded, or available for loading
@@ -163,7 +164,7 @@ class Loader
   # @api private
   #
   def set_entry(type, name, value, origin = nil)
-    raise NotImplementedError.new
+    raise NotImplementedError
   end
 
   # Produces a NamedEntry if a value is bound to the given name, or nil if nothing is bound.
@@ -174,7 +175,7 @@ class Loader
   # @api private
   #
   def get_entry(typed_name)
-    raise NotImplementedError.new
+    raise NotImplementedError
   end
 
   # A loader is by default a loader for all kinds of loadables. An implementation may override
@@ -198,9 +199,8 @@ class Loader
   # at this point to inspect (ie children would print out `loader_name`
   # rather than their version of to_s if they chose to implement it).
   def inspect
-    self.to_s
+    to_s
   end
-
 
   # An entry for one entity loaded by the loader.
   #

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Utility module for type assertion
 #
 module Puppet::Pops::Types
@@ -37,11 +39,11 @@ module TypeAsserter
 
   def self.report_type_mismatch(subject, expected_type, actual_type, what = 'has wrong type')
     subject = yield(subject) if block_given?
-    subject = subject[0] % subject[1..-1] if subject.is_a?(Array)
+    subject = subject[0] % subject[1..] if subject.is_a?(Array)
     raise TypeAssertionError.new(
-      TypeMismatchDescriber.singleton.describe_mismatch("#{subject} #{what},", expected_type, actual_type), expected_type, actual_type)
+      TypeMismatchDescriber.singleton.describe_mismatch("#{subject} #{what},", expected_type, actual_type), expected_type, actual_type
+    )
   end
   private_class_method :report_type_mismatch
 end
 end
-

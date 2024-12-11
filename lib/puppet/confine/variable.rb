@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/confine'
 
 # Require a specific value for a variable, either a Puppet setting
@@ -10,7 +12,7 @@ class Puppet::Confine::Variable < Puppet::Confine
   # Only returns failed values, not all required values.
   def self.summarize(confines)
     result = Hash.new { |hash, key| hash[key] = [] }
-    confines.inject(result) { |total, confine| total[confine.name] += confine.values unless confine.valid?; total }
+    confines.each_with_object(result) { |confine, total| total[confine.name] += confine.values unless confine.valid?; }
   end
 
   # This is set by ConfineCollection.
@@ -27,7 +29,7 @@ class Puppet::Confine::Variable < Puppet::Confine
   end
 
   def message(value)
-    "facter value '#{test_value}' for '#{self.name}' not in required list '#{values.join(",")}'"
+    "facter value '#{test_value}' for '#{name}' not in required list '#{values.join(',')}'"
   end
 
   # Compare the passed-in value to the retrieved value.

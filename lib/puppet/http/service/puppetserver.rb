@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 # The puppetserver service.
 #
 # @api public
 #
 class Puppet::HTTP::Service::Puppetserver < Puppet::HTTP::Service
-
   # Use `Puppet::HTTP::Session.route_to(:puppetserver)` to create or get an instance of this class.
   #
   # @param [Puppet::HTTP::Client] client
@@ -35,7 +36,7 @@ class Puppet::HTTP::Service::Puppetserver < Puppet::HTTP::Service
       response = @client.get(
         with_base_url(request_path),
         headers: add_puppet_headers({}),
-        options: {ssl_context: ssl_context}
+        options: { ssl_context: ssl_context }
       )
 
       process_response(response)

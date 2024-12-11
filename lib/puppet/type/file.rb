@@ -1,10 +1,11 @@
 # coding: utf-8
+# frozen_string_literal: true
+
 require 'digest/md5'
 require 'cgi'
 require 'etc'
 require 'uri'
 require 'fileutils'
-require 'enumerator'
 require 'pathname'
 require_relative '../../puppet/parameter/boolean'
 require_relative '../../puppet/util/diff'
@@ -39,12 +40,12 @@ Puppet::Type.newtype(:file) do
      or `recursive_file_permissions` modules from the Forge."
 
   feature :manages_symlinks,
-    "The provider can manage symbolic links."
+          "The provider can manage symbolic links."
 
   def self.title_patterns
     # strip trailing slashes from path but allow the root directory, including
     # for example "/" or "C:/"
-    [ [ %r{^(/|.+:/|.*[^/])/*\Z}m, [ [ :path ] ] ] ]
+    [[%r{^(/|.+:/|.*[^/])/*\Z}m, [[:path]]]]
   end
 
   newparam(:path) do
@@ -109,17 +110,17 @@ Puppet::Type.newtype(:file) do
       something like an out-of-band rsync task to synchronize the content on all
       primary servers.
 
-      > **Note**: Enabling and using the backup option, and by extension the 
-        filebucket resource, requires appropriate planning and management to ensure 
-        that sufficient disk space is available for the file backups. Generally, you 
+      > **Note**: Enabling and using the backup option, and by extension the
+        filebucket resource, requires appropriate planning and management to ensure
+        that sufficient disk space is available for the file backups. Generally, you
         can implement this using one of the following two options:
-        - Use a `find` command and `crontab` entry to retain only the last X days 
+        - Use a `find` command and `crontab` entry to retain only the last X days
         of file backups. For example:
-        
+
         ```
         find /opt/puppetlabs/server/data/puppetserver/bucket -type f -mtime +45 -atime +45 -print0 | xargs -0 rm
         ```
-        
+
         - Restrict the directory to a maximum size after which the oldest items are removed.
     EOT
 
@@ -263,7 +264,7 @@ Puppet::Type.newtype(:file) do
 
     validate do |value|
       unless value.is_a?(Array) or value.is_a?(String) or value == false
-        self.devfail "Ignore must be a string or an Array"
+        devfail "Ignore must be a string or an Array"
       end
     end
   end
@@ -386,7 +387,7 @@ Puppet::Type.newtype(:file) do
   autorequire(:file) do
     req = []
     path = Pathname.new(self[:path])
-    if !path.root?
+    unless path.root?
       # Start at our parent, to avoid autorequiring ourself
       parents = path.parent.enum_for(:ascend)
       found = parents.find { |p| catalog.resource(:file, p.to_s) }
@@ -400,12 +401,13 @@ Puppet::Type.newtype(:file) do
   end
 
   # Autorequire the owner and group of the file.
-  {:user => :owner, :group => :group}.each do |type, property|
+  { :user => :owner, :group => :group }.each do |type, property|
     autorequire(type) do
       if @parameters.include?(property)
         # The user/group property automatically converts to IDs
         should = @parameters[property].shouldorig
         next unless should
+
         val = should[0]
         if val.is_a?(Integer) or val =~ /^\d+$/
           nil
@@ -430,7 +432,7 @@ Puppet::Type.newtype(:file) do
     end
     creator_count += 1 if @parameters.include?(:source)
 
-    self.fail _("You cannot specify more than one of %{creators}") % { creators: CREATORS.collect { |p| p.to_s}.join(", ") } if creator_count > 1
+    self.fail _("You cannot specify more than one of %{creators}") % { creators: CREATORS.collect(&:to_s).join(", ") } if creator_count > 1
 
     self.fail _("You cannot specify a remote recursion without a source") if !self[:source] && self[:recurse] == :remote
 
@@ -440,7 +442,7 @@ Puppet::Type.newtype(:file) do
       self.fail _("You cannot specify content when using checksum '%{checksum_type}'") % { checksum_type: checksum_type } if self[:checksum] == checksum_type && !self[:content].nil?
     end
 
-    self.warning _("Possible error: recurselimit is set but not recurse, no recursion will happen") if !self[:recurse] && self[:recurselimit]
+    warning _("Possible error: recurselimit is set but not recurse, no recursion will happen") if !self[:recurse] && self[:recurselimit]
 
     if @parameters[:content] && @parameters[:content].actual_content
       # Now that we know the checksum, update content (in case it was created before checksum was known).
@@ -451,23 +453,24 @@ Puppet::Type.newtype(:file) do
       self.fail _("Checksum value '%{value}' is not a valid checksum type %{checksum}") % { value: self[:checksum_value], checksum: self[:checksum] }
     end
 
-    self.warning _("Checksum value is ignored unless content or source are specified") if self[:checksum_value] && !self[:content] && !self[:source]
+    warning _("Checksum value is ignored unless content or source are specified") if self[:checksum_value] && !self[:content] && !self[:source]
 
     provider.validate if provider.respond_to?(:validate)
   end
 
   def self.[](path)
     return nil unless path
-    super(path.gsub(/\/+/, '/').sub(/\/$/, ''))
+
+    super(path.gsub(%r{/+}, '/').sub(%r{/$}, ''))
   end
 
   def self.instances
-    return []
+    []
   end
 
   # Determine the user to write files as.
   def asuser
-    if self.should(:owner) && ! self.should(:owner).is_a?(Symbol)
+    if self.should(:owner) && !self.should(:owner).is_a?(Symbol)
       writeable = Puppet::Util::SUIDManager.asuser(self.should(:owner)) {
         FileTest.writable?(::File.dirname(self[:path]))
       }
@@ -528,7 +531,7 @@ Puppet::Type.newtype(:file) do
 
   # Create any children via recursion or whatever.
   def eval_generate
-    return [] unless self.recurse?
+    return [] unless recurse?
 
     recurse
   end
@@ -541,7 +544,7 @@ Puppet::Type.newtype(:file) do
 
   def flush
     # We want to make sure we retrieve metadata anew on each transaction.
-    @parameters.each do |name, param|
+    @parameters.each do |_name, param|
       param.flush if param.respond_to?(:flush)
     end
     @stat = :needs_stat
@@ -568,8 +571,9 @@ Puppet::Type.newtype(:file) do
 
   # Configure discovered resources to be purged.
   def mark_children_for_purging(children)
-    children.each do |name, child|
+    children.each do |_name, child|
       next if child[:source]
+
       child[:ensure] = :absent
     end
   end
@@ -588,7 +592,7 @@ Puppet::Type.newtype(:file) do
     # or so.  Unfortunately, we don't have a straightforward way to manage
     # the different lifetimes of this data, so we kludge it like this.
     # The right-side hash wins in the merge.
-    options = @original_parameters.merge(:path => full_path).reject { |param, value| value.nil? }
+    options = @original_parameters.merge(:path => full_path).compact
 
     # These should never be passed to our children.
     [:parent, :ensure, :recurse, :recurselimit, :max_files, :target, :alias, :source].each do |param|
@@ -612,12 +616,12 @@ Puppet::Type.newtype(:file) do
         # Remove the parent file name
         list = parent.pathbuilder
         list.pop # remove the parent's path info
-        return list << self.ref
+        list << ref
       else
-        return super
+        super
       end
     else
-      return [self.ref]
+      [ref]
     end
   end
 
@@ -635,7 +639,7 @@ Puppet::Type.newtype(:file) do
 
     # If we're purging resources, then delete any resource that isn't on the
     # remote system.
-    mark_children_for_purging(children) if self.purge?
+    mark_children_for_purging(children) if purge?
 
     result = children.values.sort_by { |a| a[:path] }
     remove_less_specific_files(result)
@@ -655,17 +659,17 @@ Puppet::Type.newtype(:file) do
   def self.remove_less_specific_files(files, parent_path, existing_files, &block)
     # REVISIT: is this Windows safe?  AltSeparator?
     mypath = parent_path.split(::File::Separator)
-    other_paths = existing_files.
-      select { |r| (yield r) != parent_path}.
-      collect { |r| (yield r).split(::File::Separator) }.
-      select  { |p| p[0,mypath.length]  == mypath }
+    other_paths = existing_files
+                  .select { |r| (yield r) != parent_path }
+                  .collect { |r| (yield r).split(::File::Separator) }
+                  .select  { |p| p[0, mypath.length] == mypath }
 
     return files if other_paths.empty?
 
     files.reject { |file|
       path = (yield file).split(::File::Separator)
-      other_paths.any? { |p| path[0,p.length] == p }
-      }
+      other_paths.any? { |p| path[0, p.length] == p }
+    }
   end
 
   # A simple method for determining whether we should be recursing.
@@ -696,11 +700,11 @@ Puppet::Type.newtype(:file) do
   def recurse_local
     result = perform_recursion(self[:path])
     return {} unless result
-    result.inject({}) do |hash, meta|
+
+    result.each_with_object({}) do |meta, hash|
       next hash if meta.relative_path == "."
 
       hash[meta.relative_path] = newchild(meta.relative_path)
-      hash
     end
   end
 
@@ -735,8 +739,10 @@ Puppet::Type.newtype(:file) do
       end
 
       next unless result
+
       top = result.find { |r| r.relative_path == "." }
       return [] if top && top.ftype != "directory"
+
       result.each do |data|
         if data.relative_path == '.'
           data.source = source
@@ -745,7 +751,8 @@ Puppet::Type.newtype(:file) do
           data.source = "#{source}/#{data.relative_path}"
         end
       end
-      break result if result and ! result.empty? and sourceselect == :first
+      break result if result and !result.empty? and sourceselect == :first
+
       result
     end.flatten.compact
 
@@ -793,7 +800,7 @@ Puppet::Type.newtype(:file) do
       if can_backup?(current_type)
         backup_existing
       else
-        self.warning _("Could not back up file of type %{current_type}") % { current_type: current_type }
+        warning _("Could not back up file of type %{current_type}") % { current_type: current_type }
       end
     end
 
@@ -803,9 +810,9 @@ Puppet::Type.newtype(:file) do
 
     case current_type
     when "directory"
-      return remove_directory(wanted_type)
+      remove_directory(wanted_type)
     when "link", "file", "fifo", "socket"
-      return remove_file(current_type, wanted_type)
+      remove_file(current_type, wanted_type)
     else
       # Including: “blockSpecial”, “characterSpecial”, “unknown”
       self.fail _("Could not remove files of type %{current_type}") % { current_type: current_type }
@@ -817,16 +824,16 @@ Puppet::Type.newtype(:file) do
     # metadata in `copy_source_values`, but so it only fails the resource and not
     # catalog validation (because that would be a breaking change from Puppet 4).
     if Puppet::Util::Platform.windows? && parameter(:source) &&
-      [:use, :use_when_creating].include?(self[:source_permissions])
-      #TRANSLATORS "source_permissions => ignore" should not be translated
+       [:use, :use_when_creating].include?(self[:source_permissions])
+      # TRANSLATORS "source_permissions => ignore" should not be translated
       err_msg = _("Copying owner/mode/group from the source file on Windows is not supported; use source_permissions => ignore.")
-      if self[:owner] == nil || self[:group] == nil || self[:mode] == nil
+      if self[:owner].nil? || self[:group].nil? || self[:mode].nil?
         # Fail on Windows if source permissions are being used and the file resource
         # does not have mode owner, group, and mode all set (which would take precedence).
         self.fail err_msg
       else
         # Warn if use source permissions is specified on Windows
-        self.warning err_msg
+        warning err_msg
       end
     end
 
@@ -866,12 +873,14 @@ Puppet::Type.newtype(:file) do
     # The user doesn't really care, apparently
     if self[:ensure] == :present
       return true unless stat
-      return(stat.ftype == "file" ? true : false)
+
+      return(stat.ftype == "file")
     end
 
     # If we've gotten here, then :ensure isn't set
     return true if self[:content]
     return true if stat and stat.ftype == "file"
+
     false
   end
 
@@ -889,7 +898,7 @@ Puppet::Type.newtype(:file) do
     method = :stat
 
     # Files are the only types that support links
-    if (self.class.name == :file and self[:links] != :follow) or self.class.name == :tidy
+    if instance_of?(Puppet::Type::File) and self[:links] != :follow
       method = :lstat
     end
 
@@ -928,7 +937,7 @@ Puppet::Type.newtype(:file) do
         validate_callback = proc { |path|
           output = Puppet::Util::Execution.execute(self[:validate_cmd].gsub(self[:validate_replacement], path), :failonfail => true, :combine => true)
           output.split(/\n/).each { |line|
-            self.debug(line)
+            debug(line)
           }
         }
       end
@@ -953,8 +962,8 @@ Puppet::Type.newtype(:file) do
         fail_if_checksum_is_wrong(property, file.path, content_checksum)
       end
     else
-      umask = mode ? 000 : 022
-      Puppet::Util.withumask(umask) { ::File.open(self[:path], 'wb', mode_int ) { |f| property.write(f) if property } }
+      umask = mode ? 0o00 : 0o22
+      Puppet::Util.withumask(umask) { ::File.open(self[:path], 'wb', mode_int) { |f| property.write(f) if property } }
     end
 
     # make sure all of the modes are actually correct
@@ -963,7 +972,7 @@ Puppet::Type.newtype(:file) do
 
   private
 
-  # Carry the context of sensitive parameters to the the properties that will actually handle that
+  # Carry the context of sensitive parameters to the properties that will actually handle that
   # sensitive data.
   #
   # The file type can accept file content from a number of origins and depending on the current
@@ -1014,11 +1023,8 @@ Puppet::Type.newtype(:file) do
       # (#18110) Directories cannot be removed without :force,
       # so it doesn't make sense to back them up unless removing with :force.
       true
-    elsif type == "file" or type == "link"
-      true
     else
-      # Including: “blockSpecial”, “characterSpecial”, "fifo", "socket", “unknown”
-      false
+      type == "file" or type == "link"
     end
   end
 
@@ -1055,7 +1061,7 @@ Puppet::Type.newtype(:file) do
   # @return [void]
   def backup_existing
     unless perform_backup
-      #TRANSLATORS refers to a file which could not be backed up
+      # TRANSLATORS refers to a file which could not be backed up
       raise Puppet::Error, _("Could not back up; will not remove")
     end
   end
@@ -1087,6 +1093,7 @@ Puppet::Type.newtype(:file) do
 
       # due to HttpMetadata the checksum type may fallback to mtime, so recheck
       return if SOURCE_ONLY_CHECKSUMS.include?(meta.checksum_type)
+
       meta.checksum
     elsif property && property.name == :content
       str = property.actual_content
@@ -1112,7 +1119,6 @@ Puppet::Type.newtype(:file) do
       thing.sync unless thing.safe_insync?(currentvalue)
     end
   end
-
 end
 
 # We put all of the properties in separate files, because there are so many

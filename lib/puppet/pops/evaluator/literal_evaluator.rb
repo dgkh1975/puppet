@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Evaluator
 # Literal values for
@@ -10,13 +12,11 @@ module Evaluator
 # QualifiedName
 # Default (produced :default)
 # Regular Expression (produces ruby regular expression)
-#
-# Not considered literal
-# QualifiedReference  # i.e. File, FooBar
+# QualifiedReference
+# AccessExpresion
 #
 class LiteralEvaluator
-
-  COMMA_SEPARATOR = ', '.freeze
+  COMMA_SEPARATOR = ', '
 
   def initialize
     @@literal_visitor ||= Visitor.new(self, "literal", 0, 0)
@@ -66,6 +66,20 @@ class LiteralEvaluator
     o.value
   end
 
+  def literal_QualifiedReference(o)
+    o.value
+  end
+
+  def literal_AccessExpression(o)
+    # to prevent parameters with [[]] like Optional[[String]]
+    throw :not_literal if o.keys.size == 1 && o.keys[0].is_a?(Model::LiteralList)
+    o.keys.map { |v| literal(v) }
+  end
+
+  def literal_UnaryMinusExpression(o)
+    -literal(o.expr)
+  end
+
   def literal_ConcatenatedString(o)
     # use double quoted string value if there is no interpolation
     throw :not_literal unless o.segments.size == 1 && o.segments[0].is_a?(Model::LiteralString)
@@ -73,13 +87,12 @@ class LiteralEvaluator
   end
 
   def literal_LiteralList(o)
-    o.values.map {|v| literal(v) }
+    o.values.map { |v| literal(v) }
   end
 
   def literal_LiteralHash(o)
-    o.entries.reduce({}) do |result, entry|
+    o.entries.each_with_object({}) do |entry, result|
       result[literal(entry.key)] = literal(entry.value)
-      result
     end
   end
 end

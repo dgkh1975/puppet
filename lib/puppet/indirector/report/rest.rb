@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/indirector/rest'
 require 'semantic_puppet'
 
@@ -18,19 +20,6 @@ class Puppet::Transaction::Report::Rest < Puppet::Indirector::REST
     return nil if e.response.code == 404
 
     raise convert_to_http_error(e.response)
-  end
-
-  # This is called by the superclass when not using our httpclient.
-  def handle_response(request, response)
-    if !response.success?
-      server_version = response[Puppet::Network::HEADER_PUPPET_VERSION]
-      if server_version &&
-         SemanticPuppet::Version.parse(server_version).major < Puppet::Indirector::REST::MAJOR_VERSION_JSON_DEFAULT &&
-         Puppet[:preferred_serialization_format] != 'pson'
-        format = Puppet[:preferred_serialization_format]
-        raise Puppet::Error.new(_("Server version %{version} does not accept reports in '%{format}', use `preferred_serialization_format=pson`") % {version: server_version, format: format})
-      end
-    end
   end
 
   private

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../../puppet/provider/package/windows/package'
 
 class Puppet::Provider::Package::Windows
@@ -14,7 +16,7 @@ class Puppet::Provider::Package::Windows
       'Security Update',
       'Update Rollup',
       'Hotfix',
-      'WindowsInstaller',
+      'WindowsInstaller'
     ]
 
     def self.register(path)
@@ -42,10 +44,10 @@ class Puppet::Provider::Package::Windows
          values['UninstallString'].length > 0 &&
          values['WindowsInstaller'] != 1 && # DWORD
          name !~ /^KB[0-9]{6}/ &&
-         values['ParentKeyName'] == nil &&
-         values['Security Update'] == nil &&
-         values['Update Rollup'] == nil &&
-         values['Hotfix'] == nil)
+         values['ParentKeyName'].nil? &&
+         values['Security Update'].nil? &&
+         values['Update Rollup'].nil? &&
+         values['Hotfix'].nil?)
     end
 
     def initialize(name, version, uninstall_string)
@@ -62,12 +64,12 @@ class Puppet::Provider::Package::Windows
     def self.install_command(resource)
       file_location = resource[:source]
       if file_location.start_with?('http://', 'https://')
-        tempfile = Tempfile.new(['','.exe'])
+        tempfile = Tempfile.new(['', '.exe'])
         begin
           uri = URI(Puppet::Util.uri_encode(file_location))
           client = Puppet.runtime[:http]
           client.get(uri, options: { include_system_store: true }) do |response|
-            raise Puppet::HTTP::ResponseError.new(response) unless response.success?
+            raise Puppet::HTTP::ResponseError, response unless response.success?
 
             File.open(tempfile.path, 'wb') do |file|
               response.read_body do |data|
@@ -76,9 +78,9 @@ class Puppet::Provider::Package::Windows
             end
           end
         rescue => detail
-          raise Puppet::Error.new(_("Error when installing %{package}: %{detail}") % { package: resource[:name] ,detail: detail.message}, detail)
+          raise Puppet::Error.new(_("Error when installing %{package}: %{detail}") % { package: resource[:name], detail: detail.message }, detail)
         ensure
-          self.register(tempfile.path)
+          register(tempfile.path)
           tempfile.close()
           file_location = tempfile.path
         end

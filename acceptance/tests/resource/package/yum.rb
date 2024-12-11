@@ -6,6 +6,11 @@ test_name "test the yum package provider" do
     skip_test('Skipping EC2 Hosts') if fact_on(agent, 'ec2_metadata')
   end
 
+  # Upgrade the AlmaLinux release package for newer keys until our image is updated (RE-16096)
+  agents.each do |agent|
+    on(agent, 'dnf -y upgrade almalinux-release') if fact_on(agent, 'os.name') == 'AlmaLinux'
+  end
+
   tag 'audit:high',
       'audit:acceptance' # Could be done at the integration (or unit) layer though
                          # actual changing of resources could irreparably damage a
@@ -29,8 +34,8 @@ test_name "test the yum package provider" do
     hosts.each do |agent|
       cmd = rpm_provider(agent)
       # Note yum and dnf list packages as <name>.<arch>
-      on agent, "#{cmd} list installed" do
-        method(match).call(/^#{pkg}\./, stdout)
+      on(agent, "#{cmd} list installed") do |result|
+        method(match).call(/^#{pkg}\./, result.stdout)
       end
     end
   end
@@ -40,7 +45,7 @@ test_name "test the yum package provider" do
   end
 
   def verify_absent(hosts, pkg)
-    verify_state(hosts, pkg, '(?:purged|absent)', :assert_no_match)
+    verify_state(hosts, pkg, '(?:purged|absent)', :refute_match)
   end
 
   step "Managing a package which does not include an epoch in its version" do
@@ -82,7 +87,7 @@ test_name "test the yum package provider" do
     step 'Installing a non-existent version of a known package fails' do
       verify_absent agents, 'guid'
       apply_manifest_on(agents, 'package {"guid": ensure => "1.1"}') do |result|
-        assert_not_match(/Package\[guid\]\/ensure: created/, "#{result.host}: #{result.stdout}")
+        refute_match(/Package\[guid\]\/ensure: created/, "#{result.host}: #{result.stdout}")
         assert_match("Package[guid]/ensure: change from 'purged' to '1.1' failed", "#{result.host}: #{result.stderr}")
       end
       verify_absent agents, 'guid'
@@ -91,7 +96,7 @@ test_name "test the yum package provider" do
     step 'Installing a non-existent package fails' do
       verify_absent agents, 'not_a_package'
       apply_manifest_on(agents, 'package {"not_a_package": ensure => present}') do |result|
-        assert_not_match(/Package\[not_a_package\]\/ensure: created/, "#{result.host}: #{result.stdout}")
+        refute_match(/Package\[not_a_package\]\/ensure: created/, "#{result.host}: #{result.stdout}")
         assert_match("Package[not_a_package]/ensure: change from 'purged' to 'present' failed", "#{result.host}: #{result.stderr}")
       end
       verify_absent agents, 'not_a_package'
@@ -100,7 +105,7 @@ test_name "test the yum package provider" do
     step 'Removing a non-existent package succeeds' do
       verify_absent agents, 'not_a_package'
       apply_manifest_on(agents, 'package {"not_a_package": ensure => absent}') do |result|
-        assert_not_match(/Package\[not_a_package\]\/ensure/, "#{result.host}: #{result.stdout}")
+        refute_match(/Package\[not_a_package\]\/ensure/, "#{result.host}: #{result.stdout}")
         assert_match('Applied catalog', "#{result.host}: #{result.stdout}")
       end
       verify_absent agents, 'not_a_package'
@@ -144,7 +149,7 @@ test_name "test the yum package provider" do
         end
 
         apply_manifest_on(agent, "package {'epoch': ensure => '1:1.1-1.noarch'}") do |result|
-          assert_no_match(/epoch/, result.stdout)
+          refute_match(/epoch/, result.stdout)
         end
       end
 
@@ -162,11 +167,11 @@ test_name "test the yum package provider" do
           end
 
           apply_manifest_on(agent, 'package {"epoch": ensure => "1:1.1-1"}') do |result|
-            assert_no_match(/epoch/, result.stdout)
+            refute_match(/epoch/, result.stdout)
           end
 
           apply_manifest_on(agent, "package {'epoch': ensure => '1:1.1-1.noarch'}") do |result|
-            assert_no_match(/epoch/, result.stdout)
+            refute_match(/epoch/, result.stdout)
           end
         end
       end
@@ -185,11 +190,11 @@ test_name "test the yum package provider" do
           end
 
           apply_manifest_on(agent, 'package {"epoch": ensure => "1.1-1"}') do |result|
-            assert_no_match(/epoch/, result.stdout)
+            refute_match(/epoch/, result.stdout)
           end
 
           apply_manifest_on(agent, "package {'epoch': ensure => '1:1.1-1.noarch'}") do |result|
-            assert_no_match(/epoch/, result.stdout)
+            refute_match(/epoch/, result.stdout)
           end
         end
       end

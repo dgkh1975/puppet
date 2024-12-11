@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/file_serving/configuration'
 require_relative '../../../puppet/util/watched_file'
 
@@ -23,12 +25,13 @@ class Puppet::FileServing::Configuration::Parser
         when /^\s*#/; next # skip comments
         when /^\s*$/; next # skip blank lines
         when /\[([-\w]+)\]/
-          mount = newmount($1)
+          mount = newmount(::Regexp.last_match(1))
         when /^\s*(\w+)\s+(.+?)(\s*#.*)?$/
-          var = $1
-          value = $2
+          var = ::Regexp.last_match(1)
+          value = ::Regexp.last_match(2)
           value.strip!
           raise(ArgumentError, _("Fileserver configuration file does not use '=' as a separator")) if value =~ /^=/
+
           case var
           when "path"
             path(mount, value)
@@ -40,13 +43,13 @@ class Puppet::FileServing::Configuration::Parser
             end
           else
             error_location_str = Puppet::Util::Errors.error_location(@file.filename, @count)
-            raise ArgumentError.new(_("Invalid argument '%{var}' at %{error_location}") %
-                                        { var: var, error_location: error_location_str })
+            raise ArgumentError, _("Invalid argument '%{var}' at %{error_location}") %
+                                 { var: var, error_location: error_location_str }
           end
         else
           error_location_str = Puppet::Util::Errors.error_location(@file.filename, @count)
-          raise ArgumentError.new(_("Invalid entry at %{error_location}: '%{file_text}'") %
-                                      { file_text: line.chomp, error_location: error_location_str })
+          raise ArgumentError, _("Invalid entry at %{error_location}: '%{file_text}'") %
+                               { file_text: line.chomp, error_location: error_location_str }
         end
       end
     end
@@ -70,8 +73,8 @@ class Puppet::FileServing::Configuration::Parser
   def newmount(name)
     if @mounts.include?(name)
       error_location_str = Puppet::Util::Errors.error_location(@file, @count)
-      raise ArgumentError.new(_("%{mount} is already mounted at %{name} at %{error_location}") %
-                                  { mount: @mounts[name], name: name, error_location: error_location_str })
+      raise ArgumentError, _("%{mount} is already mounted at %{name} at %{error_location}") %
+                           { mount: @mounts[name], name: name, error_location: error_location_str }
     end
     case name
     when "modules"
@@ -108,6 +111,6 @@ class Puppet::FileServing::Configuration::Parser
   # Make sure all of our mounts are valid.  We have to do this after the fact
   # because details are added over time as the file is parsed.
   def validate
-    @mounts.each { |name, mount| mount.validate }
+    @mounts.each { |_name, mount| mount.validate }
   end
 end

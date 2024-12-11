@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/package/version/range'
 require_relative '../../../puppet/util/package/version/rpm'
 require_relative '../../../puppet/util/rpm_compare'
@@ -15,13 +17,16 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
   This provider supports the `install_options` attribute, which allows command-line flags to be passed to yum.
   These options should be specified as an array where each element is either a string or a hash."
 
-  has_feature :install_options, :versionable, :virtual_packages, :install_only
+  has_feature :install_options, :versionable, :virtual_packages, :install_only, :version_ranges
 
   RPM_VERSION       = Puppet::Util::Package::Version::Rpm
   RPM_VERSION_RANGE = Puppet::Util::Package::Version::Range
 
   commands :cmd => "yum", :rpm => "rpm"
 
+  # Mixing confine statements, control expressions, and exception handling
+  # confuses Rubocop's Layout cops, so we disable them entirely.
+  # rubocop:disable Layout
   if command('rpm')
     confine :true => begin
       rpm('--version')
@@ -31,9 +36,10 @@ Puppet::Type.type(:package).provide :yum, :parent => :rpm, :source => :rpm do
         true
       end
   end
+  # rubocop:enable Layout
 
-defaultfor :operatingsystem => :amazon
-defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
+  defaultfor 'os.name' => :amazon
+  defaultfor 'os.family' => :redhat, 'os.release.major' => (4..7).to_a
 
   def insync?(is)
     return false if [:purged, :absent].include?(is)
@@ -53,12 +59,10 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
       end
 
       is.split(self.class::MULTIVERSION_SEPARATOR).any? do |version|
-        begin
-          is_version = RPM_VERSION.parse(version)
-          should_version.include?(is_version)
-        rescue RPM_VERSION::ValidationFailure
-          Puppet.debug("Cannot parse #{is} as a RPM version")
-        end
+        is_version = RPM_VERSION.parse(version)
+        should_version.include?(is_version)
+      rescue RPM_VERSION::ValidationFailure
+        Puppet.debug("Cannot parse #{is} as a RPM version")
       end
     end
   end
@@ -67,6 +71,7 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
 
   def self.prefetch(packages)
     raise Puppet::Error, _("The yum provider can only be used as root") if Process.euid != 0
+
     super
   end
 
@@ -84,7 +89,6 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
   # @param disableexcludes [Array<String>] A list of repository excludes to disable for this query
   # @return [Hash<Symbol, String>]
   def self.latest_package_version(package, disablerepo, enablerepo, disableexcludes)
-
     key = [disablerepo, enablerepo, disableexcludes]
 
     @latest_versions ||= {}
@@ -106,6 +110,7 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
   # @param disableexcludes [Array<String>] A list of repository excludes to disable for this query
   # @return [Hash<String, Array<Hash<String, String>>>] All packages that were
   #   found with a list of found versions for each package.
+  # rubocop:disable Layout/SingleLineBlockChain
   def self.check_updates(disablerepo, enablerepo, disableexcludes)
     args = [command(:cmd), 'check-update']
     args.concat(disablerepo.map { |repo| ["--disablerepo=#{repo}"] }.flatten)
@@ -115,15 +120,17 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
     output = Puppet::Util::Execution.execute(args, :failonfail => false, :combine => false)
 
     updates = {}
-    if output.exitstatus == 100
+    case output.exitstatus
+    when 100
       updates = parse_updates(output)
-    elsif output.exitstatus == 0
-      self.debug "#{command(:cmd)} check-update exited with 0; no package updates available."
+    when 0
+      debug "#{command(:cmd)} check-update exited with 0; no package updates available."
     else
-      self.warning _("Could not check for updates, '%{cmd} check-update' exited with %{status}") % { cmd: command(:cmd), status: output.exitstatus }
+      warning _("Could not check for updates, '%{cmd} check-update' exited with %{status}") % { cmd: command(:cmd), status: output.exitstatus }
     end
     updates
   end
+  # rubocop:enable Layout/SingleLineBlockChain
 
   def self.parse_updates(str)
     # Strip off all content that contains Obsoleting, Security: or Update
@@ -148,7 +155,6 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
   end
 
   def self.update_to_hash(pkgname, pkgversion)
-
     # The pkgname string has two parts: name, and architecture. Architecture
     # is the portion of the string following the last "." character. All
     # characters preceding the final dot are the package name. Parse out
@@ -168,7 +174,7 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
       :epoch => epoch,
       :version => version,
       :release => release,
-      :arch    => arch,
+      :arch => arch,
     }
   end
 
@@ -204,16 +210,14 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
         return should
       end
       versions = []
-      available_versions(@resource[:name]).each do |version|
-        begin
-          rpm_version = RPM_VERSION.parse(version)
-          versions << rpm_version if should_range.include?(rpm_version)
-        rescue RPM_VERSION::ValidationFailure
-          Puppet.debug("Cannot parse #{version} as a RPM version")
-        end
+      available_versions(@resource[:name], disablerepo, enablerepo, disableexcludes).each do |version|
+        rpm_version = RPM_VERSION.parse(version)
+        versions << rpm_version if should_range.include?(rpm_version)
+      rescue RPM_VERSION::ValidationFailure
+        Puppet.debug("Cannot parse #{version} as a RPM version")
       end
 
-      version = versions.sort.last if versions.any?
+      version = versions.max if versions.any?
 
       if version
         version = version.to_s.sub(/^\d+:/, '')
@@ -225,10 +229,17 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
     end
   end
 
-  def available_versions(package_name)
-    output = execute("yum list #{package_name} --showduplicates | sed -e '1,/Available Packages/ d' | awk '{print $2}'")
+  # rubocop:disable Layout/SingleLineBlockChain
+  def available_versions(package_name, disablerepo, enablerepo, disableexcludes)
+    args = [command(:cmd), 'list', package_name, '--showduplicates']
+    args.concat(disablerepo.map { |repo| ["--disablerepo=#{repo}"] }.flatten)
+    args.concat(enablerepo.map { |repo| ["--enablerepo=#{repo}"] }.flatten)
+    args.concat(disableexcludes.map { |repo| ["--disableexcludes=#{repo}"] }.flatten)
+
+    output = execute("#{args.compact.join(' ')} | sed -e '1,/Available Packages/ d' | awk '{print $2}'")
     output.split("\n")
   end
+  # rubocop:enable Layout/SingleLineBlockChain
 
   def install
     wanted = @resource[:name]
@@ -240,17 +251,17 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
     end
 
     should = @resource.should(:ensure)
-    self.debug "Ensuring => #{should}"
+    debug "Ensuring => #{should}"
     operation = :install
 
     case should
     when :latest
-      current_package = self.query
+      current_package = query
       if current_package && !current_package[:ensure].to_s.empty?
         operation = update_command
-        self.debug "Ensuring latest, so using #{operation}"
+        debug "Ensuring latest, so using #{operation}"
       else
-        self.debug "Ensuring latest, but package is absent, so using #{:install}"
+        debug "Ensuring latest, but package is absent, so using install"
         operation = :install
       end
       should = nil
@@ -259,10 +270,10 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
       # version feed it to yum directly
       if @resource[:source]
         wanted = @resource[:source]
-        self.debug "Installing directly from #{wanted}"
+        debug "Installing directly from #{wanted}"
       end
       should = nil
-    when false,:absent
+    when false, :absent
       # pass
       should = nil
     else
@@ -271,26 +282,26 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
         # version, and also supplying the path to a package that supplies that
         # version.
         wanted = @resource[:source]
-        self.debug "Installing directly from #{wanted}"
+        debug "Installing directly from #{wanted}"
       else
         # No explicit source was specified, so add the package version
         should = best_version(should)
         wanted += "-#{should}"
         if wanted.scan(self.class::ARCH_REGEX)
-          self.debug "Detected Arch argument in package! - Moving arch to end of version string"
-          wanted.gsub!(/(.+)(#{self.class::ARCH_REGEX})(.+)/,'\1\3\2')
+          debug "Detected Arch argument in package! - Moving arch to end of version string"
+          wanted.gsub!(/(.+)(#{self.class::ARCH_REGEX})(.+)/, '\1\3\2')
         end
       end
-      current_package = self.query
+      current_package = query
       if current_package
         if @resource[:install_only]
-          self.debug "Updating package #{@resource[:name]} from version #{current_package[:ensure]} to #{should} as install_only packages are never downgraded"
+          debug "Updating package #{@resource[:name]} from version #{current_package[:ensure]} to #{should} as install_only packages are never downgraded"
           operation = update_command
-        elsif rpm_compareEVR(should, current_package[:ensure]) < 0
-          self.debug "Downgrading package #{@resource[:name]} from version #{current_package[:ensure]} to #{should}"
+        elsif rpm_compare_evr(should, current_package[:ensure]) < 0
+          debug "Downgrading package #{@resource[:name]} from version #{current_package[:ensure]} to #{should}"
           operation = :downgrade
-        elsif rpm_compareEVR(should, current_package[:ensure]) > 0
-          self.debug "Upgrading package #{@resource[:name]} from version #{current_package[:ensure]} to #{should}"
+        elsif rpm_compare_evr(should, current_package[:ensure]) > 0
+          debug "Upgrading package #{@resource[:name]} from version #{current_package[:ensure]} to #{should}"
           operation = update_command
         end
       end
@@ -298,7 +309,7 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
 
     # Yum on el-4 and el-5 returns exit status 0 when trying to install a package it doesn't recognize;
     # ensure we capture output to check for errors.
-    no_debug = if Puppet.runtime[:facter].value(:operatingsystemmajrelease).to_i > 5 then ["-d", "0"] else [] end
+    no_debug = Puppet.runtime[:facter].value('os.release.major').to_i > 5 ? ["-d", "0"] : []
     command = [command(:cmd)] + no_debug + ["-e", error_level, "-y", install_options, operation, wanted].compact
     output = execute(command)
 
@@ -308,8 +319,8 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
 
     # If a version was specified, query again to see if it is a matching version
     if should
-      is = self.query
-      raise Puppet::Error, _("Could not find package %{name}") % { name: self.name } unless is
+      is = query
+      raise Puppet::Error, _("Could not find package %{name}") % { name: name } unless is
 
       version = is[:ensure]
       # FIXME: Should we raise an exception even if should == :latest
@@ -322,22 +333,23 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
   # What's the latest package version available?
   def latest
     upd = self.class.latest_package_version(@resource[:name], disablerepo, enablerepo, disableexcludes)
-    unless upd.nil?
-      # FIXME: there could be more than one update for a package
-      # because of multiarch
-      return "#{upd[:epoch]}:#{upd[:version]}-#{upd[:release]}"
-    else
+    if upd.nil?
       # Yum didn't find updates, pretend the current version is the latest
-      self.debug "Yum didn't find updates, current version (#{properties[:ensure]}) is the latest"
+      debug "Yum didn't find updates, current version (#{properties[:ensure]}) is the latest"
       version = properties[:ensure]
       raise Puppet::DevError, _("Tried to get latest on a missing package") if version == :absent || version == :purged
-      return version
+
+      version
+    else
+      # FIXME: there could be more than one update for a package
+      # because of multiarch
+      "#{upd[:epoch]}:#{upd[:version]}-#{upd[:release]}"
     end
   end
 
   def update
     # Install in yum can be used for update, too
-    self.install
+    install
   end
 
   def purge
@@ -368,15 +380,19 @@ defaultfor :osfamily => :redhat, :operatingsystemmajrelease => (4..7).to_a
   # @return [Array<String>] All hash values with the given key.
   def scan_options(options, key)
     return [] unless options.is_a?(Enumerable)
-    values = options.map do | repo |
-      value = if repo.is_a?(String)
-        next unless repo.include?('=')
-        Hash[*repo.strip.split('=')] # make it a hash
-      else
-        repo
+
+    values =
+      options.map do |repo|
+        value =
+          if repo.is_a?(String)
+            next unless repo.include?('=')
+
+            Hash[*repo.strip.split('=')] # make it a hash
+          else
+            repo
+          end
+        value[key]
       end
-      value[key]
-    end
     values.compact.uniq
   end
 end

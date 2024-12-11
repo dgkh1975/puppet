@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Puppet::Parser::Compiler
   # Validator that asserts relationship metaparameters refer to valid resources
   class CatalogValidator::RelationshipValidator < CatalogValidator
@@ -5,6 +7,7 @@ class Puppet::Parser::Compiler
       catalog.resources.each do |resource|
         next unless resource.is_a?(Puppet::Parser::Resource)
         next if resource.virtual?
+
         resource.eachparam do |param|
           pclass = Puppet::Type.metaparamclass(param.name)
           validate_relationship(param) if !pclass.nil? && pclass < Puppet::Type::RelationshipMetaparam
@@ -20,6 +23,7 @@ class Puppet::Parser::Compiler
       refs = param.value.is_a?(Array) ? param.value.flatten : [param.value]
       refs.each do |r|
         next if r.nil? || r == :undef
+
         res = r.to_s
         begin
           found = catalog.resource(res)
@@ -35,5 +39,3 @@ class Puppet::Parser::Compiler
     end
   end
 end
-
-

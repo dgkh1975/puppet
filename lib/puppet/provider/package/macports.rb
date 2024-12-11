@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require_relative '../../../puppet/provider/command'
 
@@ -12,7 +14,7 @@ Puppet::Type.type(:package).provide :macports, :parent => Puppet::Provider::Pack
     Revisions are only used internally for ensuring the latest version/revision of a port.
   "
 
-  confine :operatingsystem => :darwin
+  confine 'os.name' => :darwin
 
   has_command(:port, "/opt/local/bin/port") do
     environment :HOME => "/opt/local"
@@ -22,7 +24,6 @@ Puppet::Type.type(:package).provide :macports, :parent => Puppet::Provider::Pack
   has_feature :uninstallable
   has_feature :upgradeable
   has_feature :versionable
-
 
   def self.parse_installed_query_line(line)
     regex = /(\S+)\s+@(\S+)_(\d+).*\(active\)/
@@ -43,7 +44,7 @@ Puppet::Type.type(:package).provide :macports, :parent => Puppet::Provider::Pack
       fields.zip(match.captures) { |field, value|
         hash[field] = value
       }
-      hash[:provider] = self.name
+      hash[:provider] = name
       return hash
     end
     nil
@@ -74,7 +75,8 @@ Puppet::Type.type(:package).provide :macports, :parent => Puppet::Provider::Pack
   def query
     result = self.class.parse_installed_query_line(execute([command(:port), "-q", :installed, @resource[:name]], :failonfail => false, :combine => false))
     return {} if result.nil?
-    return result
+
+    result
   end
 
   def latest

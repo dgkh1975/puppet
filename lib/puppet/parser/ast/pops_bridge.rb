@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/parser/ast/top_level_construct'
 require_relative '../../../puppet/pops'
 
@@ -6,7 +8,6 @@ require_relative '../../../puppet/pops'
 # fundamental for the rest of the logic.
 #
 class Puppet::Parser::AST::PopsBridge
-
   # Bridges to one Pops Model Expression
   # The @value is the expression
   # This is used to represent the body of a class, definition, or node, and for each parameter's default value
@@ -58,13 +59,14 @@ class Puppet::Parser::AST::PopsBridge
 
   class ExpressionSupportingReturn < Expression
     def evaluate(scope)
-      return catch(:return) do
+      catch(:return) do
         return catch(:next) do
           return super(scope)
         end
       end
     end
   end
+
   # Bridges the top level "Program" produced by the pops parser.
   # Its main purpose is to give one point where all definitions are instantiated (actually defined since the
   # Puppet 3x terminology is somewhat misleading - the definitions are instantiated, but instances of the created types
@@ -85,7 +87,6 @@ class Puppet::Parser::AST::PopsBridge
     # efficient as it avoids one full scan of all logic via recursive enumeration/yield)
     #
     def instantiate(modname)
-
       @program_model.definitions.map do |d|
         case d
         when Puppet::Pops::Model::HostClassDefinition
@@ -102,7 +103,7 @@ class Puppet::Parser::AST::PopsBridge
           nil
         end
       end.flatten().compact() # flatten since node definition may have returned an array
-                              # Compact since 4x definitions are not understood by compiler
+      # Compact since 4x definitions are not understood by compiler
     end
 
     def evaluate(scope)
@@ -128,7 +129,7 @@ class Puppet::Parser::AST::PopsBridge
       when Puppet::Pops::Model::Program
         is_definition?(o.body)
       when Puppet::Pops::Model::BlockExpression
-        o.statements.all {|s| is_definition?(s) }
+        o.statements.all { |s| is_definition?(s) }
       when Puppet::Pops::Model::Definition
         true
       else
@@ -151,7 +152,7 @@ class Puppet::Parser::AST::PopsBridge
       return result unless definition.parameters.size > 0
 
       # No need to do anything if there are no typed parameters
-      typed_parameters = definition.parameters.select {|p| p.type_expr }
+      typed_parameters = definition.parameters.select(&:type_expr)
       return result if typed_parameters.empty?
 
       # If there are typed parameters, they need to be evaluated to produce the corresponding type
@@ -172,23 +173,22 @@ class Puppet::Parser::AST::PopsBridge
 
     # Obtains the scope or issues a warning if :global_scope is not bound
     def obtain_scope
-      scope = Puppet.lookup(:global_scope) do
+      Puppet.lookup(:global_scope) do
         # This occurs when testing and when applying a catalog (there is no scope available then), and
         # when running tests that run a partial setup.
         # This is bad if the logic is trying to compile, but a warning can not be issues since it is a normal
         # use case that there is no scope when requesting the type in order to just get the parameters.
-        Puppet.debug {_("Instantiating Resource with type checked parameters - scope is missing, skipping type checking.")}
+        Puppet.debug { _("Instantiating Resource with type checked parameters - scope is missing, skipping type checking.") }
         nil
       end
-      scope
     end
 
     # Produces a hash with data for Definition and HostClass
     def args_from_definition(o, modname, expr_class = Expression)
       args = {
-       :arguments => o.parameters.collect {|p| instantiate_Parameter(p) },
-       :argument_types => create_type_map(o),
-       :module_name => modname
+        :arguments => o.parameters.collect { |p| instantiate_Parameter(p) },
+        :argument_types => create_type_map(o),
+        :module_name => modname
       }
       unless is_nop?(o.body)
         args[:code] = expr_class.new(:value => o.body)
@@ -226,7 +226,7 @@ class Puppet::Parser::AST::PopsBridge
       end
     end
 
-    def code()
+    def code
       Expression.new(:value => @value)
     end
 

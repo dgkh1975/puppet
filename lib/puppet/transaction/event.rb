@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/transaction'
 require_relative '../../puppet/util/tagging'
 require_relative '../../puppet/util/logging'
@@ -14,10 +16,10 @@ class Puppet::Transaction::Event
   attr_accessor :time
   attr_reader :default_log_level
 
-  EVENT_STATUSES = %w{noop success failure audit}
+  EVENT_STATUSES = %w[noop success failure audit]
 
   def self.from_data_hash(data)
-    obj = self.allocate
+    obj = allocate
     obj.initialize_from_hash(data)
     obj
   end
@@ -67,9 +69,9 @@ class Puppet::Transaction::Event
 
   def initialize_from_hash(data)
     data = Puppet::Pops::Serialization::FromDataConverter.convert(data, {
-      :allow_unresolved => true,
-      :loader => Puppet::Pops::Loaders.static_loader
-    })
+                                                                    :allow_unresolved => true,
+                                                                    :loader => Puppet::Pops::Loaders.static_loader
+                                                                  })
     @audited = data['audited']
     @property = data['property']
     @previous_value = data['previous_value']
@@ -122,6 +124,7 @@ class Puppet::Transaction::Event
 
   def status=(value)
     raise ArgumentError, _("Event status can only be %{statuses}") % { statuses: EVENT_STATUSES.join(', ') } unless EVENT_STATUSES.include?(value)
+
     @status = value
   end
 

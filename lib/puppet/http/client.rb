@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The HTTP client provides methods for making `GET`, `POST`, etc requests to
 # HTTP(S) servers. It also provides methods for resolving Puppetserver REST
 # service endpoints using SRV records and settings (such as `server_list`,
@@ -19,7 +21,7 @@
 #   response = client.get(URI("http://www.example.com"))
 #
 # @example To make an HTTPS GET request, trusting the puppet CA and certs in Puppet's CA bundle:
-#   response = client.get(URI("https://www.example.com"), include_system_store: true)
+#   response = client.get(URI("https://www.example.com"), options: { include_system_store: true })
 #
 # @example To use a URL containing special characters, such as spaces:
 #  response = client.get(URI(Puppet::Util.uri_encode("https://www.example.com/path to file")))
@@ -84,7 +86,6 @@
 #
 # @api public
 class Puppet::HTTP::Client
-
   attr_reader :pool
 
   # Create a new http client instance. Use `Puppet.runtime[:http]` to get
@@ -98,7 +99,7 @@ class Puppet::HTTP::Client
   #   used if :include_system_store is set to true
   # @param [Integer] redirect_limit default number of HTTP redirections to allow
   #   in a given request. Can also be specified per-request.
-  # @param [Integer] retry_limit number of HTTP reties allowed in a given
+  # @param [Integer] retry_limit number of HTTP retries allowed in a given
   #   request
   #
   def initialize(pool: Puppet::HTTP::Pool.new(Puppet[:http_keepalive_timeout]), ssl_context: nil, system_ssl_context: nil, redirect_limit: 10, retry_limit: 100)
@@ -153,18 +154,18 @@ class Puppet::HTTP::Client
       end
     end
   rescue Net::OpenTimeout => e
-    raise_error(_("Request to %{uri} timed out connect operation after %{elapsed} seconds") % {uri: uri, elapsed: elapsed(start)}, e, connected)
+    raise_error(_("Request to %{uri} timed out connect operation after %{elapsed} seconds") % { uri: uri, elapsed: elapsed(start) }, e, connected)
   rescue Net::ReadTimeout => e
-    raise_error(_("Request to %{uri} timed out read operation after %{elapsed} seconds") % {uri: uri, elapsed: elapsed(start)}, e, connected)
+    raise_error(_("Request to %{uri} timed out read operation after %{elapsed} seconds") % { uri: uri, elapsed: elapsed(start) }, e, connected)
   rescue EOFError => e
-    raise_error(_("Request to %{uri} interrupted after %{elapsed} seconds") % {uri: uri, elapsed: elapsed(start)}, e, connected)
+    raise_error(_("Request to %{uri} interrupted after %{elapsed} seconds") % { uri: uri, elapsed: elapsed(start) }, e, connected)
   rescue Puppet::SSL::SSLError
     raise
   rescue Puppet::HTTP::HTTPError
     raise
   rescue => e
     raise_error(_("Request to %{uri} failed after %{elapsed} seconds: %{message}") %
-                {uri: uri, elapsed: elapsed(start), message: e.message}, e, connected)
+                { uri: uri, elapsed: elapsed(start), message: e.message }, e, connected)
   end
 
   # These options apply to all HTTP request methods
@@ -236,6 +237,7 @@ class Puppet::HTTP::Client
   # @api public
   def put(url, body, headers: {}, params: {}, options: {})
     raise ArgumentError, "'put' requires a string 'body' argument" unless body.is_a?(String)
+
     url = encode_query(url, params)
 
     request = Net::HTTP::Put.new(url, @default_headers.merge(headers))
@@ -264,6 +266,7 @@ class Puppet::HTTP::Client
   # @api public
   def post(url, body, headers: {}, params: {}, options: {}, &block)
     raise ArgumentError, "'post' requires a string 'body' argument" unless body.is_a?(String)
+
     url = encode_query(url, params)
 
     request = Net::HTTP::Post.new(url, @default_headers.merge(headers))
@@ -300,6 +303,24 @@ class Puppet::HTTP::Client
   # @api public
   def close
     @pool.close
+    @default_ssl_context = nil
+    @default_system_ssl_context = nil
+  end
+
+  def default_ssl_context
+    cert = Puppet::X509::CertProvider.new
+    password = cert.load_private_key_password
+
+    ssl = Puppet::SSL::SSLProvider.new
+    ctx = ssl.load_context(certname: Puppet[:certname], password: password)
+    ssl.print(ctx)
+    ctx
+  rescue => e
+    # TRANSLATORS: `message` is an already translated string of why SSL failed to initialize
+    Puppet.log_exception(e, _("Failed to initialize SSL: %{message}") % { message: e.message })
+    # TRANSLATORS: `puppet agent -t` is a command and should not be translated
+    Puppet.err(_("Run `puppet agent -t`"))
+    raise e
   end
 
   protected
@@ -344,11 +365,12 @@ class Puppet::HTTP::Client
     response = nil
     done = false
 
-    while !done do
+    until done
       connect(request.uri, options: options) do |http|
-        apply_auth(request, basic_auth)
+        apply_auth(request, basic_auth) if redirects.zero?
 
         # don't call return within the `request` block
+        close_and_sleep = nil
         http.request(request) do |nethttp|
           response = Puppet::HTTP::ResponseNetHTTP.new(request.uri, nethttp)
           begin
@@ -362,12 +384,14 @@ class Puppet::HTTP::Client
               interval = @retry_after_handler.retry_after_interval(request, response, retries)
               retries += 1
               if interval
-                if http.started?
-                  Puppet.debug("Closing connection for #{Puppet::HTTP::Site.from_uri(request.uri)}")
-                  http.finish
+                close_and_sleep = proc do
+                  if http.started?
+                    Puppet.debug("Closing connection for #{Puppet::HTTP::Site.from_uri(request.uri)}")
+                    http.finish
+                  end
+                  Puppet.warning(_("Sleeping for %{interval} seconds before retrying the request") % { interval: interval })
+                  ::Kernel.sleep(interval)
                 end
-                Puppet.warning(_("Sleeping for %{interval} seconds before retrying the request") % { interval: interval })
-                ::Kernel.sleep(interval)
                 next
               end
             end
@@ -386,6 +410,10 @@ class Puppet::HTTP::Client
 
           done = true
         end
+      ensure
+        # If a server responded with a retry, make sure the connection is closed and then
+        # sleep the specified time.
+        close_and_sleep.call if close_and_sleep
       end
     end
 
@@ -443,6 +471,7 @@ class Puppet::HTTP::Client
   def resolve_ssl_context(ssl_context, include_system_store)
     if ssl_context
       raise Puppet::HTTP::HTTPError, "The ssl_context and include_system_store parameters are mutually exclusive" if include_system_store
+
       ssl_context
     elsif include_system_store
       system_ssl_context
@@ -458,7 +487,9 @@ class Puppet::HTTP::Client
     cacerts = cert_provider.load_cacerts || []
 
     ssl = Puppet::SSL::SSLProvider.new
-    @default_system_ssl_context = ssl.create_system_context(cacerts: cacerts)
+    @default_system_ssl_context = ssl.create_system_context(cacerts: cacerts, include_client_cert: true)
+    ssl.print(@default_system_ssl_context)
+    @default_system_ssl_context
   end
 
   def apply_auth(request, basic_auth)

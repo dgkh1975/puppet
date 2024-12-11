@@ -1,9 +1,10 @@
 # coding: utf-8
+# frozen_string_literal: true
+
 require_relative '../../../puppet/ffi/windows'
 
 module Puppet::FFI::Windows
   module Structs
-
     extend FFI::Library
     extend Puppet::FFI::Windows::APITypes
 
@@ -115,7 +116,7 @@ module Puppet::FFI::Windows
     # } TOKEN_PRIVILEGES, *PTOKEN_PRIVILEGES;
     class TOKEN_PRIVILEGES < FFI::Struct
       layout :PrivilegeCount, :dword,
-             :Privileges, [LUID_AND_ATTRIBUTES, 1]    # placeholder for offset
+             :Privileges, [LUID_AND_ATTRIBUTES, 1] # placeholder for offset
     end
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/bb530717(v=vs.85).aspx
@@ -197,7 +198,7 @@ module Puppet::FFI::Windows
         :dwWin32ExitCode, :dword,
         :dwServiceSpecificExitCode, :dword,
         :dwCheckPoint, :dword,
-        :dwWaitHint, :dword,
+        :dwWaitHint, :dword
       )
     end
 
@@ -222,7 +223,7 @@ module Puppet::FFI::Windows
         :dwTagId, :dword,
         :lpDependencies, :pointer,
         :lpServiceStartName, :pointer,
-        :lpDisplayName, :pointer,
+        :lpDisplayName, :pointer
       )
     end
 
@@ -257,7 +258,7 @@ module Puppet::FFI::Windows
       )
     end
 
-	MAXIMUM_REPARSE_DATA_BUFFER_SIZE = 16384
+    MAXIMUM_REPARSE_DATA_BUFFER_SIZE = 16_384
 
     # SYMLINK_REPARSE_DATA_BUFFER
     # https://msdn.microsoft.com/en-us/library/cc232006.aspx

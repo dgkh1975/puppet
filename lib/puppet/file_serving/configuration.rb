@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/file_serving'
 require_relative '../../puppet/file_serving/mount'
@@ -18,10 +20,11 @@ class Puppet::FileServing::Configuration
 
   Mount = Puppet::FileServing::Mount
 
-  private_class_method  :new
+  private_class_method :new
 
   attr_reader :mounts
-  #private :mounts
+
+  # private :mounts
 
   # Find the right mount.  Does some shenanigans to support old-style module
   # mounts.
@@ -53,11 +56,12 @@ class Puppet::FileServing::Configuration
 
     mount_name, path = request.key.split(File::Separator, 2)
 
-    raise(ArgumentError, _("Cannot find file: Invalid mount '%{mount_name}'") % { mount_name: mount_name }) unless mount_name =~ %r{^[-\w]+$}
+    raise(ArgumentError, _("Cannot find file: Invalid mount '%{mount_name}'") % { mount_name: mount_name }) unless mount_name =~ /^[-\w]+$/
     raise(ArgumentError, _("Cannot find file: Invalid relative path '%{path}'") % { path: path }) if path and path.split('/').include?('..')
 
     mount = find_mount(mount_name, request.environment)
     return nil unless mount
+
     if mount.name == "modules" and mount_name != "modules"
       # yay backward-compatibility
       path = "#{mount_name}/#{path}"
@@ -67,10 +71,10 @@ class Puppet::FileServing::Configuration
       path = nil
     elsif path
       # Remove any double slashes that might have occurred
-      path = path.gsub(/\/+/, "/")
+      path = path.gsub(%r{/+}, "/")
     end
 
-    return mount, path
+    [mount, path]
   end
 
   def umount(name)
@@ -96,7 +100,7 @@ class Puppet::FileServing::Configuration
 
     @parser ||= Puppet::FileServing::Configuration::Parser.new(config)
 
-    return if check and ! @parser.changed?
+    return if check and !@parser.changed?
 
     # Don't assign the mounts hash until we're sure the parsing succeeded.
     begin
@@ -105,7 +109,6 @@ class Puppet::FileServing::Configuration
     rescue => detail
       Puppet.log_exception(detail, _("Error parsing fileserver configuration: %{detail}; using old configuration") % { detail: detail })
     end
-
   ensure
     # Make sure we've got our plugins and modules.
     mk_default_mounts

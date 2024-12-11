@@ -1,9 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/concurrent/thread_local_singleton'
 
 module Puppet::Pops
 module Model
-
-
 class PNTransformer
   extend Puppet::Concurrent::ThreadLocalSingleton
 
@@ -247,9 +247,9 @@ class PNTransformer
 
   def transform_ResourceBody(e)
     PN::Map.new([
-      transform(e.title).with_name('title'),
-      transform(e.operations).with_name('ops')
-    ]).as_call('resource_body')
+                  transform(e.title).with_name('title'),
+                  transform(e.operations).with_name('ops')
+                ]).as_call('resource_body')
   end
 
   def transform_ResourceDefaultsExpression(e)
@@ -380,6 +380,5 @@ class PNTransformer
     PN::Map.new(entries).as_call(name)
   end
 end
-
 end
 end

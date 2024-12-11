@@ -1,4 +1,6 @@
 # encoding: UTF-8
+# frozen_string_literal: true
+
 # Load standard libraries
 require 'pathname'
 require 'fileutils'
@@ -11,7 +13,7 @@ module Puppet
 
     # Directory and names that should not be checksummed.
     ARTIFACTS = ['pkg', /^\./, /^~/, /^#/, 'coverage', 'checksums.json', 'REVISION']
-    FULL_MODULE_NAME_PATTERN = /\A([^-\/|.]+)[-|\/](.+)\z/
+    FULL_MODULE_NAME_PATTERN = %r{\A([^-/|.]+)[-|/](.+)\z}
     REPOSITORY_URL = Puppet.settings[:module_repository]
 
     # Is this a directory that shouldn't be checksummed?
@@ -33,7 +35,7 @@ module Puppet
     def self.username_and_modname_from(full_module_name)
       matcher = full_module_name.match(FULL_MODULE_NAME_PATTERN)
       if matcher
-        return matcher.captures
+        matcher.captures
       else
         raise ArgumentError, _("Not a valid full name: %{full_module_name}") % { full_module_name: full_module_name }
       end
@@ -46,7 +48,7 @@ module Puppet
     # @return [Pathname, nil] the root path of the module directory or nil if
     #   we cannot find one
     def self.find_module_root(path)
-      path = Pathname.new(path) if path.class == String
+      path = Pathname.new(path) if path.instance_of?(String)
 
       path.expand_path.ascend do |p|
         return p if is_module_root?(p)
@@ -61,7 +63,7 @@ module Puppet
     # @param path [Pathname, String] path to analyse
     # @return [Boolean] true if the path is a module root, false otherwise
     def self.is_module_root?(path)
-      path = Pathname.new(path) if path.class == String
+      path = Pathname.new(path) if path.instance_of?(String)
 
       FileTest.file?(path + 'metadata.json')
     end
@@ -69,7 +71,7 @@ module Puppet
     # Builds a formatted tree from a list of node hashes containing +:text+
     # and +:dependencies+ keys.
     def self.format_tree(nodes, level = 0)
-      str = ''
+      str = ''.dup
       nodes.each_with_index do |node, i|
         last_node = nodes.length - 1 == i
         deps = node[:dependencies] || []
@@ -85,7 +87,7 @@ module Puppet
         str << branch
       end
 
-      return str
+      str
     end
 
     def self.build_tree(mods, dir)
@@ -100,8 +102,8 @@ module Puppet
         mod[:text] = "#{mod[:name]} (#{colorize(:cyan, version_string)})"
         mod[:text] += " [#{mod[:path]}]" unless mod[:path].to_s == dir.to_s
 
-        deps = (mod[:dependencies] || [])
-        deps.sort! { |a, b| a[:name] <=> b[:name] }
+        deps = mod[:dependencies] || []
+        deps.sort_by! { |a| a[:name] }
         build_tree(deps, dir)
       end
     end
@@ -131,7 +133,6 @@ module Puppet
 
       # Note: environment will have expanded the path
       options[:target_dir] = face_environment.full_modulepath.first
-
     end
 
     # Given a hash of options, we should discover or create a
@@ -178,7 +179,7 @@ module Puppet
         parsed_range = SemanticPuppet::VersionRange::EMPTY_RANGE
       end
 
-      [ dep_name, parsed_range, range ]
+      [dep_name, parsed_range, range]
     end
   end
 end

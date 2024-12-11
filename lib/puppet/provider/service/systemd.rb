@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Manage systemd services using systemctl
 
 require_relative '../../../puppet/file_system'
@@ -13,34 +15,38 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
 
   confine :true => Puppet::FileSystem.exist?('/proc/1/comm') && Puppet::FileSystem.read('/proc/1/comm').include?('systemd')
 
-  defaultfor :osfamily => [:archlinux]
-  defaultfor :osfamily => :redhat, :operatingsystemmajrelease => ["7", "8", "9"]
-  defaultfor :osfamily => :redhat, :operatingsystem => :fedora
-  defaultfor :osfamily => :suse
-  defaultfor :osfamily => :coreos
-  defaultfor :operatingsystem => :amazon, :operatingsystemmajrelease => ["2"]
-  defaultfor :operatingsystem => :debian
-  notdefaultfor :operatingsystem => :debian, :operatingsystemmajrelease => ["5", "6", "7"] # These are using the "debian" method
-  defaultfor :operatingsystem => :LinuxMint
-  notdefaultfor :operatingsystem => :LinuxMint, :operatingsystemmajrelease => ["10", "11", "12", "13", "14", "15", "16", "17"] # These are using upstart
-  defaultfor :operatingsystem => :ubuntu
-  notdefaultfor :operatingsystem => :ubuntu, :operatingsystemmajrelease => ["10.04", "12.04", "14.04", "14.10"] # These are using upstart
-  defaultfor :operatingsystem => :cumuluslinux, :operatingsystemmajrelease => ["3", "4"]
+  defaultfor 'os.family' => [:archlinux]
+  defaultfor 'os.family' => :redhat
+  notdefaultfor 'os.name' => :redhat, 'os.release.major' => (4..6).to_a # Use the "RedHat" service provider
+  defaultfor 'os.family' => :redhat, 'os.name' => :fedora
+  defaultfor 'os.family' => :suse
+  defaultfor 'os.family' => :coreos
+  defaultfor 'os.family' => :gentoo
+  notdefaultfor 'os.name' => :amazon, 'os.release.major' => %w[2017 2018]
+  defaultfor 'os.name' => :amazon, 'os.release.major' => %w[2 2023]
+  defaultfor 'os.name' => :debian
+  notdefaultfor 'os.name' => :debian, 'os.release.major' => %w[5 6 7] # These are using the "debian" method
+  defaultfor 'os.name' => :LinuxMint
+  notdefaultfor 'os.name' => :LinuxMint, 'os.release.major' => %w[10 11 12 13 14 15 16 17] # These are using upstart
+  defaultfor 'os.name' => :ubuntu
+  notdefaultfor 'os.name' => :ubuntu, 'os.release.major' => ["10.04", "12.04", "14.04", "14.10"] # These are using upstart
+  defaultfor 'os.name' => :cumuluslinux, 'os.release.major' => %w[3 4]
+  defaultfor 'os.name' => :raspbian, 'os.release.major' => %w[12]
 
   def self.instances
     i = []
-    output = systemctl('list-unit-files', '--type', 'service', '--full', '--all',  '--no-pager')
+    output = systemctl('list-unit-files', '--type', 'service', '--full', '--all', '--no-pager')
     output.scan(/^(\S+)\s+(disabled|enabled|masked|indirect|bad|static)\s*([^-]\S+)?\s*$/i).each do |m|
       Puppet.debug("#{m[0]} marked as bad by `systemctl`. It is recommended to be further checked.") if m[1] == "bad"
       i << new(:name => m[0])
     end
-    return i
+    i
   rescue Puppet::ExecutionFailure
-    return []
+    []
   end
 
-  # Static services cannot be enabled or disabled manually. Indirect services 
-  # should not be enabled or disabled due to limitations in systemd (see 
+  # Static services cannot be enabled or disabled manually. Indirect services
+  # should not be enabled or disabled due to limitations in systemd (see
   # https://github.com/systemd/systemd/issues/6681).
   def enabled_insync?(current)
     case cached_enabled?[:output]
@@ -50,11 +56,11 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
         current == @resource[:enable]
       else
         Puppet.debug("Unable to enable or disable static service #{@resource[:name]}")
-        return true
+        true
       end
     when 'indirect'
       Puppet.debug("Service #{@resource[:name]} is in 'indirect' state and cannot be enabled/disabled")
-      return true
+      true
     else
       current == @resource[:enable]
     end
@@ -67,8 +73,8 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
   # @param action [String,Symbol] One of 'enable', 'disable', 'mask' or 'unmask'
   def systemctl_change_enable(action)
     output = systemctl(action, '--', @resource[:name])
-  rescue
-    raise Puppet::Error, "Could not #{action} #{self.name}: #{output}", $!.backtrace
+  rescue => e
+    raise Puppet::Error, "Could not #{action} #{name}: #{output}", e.backtrace
   ensure
     @cached_enabled = nil
   end
@@ -90,6 +96,7 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
 
   def cached_enabled?
     return @cached_enabled if @cached_enabled
+
     cmd = [command(:systemctl), 'is-enabled', '--', @resource[:name]]
     result = execute(cmd, :failonfail => false)
     @cached_enabled = { output: result.chomp, exitcode: result.exitstatus }
@@ -109,13 +116,14 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
 
     # The indirect state indicates that the unit is not enabled.
     return :false if output == 'indirect'
-    return :true if (code == 0)
-    if (output.empty?) && (code > 0) && (Puppet.runtime[:facter].value(:osfamily).casecmp('debian').zero?)
+    return :true if code == 0
+
+    if output.empty? && (code > 0) && Puppet.runtime[:facter].value('os.family').casecmp('debian').zero?
       ret = debian_enabled?
       return ret if ret
     end
 
-    return :false
+    :false
   end
 
   # This method is required for Debian systems due to the way the SysVInit-Systemd
@@ -126,7 +134,7 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
   def debian_enabled?
     status = execute(["/usr/sbin/invoke-rc.d", "--quiet", "--query", @resource[:name], "start"], :failonfail => false)
     if [104, 106].include?(status.exitstatus)
-      return :true
+      :true
     elsif [101, 105].include?(status.exitstatus)
       # 101 is action not allowed, which means we have to do the check manually.
       # 105 is unknown, which generally means the initscript does not support query
@@ -134,12 +142,12 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
       # For those that do not, perform the checks manually
       # http://www.debian.org/doc/debian-policy/ch-opersys.html
       if get_start_link_count >= 4
-        return :true
+        :true
       else
-        return :false
+        :false
       end
     else
-      return :false
+      :false
     end
   end
 
@@ -159,7 +167,7 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
   end
 
   def enable
-    self.unmask
+    unmask
     systemctl_change_enable(:enable)
   end
 
@@ -182,7 +190,7 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
   end
 
   def startcmd
-    self.unmask
+    unmask
     [command(:systemctl), "start", '--', @resource[:name]]
   end
 
@@ -195,29 +203,23 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
   end
 
   def restart
-    begin
-      daemon_reload?
-      super
-    rescue Puppet::Error => e
-      raise Puppet::Error.new(prepare_error_message(@resource[:name], 'restart', e))
-    end
+    daemon_reload?
+    super
+  rescue Puppet::Error => e
+    raise Puppet::Error, prepare_error_message(@resource[:name], 'restart', e)
   end
 
   def start
-    begin
-      daemon_reload?
-      super
-    rescue Puppet::Error => e
-      raise Puppet::Error.new(prepare_error_message(@resource[:name], 'start', e))
-    end
+    daemon_reload?
+    super
+  rescue Puppet::Error => e
+    raise Puppet::Error, prepare_error_message(@resource[:name], 'start', e)
   end
 
   def stop
-    begin
-      super
-    rescue Puppet::Error => e
-      raise Puppet::Error.new(prepare_error_message(@resource[:name], 'stop', e))
-    end
+    super
+  rescue Puppet::Error => e
+    raise Puppet::Error, prepare_error_message(@resource[:name], 'stop', e)
   end
 
   def prepare_error_message(name, action, exception)
@@ -228,4 +230,3 @@ Puppet::Type.type(:service).provide :systemd, :parent => :base do
     error_return << "journalctl log for #{name}:\n#{journalctl_output}"
   end
 end
-

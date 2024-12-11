@@ -13,9 +13,9 @@ describe Puppet::Resource::Catalog, "when compiling" do
     allow(Puppet::Util::Storage).to receive(:store)
   end
 
-  it "should support json, pson, dot, yaml" do
-    # msgpack is optional, so using include instead of eq
-    expect(Puppet::Resource::Catalog.supported_formats).to include(:json, :pson, :dot, :yaml)
+  it "should support json, dot, yaml" do
+    # msgpack and pson are optional, so using include instead of eq
+    expect(Puppet::Resource::Catalog.supported_formats).to include(:json, :dot, :yaml)
   end
 
   # audit only resources are unmanaged
@@ -104,7 +104,7 @@ describe Puppet::Resource::Catalog, "when compiling" do
 
   it "should include the current catalog_format" do
     catalog = Puppet::Resource::Catalog.new("host")
-    expect(catalog.catalog_format).to eq(1)
+    expect(catalog.catalog_format).to eq(2)
   end
 
   describe "when compiling" do
@@ -178,6 +178,7 @@ describe Puppet::Resource::Catalog, "when compiling" do
       @original.add_edge(@middle, @bottom)
       @original.add_edge(@bottom, @bottomobject)
 
+      @original.catalog_format = 1
       @catalog = @original.to_ral
     end
 
@@ -188,6 +189,18 @@ describe Puppet::Resource::Catalog, "when compiling" do
         # result tries to call `each` on the resource, and that raises.
         expect(@catalog.resource(resource.ref)).to be_a_kind_of(Puppet::Type)
       end
+    end
+
+    it "should raise if an unknown resource is being converted" do
+      @new_res = Puppet::Resource.new "Unknown", "type", :kind => 'compilable_type'
+      @resource_array = [@new_res]
+
+      @original.add_resource(*@resource_array)
+      @original.add_edge(@bottomobject, @new_res)
+
+      @original.catalog_format = 2
+
+      expect { @original.to_ral }.to raise_error(Puppet::Error, "Resource type 'Unknown' was not found")
     end
 
     it "should copy the tag list to the new catalog" do
@@ -952,7 +965,13 @@ describe Puppet::Resource::Catalog, "when converting a resource catalog to json"
 
     context 'and rich_data is disabled' do
       before(:each) do
-        Puppet[:rich_data] = false
+        Puppet[:strict] = :warning # do not want to stub out behavior in tests
+      end
+
+      around(:each) do |test|
+        Puppet.override(rich_data: false) do
+          test.run
+        end
       end
 
       let(:catalog_w_regexp)  { compile_to_catalog("notify {'foo': message => /[a-z]+/ }") }
@@ -1018,6 +1037,14 @@ describe Puppet::Resource::Catalog, "when converting a resource catalog to json"
         expect(message.has_key?('a')).to eql(true)
         expect(message['a']).to eql(nil)
         expect(message['b']).to eql(10)
+      end
+
+      it 'should raise an error by default when trying to convert parameter with rich data' do
+        Puppet[:strict] = :error
+        expect {
+          catalog = compile_to_catalog("notify {'foo': message => Timestamp('2016-09-15T08:32:16.123 UTC') }")
+          Puppet::Resource::Catalog.from_data_hash(JSON.parse(catalog.to_json)) 
+        }.to raise_error(/Evaluation Error: Notify\[foo\]\['message'\] contains a Puppet::Pops::Time::Timestamp value. It will be converted to the String '2016-09-15T08:32:16.123000000 UTC'/)
       end
     end
   end

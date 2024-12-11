@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Literal values for
 #
 #   * String
@@ -17,9 +19,9 @@
 #   * String with interpolation
 #
 class Puppet::Pops::Evaluator::JsonStrictLiteralEvaluator
-  #include Puppet::Pops::Utils
+  # include Puppet::Pops::Utils
 
-  COMMA_SEPARATOR = ', '.freeze
+  COMMA_SEPARATOR = ', '
 
   def initialize
     @@literal_visitor ||= Puppet::Pops::Visitor.new(self, "literal", 0, 0)
@@ -68,15 +70,14 @@ class Puppet::Pops::Evaluator::JsonStrictLiteralEvaluator
   end
 
   def literal_LiteralList(o)
-    o.values.map {|v| literal(v) }
+    o.values.map { |v| literal(v) }
   end
 
   def literal_LiteralHash(o)
-    o.entries.reduce({}) do |result, entry|
+    o.entries.each_with_object({}) do |entry, result|
       key = literal(entry.key)
       throw :not_literal unless key.is_a?(String)
       result[key] = literal(entry.value)
-      result
     end
   end
 end

@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/application'
 require_relative '../../puppet/ssl/oids'
 
 class Puppet::Application::Ssl < Puppet::Application
-
   run_mode :agent
 
   def summary
@@ -10,74 +11,79 @@ class Puppet::Application::Ssl < Puppet::Application
   end
 
   def help
-    <<-HELP
-puppet-ssl(8) -- #{summary}
-========
+    <<~HELP
+      puppet-ssl(8) -- #{summary}
+      ========
 
-SYNOPSIS
---------
-Manage SSL keys and certificates for SSL clients needing
-to communicate with a puppet infrastructure.
+      SYNOPSIS
+      --------
+      Manage SSL keys and certificates for SSL clients needing
+      to communicate with a puppet infrastructure.
 
-USAGE
------
-puppet ssl <action> [-h|--help] [-v|--verbose] [-d|--debug] [--localca] [--target CERTNAME]
+      USAGE
+      -----
+      puppet ssl <action> [-h|--help] [-v|--verbose] [-d|--debug] [--localca] [--target CERTNAME]
 
 
-OPTIONS
--------
+      OPTIONS
+      -------
 
-* --help:
-  Print this help message.
+      * --help:
+        Print this help message.
 
-* --verbose:
-  Print extra information.
+      * --verbose:
+        Print extra information.
 
-* --debug:
-  Enable full debugging.
+      * --debug:
+        Enable full debugging.
 
-* --localca
-  Also clean the local CA certificate and CRL.
+      * --localca
+        Also clean the local CA certificate and CRL.
 
-* --target CERTNAME
-  Clean the specified device certificate instead of this host's certificate.
+      * --target CERTNAME
+        Clean the specified device certificate instead of this host's certificate.
 
-ACTIONS
--------
+      ACTIONS
+      -------
 
-* bootstrap:
-  Perform all of the steps necessary to request and download a client
-  certificate. If autosigning is disabled, then puppet will wait every
-  `waitforcert` seconds for its certificate to be signed. To only attempt
-  once and never wait, specify a time of 0. Since `waitforcert` is a
-  Puppet setting, it can be specified as a time interval, such as 30s,
-  5m, 1h.
+      * bootstrap:
+        Perform all of the steps necessary to request and download a client
+        certificate. If autosigning is disabled, then puppet will wait every
+        `waitforcert` seconds for its certificate to be signed. To only attempt
+        once and never wait, specify a time of 0. Since `waitforcert` is a
+        Puppet setting, it can be specified as a time interval, such as 30s,
+        5m, 1h.
 
-* submit_request:
-  Generate a certificate signing request (CSR) and submit it to the CA. If
-  a private and public key pair already exist, they will be used to generate
-  the CSR. Otherwise a new key pair will be generated. If a CSR has already
-  been submitted with the given `certname`, then the operation will fail.
+      * submit_request:
+        Generate a certificate signing request (CSR) and submit it to the CA. If
+        a private and public key pair already exist, they will be used to generate
+        the CSR. Otherwise, a new key pair will be generated. If a CSR has already
+        been submitted with the given `certname`, then the operation will fail.
 
-* download_cert:
-  Download a certificate for this host. If the current private key matches
-  the downloaded certificate, then the certificate will be saved and used
-  for subsequent requests. If there is already an existing certificate, it
-  will be overwritten.
+      * generate_request:
+        Generate a certificate signing request (CSR). If a private and public key
+        pair exist, they will be used to generate the CSR. Otherwise a new key
+        pair will be generated.
 
-* verify:
-  Verify the private key and certificate are present and match, verify the
-  certificate is issued by a trusted CA, and check revocation status.
+      * download_cert:
+        Download a certificate for this host. If the current private key matches
+        the downloaded certificate, then the certificate will be saved and used
+        for subsequent requests. If there is already an existing certificate, it
+        will be overwritten.
 
-* clean:
-  Remove the private key and certificate related files for this host. If
-  `--localca` is specified, then also remove this host's local copy of the
-  CA certificate(s) and CRL bundle. if `--target CERTNAME` is specified, then
-  remove the files for the specified device on this host instead of this host.
+      * verify:
+        Verify the private key and certificate are present and match, verify the
+        certificate is issued by a trusted CA, and check revocation status.
 
- * show:
-  Print the full-text version of this host's certificate.
-HELP
+      * clean:
+        Remove the private key and certificate related files for this host. If
+        `--localca` is specified, then also remove this host's local copy of the
+        CA certificate(s) and CRL bundle. if `--target CERTNAME` is specified, then
+        remove the files for the specified device on this host instead of this host.
+
+       * show:
+        Print the full-text version of this host's certificate.
+    HELP
   end
 
   option('--target CERTNAME') do |arg|
@@ -136,12 +142,25 @@ HELP
       unless cert
         raise Puppet::Error, _("The certificate for '%{name}' has not yet been signed") % { name: certname }
       end
+    when 'generate_request'
+      generate_request(certname)
     when 'verify'
       verify(certname)
     when 'clean'
+      possible_extra_args = command_line.args.drop(1)
+      unless possible_extra_args.empty?
+        raise Puppet::Error, _(<<~END) % { args: possible_extra_args.join(' ') }
+          Extra arguments detected: %{args}
+          Did you mean to run:
+            puppetserver ca clean --certname <name>
+          Or:
+            puppet ssl clean --target <name>
+        END
+      end
+
       clean(certname)
     when 'bootstrap'
-      if !Puppet::Util::Log.sendlevel?(:info)
+      unless Puppet::Util::Log.sendlevel?(:info)
         Puppet::Util::Log.level = :info
       end
       @machine.ensure_client_certificate
@@ -162,13 +181,7 @@ HELP
   def submit_request(ssl_context)
     key = @cert_provider.load_private_key(Puppet[:certname])
     unless key
-      if Puppet[:key_type] == 'ec'
-        Puppet.info _("Creating a new EC SSL key for %{name} using curve %{curve}") % { name: Puppet[:certname], curve: Puppet[:named_curve] }
-        key = OpenSSL::PKey::EC.generate(Puppet[:named_curve])
-      else
-        Puppet.info _("Creating a new SSL key for %{name}") % { name: Puppet[:certname] }
-        key = OpenSSL::PKey::RSA.new(Puppet[:keylength].to_i)
-      end
+      key = create_key(Puppet[:certname])
       @cert_provider.save_private_key(Puppet[:certname], key)
     end
 
@@ -179,12 +192,26 @@ HELP
     Puppet.notice _("Submitted certificate request for '%{name}' to %{url}") % { name: Puppet[:certname], url: route.url }
   rescue Puppet::HTTP::ResponseError => e
     if e.response.code == 400
-      raise Puppet::Error.new(_("Could not submit certificate request for '%{name}' to %{url} due to a conflict on the server") % { name: Puppet[:certname], url: route.url })
+      raise Puppet::Error, _("Could not submit certificate request for '%{name}' to %{url} due to a conflict on the server") % { name: Puppet[:certname], url: route.url }
     else
       raise Puppet::Error.new(_("Failed to submit certificate request: %{message}") % { message: e.message }, e)
     end
   rescue => e
     raise Puppet::Error.new(_("Failed to submit certificate request: %{message}") % { message: e.message }, e)
+  end
+
+  def generate_request(certname)
+    key = @cert_provider.load_private_key(certname)
+    unless key
+      key = create_key(certname)
+      @cert_provider.save_private_key(certname, key)
+    end
+
+    csr = @cert_provider.create_request(certname, key)
+    @cert_provider.save_request(certname, csr)
+    Puppet.notice _("Generated certificate request in '%{path}'") % { path: @cert_provider.to_path(Puppet[:requestdir], certname) }
+  rescue => e
+    raise Puppet::Error.new(_("Failed to generate certificate request: %{message}") % { message: e.message }, e)
   end
 
   def download_cert(ssl_context)
@@ -207,7 +234,7 @@ HELP
     cert
   rescue Puppet::HTTP::ResponseError => e
     if e.response.code == 404
-      return nil
+      nil
     else
       raise Puppet::Error.new(_("Failed to download certificate: %{message}") % { message: e.message }, e)
     end
@@ -248,18 +275,18 @@ HELP
       end
 
       if cert
-        raise Puppet::Error, _(<<END) % { certname: certname }
-The certificate %{certname} must be cleaned from the CA first. To fix this,
-run the following commands on the CA:
-  puppetserver ca clean --certname %{certname}
-  puppet ssl clean
-END
+        raise Puppet::Error, _(<<~END) % { certname: certname }
+          The certificate %{certname} must be cleaned from the CA first. To fix this,
+          run the following commands on the CA:
+            puppetserver ca clean --certname %{certname}
+            puppet ssl clean
+        END
       end
     end
 
     paths = {
       'private key' => Puppet[:hostprivkey],
-      'public key'  => Puppet[:hostpubkey],
+      'public key' => Puppet[:hostpubkey],
       'certificate request' => Puppet[:hostcsr],
       'certificate' => Puppet[:hostcert],
       'private key password file' => Puppet[:passfile]
@@ -284,5 +311,15 @@ END
 
   def create_route(ssl_context)
     @session.route_to(:ca, ssl_context: ssl_context)
+  end
+
+  def create_key(certname)
+    if Puppet[:key_type] == 'ec'
+      Puppet.info _("Creating a new EC SSL key for %{name} using curve %{curve}") % { name: certname, curve: Puppet[:named_curve] }
+      OpenSSL::PKey::EC.generate(Puppet[:named_curve])
+    else
+      Puppet.info _("Creating a new SSL key for %{name}") % { name: certname }
+      OpenSSL::PKey::RSA.new(Puppet[:keylength].to_i)
+    end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/util/classgen'
 require_relative '../../puppet/node/environment'
@@ -15,7 +17,7 @@ module Manager
   # @api private
   #
   def allclear
-    @types.each { |name, type|
+    @types.each { |_name, type|
       type.clear
     }
   end
@@ -26,7 +28,7 @@ module Manager
   #
   def clear_misses
     unless @types.nil?
-      @types.delete_if {|_, v| v.nil? }
+      @types.compact
     end
   end
 
@@ -36,11 +38,11 @@ module Manager
   # @yieldreturn [Object] the last returned object is also returned from this method
   # @return [Object] the last returned value from the block.
   def eachtype
-    @types.each do |name, type|
+    @types.each do |_name, type|
       # Only consider types that have names
-      #if ! type.parameters.empty? or ! type.validproperties.empty?
-        yield type
-      #end
+      # if ! type.parameters.empty? or ! type.validproperties.empty?
+      yield type
+      # end
     end
   end
 
@@ -73,9 +75,9 @@ module Manager
     @manager_lock.synchronize do
       # Handle backward compatibility
       unless options.is_a?(Hash)
-        #TRANSLATORS 'Puppet::Type.newtype' should not be translated
+        # TRANSLATORS 'Puppet::Type.newtype' should not be translated
         Puppet.warning(_("Puppet::Type.newtype(%{name}) now expects a hash as the second argument, not %{argument}") %
-                       { name: name, argument: options.inspect})
+                       { name: name, argument: options.inspect })
       end
 
       # First make sure we don't have a method sitting around
@@ -86,9 +88,9 @@ module Manager
       selfobj = singleton_class
 
       if @types.include?(name)
-        if self.respond_to?(newmethod)
+        if respond_to?(newmethod)
           # Remove the old newmethod
-          selfobj.send(:remove_method,newmethod)
+          selfobj.send(:remove_method, newmethod)
         end
       end
 
@@ -104,9 +106,9 @@ module Manager
       )
 
       # Now define a "new<type>" method for convenience.
-      if self.respond_to? newmethod
+      if respond_to? newmethod
         # Refuse to overwrite existing methods like 'newparam' or 'newtype'.
-        #TRANSLATORS 'new%{method}' will become a method name, do not translate this string
+        # TRANSLATORS 'new%{method}' will become a method name, do not translate this string
         Puppet.warning(_("'new%{method}' method already exists; skipping") % { method: name.to_s })
       else
         selfobj.send(:define_method, newmethod) do |*args|
@@ -116,7 +118,7 @@ module Manager
 
       # If they've got all the necessary methods defined and they haven't
       # already added the property, then do so now.
-      klass.ensurable if klass.ensurable? and ! klass.validproperty?(:ensure)
+      klass.ensurable if klass.ensurable? and !klass.validproperty?(:ensure)
 
       # Now set up autoload any providers that might exist for this type.
 
@@ -169,7 +171,7 @@ module Manager
       end
       # Try loading the type.
       if typeloader.load(name, Puppet.lookup(:current_environment))
-        #TRANSLATORS 'puppet/type/%{name}' should not be translated
+        # TRANSLATORS 'puppet/type/%{name}' should not be translated
         Puppet.warning(_("Loaded puppet/type/%{name} but no class was created") % { name: name }) unless @types.include? name
       elsif !Puppet[:always_retry_plugins]
         # PUP-5482 - Only look for a type once if plugin retry is disabled
@@ -194,4 +196,3 @@ module Manager
   end
 end
 end
-

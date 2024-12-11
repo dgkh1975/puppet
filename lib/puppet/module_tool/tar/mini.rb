@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Puppet::ModuleTool::Tar::Mini
   def unpack(sourcefile, destdir, _)
     Zlib::GzipReader.open(sourcefile) do |reader|
@@ -9,7 +11,7 @@ class Puppet::ModuleTool::Tar::Mini
       args = [reader, destdir, find_valid_files(reader)]
       spec = Gem::Specification.find_by_name('minitar')
       if spec && spec.version >= Gem::Version.new('0.9')
-        args << {:fsync => false}
+        args << { :fsync => false }
       end
       Archive::Tar::Minitar.unpack(*args) do |action, name, stats|
         case action
@@ -42,9 +44,9 @@ class Puppet::ModuleTool::Tar::Mini
 
   private
 
-  EXECUTABLE = 0755
-  NOT_EXECUTABLE = 0644
-  USER_EXECUTE = 0100
+  EXECUTABLE = 0o755
+  NOT_EXECUTABLE = 0o644
+  USER_EXECUTE = 0o100
 
   def set_dir_mode!(stats)
     if stats.key?(:mode)

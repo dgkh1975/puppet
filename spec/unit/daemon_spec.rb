@@ -1,19 +1,7 @@
 require 'spec_helper'
 require 'puppet/daemon'
 require 'puppet/agent'
-
-def without_warnings
-  flag = $VERBOSE
-  $VERBOSE = nil
-  yield
-  $VERBOSE = flag
-end
-
-class TestClient
-  def lockfile_path
-    "/dev/null"
-  end
-end
+require 'puppet/configurer'
 
 describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
   include PuppetSpec::Files
@@ -26,7 +14,7 @@ describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
     end
   end
 
-  let(:agent) { Puppet::Agent.new(TestClient.new, false) }
+  let(:agent) { Puppet::Agent.new(Puppet::Configurer, false) }
   let(:server) { double("Server", :start => nil, :wait_for_shutdown => nil) }
 
   let(:pidfile) { double("PidFile", :lock => true, :unlock => true, :file_path => 'fake.pid') }
@@ -72,6 +60,9 @@ describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
   end
 
   describe "when starting" do
+    let(:reparse_run) { scheduler.jobs[0] }
+    let(:agent_run) { scheduler.jobs[1] }
+
     before do
       allow(daemon).to receive(:set_signal_traps)
     end
@@ -89,21 +80,93 @@ describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
     it "disables the reparse of configs if the filetimeout is 0" do
       Puppet[:filetimeout] = 0
       daemon.start
-      expect(scheduler.jobs[0]).not_to be_enabled
+      expect(reparse_run).not_to be_enabled
+    end
+
+    it "does not splay the agent run by default" do
+      daemon.start
+      expect(agent_run.splay).to eq(0)
+    end
+
+    describe "and calculating splay" do
+      before do
+        # Set file timeout so the daemon reparses
+        Puppet[:filetimeout] = 1
+        Puppet[:splay] = true
+      end
+
+      it "recalculates when splaylimit changes" do
+        daemon.start
+
+        Puppet[:splaylimit] = 60
+        init_splay = agent_run.splay
+        next_splay = init_splay + 1
+        allow(agent_run).to receive(:rand).and_return(next_splay)
+        reparse_run.run(Time.now)
+
+        expect(agent_run.splay).to eq(next_splay)
+      end
+
+      it "does not change splay if splaylimit is unmodified" do
+        daemon.start
+
+        init_splay = agent_run.splay
+        reparse_run.run(Time.now)
+
+        expect(agent_run.splay).to eq(init_splay)
+      end
+
+      it "recalculates when splay is enabled later" do
+        Puppet[:splay] = false
+        daemon.start
+
+        Puppet[:splay] = true
+        allow(agent_run).to receive(:rand).and_return(999)
+        reparse_run.run(Time.now)
+
+        expect(agent_run.splay).to eq(999)
+      end
+
+      it "sets splay to 0 when splay is disabled" do
+        daemon.start
+
+        Puppet[:splay] = false
+        reparse_run.run(Time.now)
+
+        expect(agent_run.splay).to eq(0)
+      end
+
+      it "recalculates splay when runinterval is decreased" do
+        Puppet[:runinterval] = 60
+        daemon.start
+
+        Puppet[:runinterval] = Puppet[:runinterval] - 30
+        new_splay = agent_run.splay + 1
+        allow(agent_run).to receive(:rand).and_return(new_splay)
+        reparse_run.run(Time.now)
+
+        expect(agent_run.splay).to eq(new_splay)
+      end
+
+      it "recalculates splay when runinterval is increased" do
+        Puppet[:runinterval] = 60
+        daemon.start
+
+        Puppet[:runinterval] = Puppet[:runinterval] + 30
+        new_splay = agent_run.splay - 1
+        allow(agent_run).to receive(:rand).and_return(new_splay)
+        reparse_run.run(Time.now)
+
+        expect(agent_run.splay).to eq(new_splay)
+      end
     end
   end
 
   describe "when stopping" do
     before do
       allow(Puppet::Util::Log).to receive(:close_all)
-      # to make the global safe to mock, set it to a subclass of itself,
-      # then restore it in an after pass
-      without_warnings { Puppet::Application = Class.new(Puppet::Application) }
-    end
-
-    after do
-      # restore from the superclass so we lose the stub garbage
-      without_warnings { Puppet::Application = Puppet::Application.superclass }
+      # to make the global safe to mock, set it to a subclass of itself
+      stub_const('Puppet::Application', Class.new(Puppet::Application))
     end
 
     it 'should request a stop from Puppet::Application' do
@@ -131,10 +194,6 @@ describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
   end
 
   describe "when reloading" do
-    it "should do nothing if no agent is configured" do
-      daemon.reload
-    end
-
     it "should do nothing if the agent is running" do
       expect(agent).to receive(:run).with({:splay => false}).and_raise(Puppet::LockError, 'Failed to aquire lock')
       expect(Puppet).to receive(:notice).with('Not triggering already-running agent')
@@ -152,11 +211,7 @@ describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
 
   describe "when restarting" do
     before do
-      without_warnings { Puppet::Application = Class.new(Puppet::Application) }
-    end
-
-    after do
-      without_warnings { Puppet::Application = Puppet::Application.superclass }
+      stub_const('Puppet::Application', Class.new(Puppet::Application))
     end
 
     it 'should set Puppet::Application.restart!' do
@@ -189,7 +244,7 @@ describe Puppet::Daemon, :unless => Puppet::Util::Platform.windows? do
 
     it "should shut down without exiting" do
       daemon.argv = %w{foo}
-      expect(daemon).to receive(:stop).with(:exit => false)
+      expect(daemon).to receive(:stop).with({:exit => false})
       daemon.reexec
     end
 

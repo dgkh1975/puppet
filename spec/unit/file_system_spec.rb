@@ -819,9 +819,11 @@ describe "Puppet::FileSystem" do
         mode = Puppet::FileSystem.stat(dir).mode
         Puppet::FileSystem.chmod(0, dir)
         begin
+          # JRuby 9.2.21.0 drops the path from the message..
+          message = Puppet::Util::Platform.jruby? ? /^Permission denied/ : /^Permission denied .* #{path}/
           expect {
             Puppet::FileSystem.unlink(path)
-          }.to raise_error(Errno::EACCES, /^Permission denied .* #{path}/)
+          }.to raise_error(Errno::EACCES, message)
         ensure
           Puppet::FileSystem.chmod(mode, dir)
         end
@@ -906,6 +908,8 @@ describe "Puppet::FileSystem" do
         end
 
         it 'should expand a shortened path completely, unlike Ruby File.expand_path' do
+          pending("GH runners seem to have disabled 8.3 support")
+
           tmp_long_dir = tmpdir('super-long-thing-that-Windows-shortens')
           short_path = Puppet::Util::Windows::File.get_short_pathname(tmp_long_dir)
 
@@ -984,11 +988,12 @@ describe "Puppet::FileSystem" do
         end
 
         it 'preserves file ownership' do
-          allow(Puppet::FileSystem).to receive(:lstat)
-            .with(Puppet::FileSystem.pathname(dest))
-            .and_return(double(uid: 1, gid: 2))
+          FileUtils.touch(dest)
+          allow(File).to receive(:lstat).and_call_original
+          allow(File).to receive(:lstat).with(Pathname.new(dest)).and_return(double(uid: 1, gid: 2, 'directory?': false))
 
-          expect(FileUtils).to receive(:chown).with(1, 2, /#{dest}/)
+          allow(File).to receive(:chown).and_call_original
+          expect(FileUtils).to receive(:chown).with(1, 2, any_args)
 
           Puppet::FileSystem.replace_file(dest, 0644) { |f| f.write(content) }
         end
@@ -1161,6 +1166,35 @@ describe "Puppet::FileSystem" do
       Puppet::FileSystem.touch(dest, mtime: tomorrow)
 
       expect(File.mtime(dest)).to be_within(1).of(tomorrow)
+    end
+  end
+
+  context '#chmod' do
+    let(:dest) { tmpfile('abs_file') }
+
+    it "changes the mode given an absolute string" do
+      Puppet::FileSystem.touch(dest)
+      Puppet::FileSystem.chmod(0644, dest)
+      expect(File.stat(dest).mode & 0777).to eq(0644)
+    end
+
+    it "returns true if given an absolute pathname" do
+      Puppet::FileSystem.touch(dest)
+      Puppet::FileSystem.chmod(0644, Pathname.new(dest))
+      expect(File.stat(dest).mode & 0777).to eq(0644)
+    end
+
+    it "raises if the file doesn't exist" do
+      klass = Puppet::Util::Platform.windows? ? Puppet::Error : Errno::ENOENT
+      expect {
+        Puppet::FileSystem.chmod(0644, dest)
+      }.to raise_error(klass)
+    end
+
+    it "raises ArgumentError if dest is invalid" do
+      expect {
+        Puppet::FileSystem.chmod(0644, nil)
+      }.to raise_error(ArgumentError, /expected Pathname, got: 'NilClass'/)
     end
   end
 end

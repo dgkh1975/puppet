@@ -1,14 +1,16 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows'
 
 Puppet::Type.type(:user).provide :windows_adsi do
   desc "Local user management for Windows."
 
-  defaultfor :operatingsystem => :windows
-  confine    :operatingsystem => :windows
+  defaultfor 'os.name' => :windows
+  confine    'os.name' => :windows
 
   has_features :manages_homedir, :manages_passwords, :manages_roles
 
-  def initialize(value={})
+  def initialize(value = {})
     super(value)
     @deleted = false
   end
@@ -18,7 +20,7 @@ Puppet::Type.type(:user).provide :windows_adsi do
   end
 
   def roles
-    Puppet::Util::Windows::User::get_rights(@resource[:name])
+    Puppet::Util::Windows::User.get_rights(@resource[:name])
   end
 
   def roles=(value)
@@ -26,11 +28,11 @@ Puppet::Type.type(:user).provide :windows_adsi do
     should  = value.split(',')
 
     add_list = should - current
-    Puppet::Util::Windows::User::set_rights(@resource[:name], add_list) unless add_list.empty?
+    Puppet::Util::Windows::User.set_rights(@resource[:name], add_list) unless add_list.empty?
 
     if @resource[:role_membership] == :inclusive
       remove_list = current - should
-      Puppet::Util::Windows::User::remove_rights(@resource[:name], remove_list) unless remove_list.empty?
+      Puppet::Util::Windows::User.remove_rights(@resource[:name], remove_list) unless remove_list.empty?
     end
   end
 
@@ -67,7 +69,8 @@ Puppet::Type.type(:user).provide :windows_adsi do
   end
 
   def groups_to_s(groups)
-    return '' if groups.nil? || !groups.kind_of?(Array)
+    return '' if groups.nil? || !groups.is_a?(Array)
+
     groups = groups.map do |group_name|
       sid = Puppet::Util::Windows::SID.name_to_principal(group_name)
       if sid.account =~ /\\/
@@ -78,7 +81,7 @@ Puppet::Type.type(:user).provide :windows_adsi do
       resource.debug("#{sid.domain}\\#{account} (#{sid.sid})")
       "#{sid.domain}\\#{account}"
     end
-    return groups.join(',')
+    groups.join(',')
   end
 
   def create
@@ -137,7 +140,8 @@ Puppet::Type.type(:user).provide :windows_adsi do
     # avoid a LogonUserW style password check when the resource is not yet
     # populated with a password (as is the case with `puppet resource user`)
     return nil if @resource[:password].nil?
-    user.password_is?( @resource[:password] ) ? @resource[:password] : nil
+
+    user.password_is?(@resource[:password]) ? @resource[:password] : nil
   end
 
   def password=(value)
@@ -161,7 +165,7 @@ Puppet::Type.type(:user).provide :windows_adsi do
 
   [:gid, :shell].each do |prop|
     define_method(prop) { nil }
-    define_method("#{prop}=") do |v|
+    define_method("#{prop}=") do |_v|
       fail "No support for managing property #{prop} of user #{@resource[:name]} on Windows"
     end
   end

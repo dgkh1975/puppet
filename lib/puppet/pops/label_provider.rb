@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 # Provides a label for an object.
 # This simple implementation calls #to_s on the given object, and handles articles 'a/an/the'.
 #
 module Puppet::Pops::LabelProvider
-  VOWELS = %w{a e i o u y}
-  SKIPPED_CHARACTERS = %w{" '}
+  VOWELS = %w[a e i o u y]
+  SKIPPED_CHARACTERS = %w[" ']
   A = "a"
   AN = "an"
 
@@ -67,9 +69,9 @@ module Puppet::Pops::LabelProvider
   private
 
   def first_letter_of(string)
-    char = string[0,1]
+    char = string[0, 1]
     if SKIPPED_CHARACTERS.include? char
-      char = string[1,1]
+      char = string[1, 1]
     end
 
     if char == ""

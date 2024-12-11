@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows'
 
 module Puppet::Util::Windows
@@ -15,10 +17,12 @@ module Puppet::Util::Windows
 
     ERROR_NO_MORE_ITEMS = 259
 
+    WCHAR_SIZE = FFI.type_size(:wchar)
+
     def root(name)
       Win32::Registry.const_get(name)
-    rescue NameError
-      raise Puppet::Error, _("Invalid registry key '%{name}'") % { name: name }, $!.backtrace
+    rescue NameError => e
+      raise Puppet::Error, _("Invalid registry key '%{name}'") % { name: name }, e.backtrace
     end
 
     def open(name, path, mode = KEY_READ | KEY64, &block)
@@ -48,7 +52,7 @@ module Puppet::Util::Windows
 
       loop do
         subkey, filetime = reg_enum_key(key, index, subkey_max_len)
-        yield subkey, filetime if !subkey.nil?
+        yield subkey, filetime unless subkey.nil?
         index += 1
         break if subkey.nil?
       end
@@ -62,7 +66,7 @@ module Puppet::Util::Windows
 
     def values(key)
       vals = {}
-      each_value(key) { |subkey, type, data| vals[subkey] = data }
+      each_value(key) { |subkey, _type, data| vals[subkey] = data }
       vals
     end
 
@@ -77,12 +81,10 @@ module Puppet::Util::Windows
       vals = {}
       names.each do |name|
         FFI::Pointer.from_string_to_wide_string(name) do |subkeyname_ptr|
-          begin
-            _, vals[name] = read(key, subkeyname_ptr)
-          rescue Puppet::Util::Windows::Error => e
-            # ignore missing names, but raise other errors
-            raise e unless e.code == Puppet::Util::Windows::Error::ERROR_FILE_NOT_FOUND
-          end
+          _, vals[name] = read(key, subkeyname_ptr)
+        rescue Puppet::Util::Windows::Error => e
+          # ignore missing names, but raise other errors
+          raise e unless e.code == Puppet::Util::Windows::Error::ERROR_FILE_NOT_FOUND
         end
       end
       vals
@@ -96,7 +98,7 @@ module Puppet::Util::Windows
 
       loop do
         subkey, type, data = reg_enum_value(key, index, value_max_len)
-        yield subkey, type, data if !subkey.nil?
+        yield subkey, type, data unless subkey.nil?
         index += 1
         break if subkey.nil?
       end
@@ -114,7 +116,8 @@ module Puppet::Util::Windows
     MAX_KEY_CHAR_LENGTH = 255 + 1
 
     def reg_enum_key(key, index, max_key_char_length = MAX_KEY_CHAR_LENGTH)
-      subkey, filetime = nil, nil
+      subkey = nil
+      filetime = nil
 
       FFI::MemoryPointer.new(:dword) do |subkey_length_ptr|
         FFI::MemoryPointer.new(FFI::WIN32::FILETIME.size) do |filetime_ptr|
@@ -123,9 +126,9 @@ module Puppet::Util::Windows
 
             # RegEnumKeyEx cannot be called twice to properly size the buffer
             result = RegEnumKeyExW(key.hkey, index,
-              subkey_ptr, subkey_length_ptr,
-              FFI::Pointer::NULL, FFI::Pointer::NULL,
-              FFI::Pointer::NULL, filetime_ptr)
+                                   subkey_ptr, subkey_length_ptr,
+                                   FFI::Pointer::NULL, FFI::Pointer::NULL,
+                                   FFI::Pointer::NULL, filetime_ptr)
 
             break if result == ERROR_NO_MORE_ITEMS
 
@@ -145,10 +148,12 @@ module Puppet::Util::Windows
     end
 
     # max number of wide characters including NULL terminator
-    MAX_VALUE_CHAR_LENGTH = 16383 + 1
+    MAX_VALUE_CHAR_LENGTH = 16_383 + 1
 
     def reg_enum_value(key, index, max_value_length = MAX_VALUE_CHAR_LENGTH)
-      subkey, type, data = nil, nil, nil
+      subkey = nil
+      type = nil
+      data = nil
 
       FFI::MemoryPointer.new(:dword) do |subkey_length_ptr|
         FFI::MemoryPointer.new(:wchar, max_value_length) do |subkey_ptr|
@@ -156,10 +161,9 @@ module Puppet::Util::Windows
           subkey_length_ptr.write_dword(max_value_length)
 
           result = RegEnumValueW(key.hkey, index,
-            subkey_ptr, subkey_length_ptr,
-            FFI::Pointer::NULL, FFI::Pointer::NULL,
-            FFI::Pointer::NULL, FFI::Pointer::NULL
-          )
+                                 subkey_ptr, subkey_length_ptr,
+                                 FFI::Pointer::NULL, FFI::Pointer::NULL,
+                                 FFI::Pointer::NULL, FFI::Pointer::NULL)
 
           break if result == ERROR_NO_MORE_ITEMS
 
@@ -183,15 +187,13 @@ module Puppet::Util::Windows
 
       FFI::MemoryPointer.new(:dword) do |max_subkey_name_length_ptr|
         FFI::MemoryPointer.new(:dword) do |max_value_name_length_ptr|
-
           status = RegQueryInfoKeyW(key.hkey,
-            FFI::MemoryPointer::NULL, FFI::MemoryPointer::NULL,
-            FFI::MemoryPointer::NULL, FFI::MemoryPointer::NULL,
-            max_subkey_name_length_ptr, FFI::MemoryPointer::NULL,
-            FFI::MemoryPointer::NULL, max_value_name_length_ptr,
-            FFI::MemoryPointer::NULL, FFI::MemoryPointer::NULL,
-            FFI::MemoryPointer::NULL
-          )
+                                    FFI::MemoryPointer::NULL, FFI::MemoryPointer::NULL,
+                                    FFI::MemoryPointer::NULL, FFI::MemoryPointer::NULL,
+                                    max_subkey_name_length_ptr, FFI::MemoryPointer::NULL,
+                                    FFI::MemoryPointer::NULL, max_value_name_length_ptr,
+                                    FFI::MemoryPointer::NULL, FFI::MemoryPointer::NULL,
+                                    FFI::MemoryPointer::NULL)
 
           if status != FFI::ERROR_SUCCESS
             msg = _("Failed to query registry %{key} for sizes") % { key: key.keyname }
@@ -201,7 +203,7 @@ module Puppet::Util::Windows
           result = [
             # Unicode characters *not* including trailing NULL
             max_subkey_name_length_ptr.read_dword + 1,
-            max_value_name_length_ptr.read_dword + 1,
+            max_value_name_length_ptr.read_dword + 1
           ]
         end
       end
@@ -235,27 +237,28 @@ module Puppet::Util::Windows
 
         string_length = 0
         # buffer is raw bytes, *not* chars - less a NULL terminator
-        string_length = (byte_length / FFI.type_size(:wchar)) - 1 if byte_length > 0
+        string_length = (byte_length / WCHAR_SIZE) - 1 if byte_length > 0
 
         begin
-          case type
-            when Win32::Registry::REG_SZ, Win32::Registry::REG_EXPAND_SZ
-              result = [ type, data_ptr.read_wide_string(string_length, Encoding::UTF_8, true) ]
-            when Win32::Registry::REG_MULTI_SZ
-              result = [ type, data_ptr.read_wide_string(string_length).split(/\0/) ]
-            when Win32::Registry::REG_BINARY
-              result = [ type, data_ptr.read_bytes(byte_length) ]
-            when Win32::Registry::REG_DWORD
-              result = [ type, data_ptr.read_dword ]
-            when Win32::Registry::REG_DWORD_BIG_ENDIAN
-              result = [ type, data_ptr.order(:big).read_dword ]
-            when Win32::Registry::REG_QWORD
-              result = [ type, data_ptr.read_qword ]
-            else
-              raise TypeError, _("Type %{type} is not supported.") % { type: type }
-          end
+          result = case type
+                   when Win32::Registry::REG_SZ, Win32::Registry::REG_EXPAND_SZ
+                     [type, data_ptr.read_wide_string(string_length, Encoding::UTF_8, true)]
+                   when Win32::Registry::REG_MULTI_SZ
+                     [type, data_ptr.read_wide_string(string_length).split(/\0/)]
+                   when Win32::Registry::REG_BINARY
+                     [type, data_ptr.read_bytes(byte_length)]
+                   when Win32::Registry::REG_DWORD
+                     [type, data_ptr.read_dword]
+                   when Win32::Registry::REG_DWORD_BIG_ENDIAN
+                     [type, data_ptr.order(:big).read_dword]
+                   when Win32::Registry::REG_QWORD
+                     [type, data_ptr.read_qword]
+                   else
+                     raise TypeError, _("Type %{type} is not supported.") % { type: type }
+                   end
         rescue IndexError => ex
-          raise if (ex.message !~ /^Memory access .* is out of bounds$/i)
+          raise if ex.message !~ /^Memory access .* is out of bounds$/i
+
           parent_key_name = key.parent ? "#{key.parent.keyname}\\" : ""
           Puppet.warning _("A value in the registry key %{parent_key_name}%{key} is corrupt or invalid") % { parent_key_name: parent_key_name, key: key.keyname }
         end
@@ -268,17 +271,50 @@ module Puppet::Util::Windows
       FFI::MemoryPointer.new(:dword) do |type_ptr|
         FFI::MemoryPointer.new(:dword) do |length_ptr|
           result = RegQueryValueExW(key.hkey, name_ptr,
-            FFI::Pointer::NULL, type_ptr,
-            FFI::Pointer::NULL, length_ptr)
+                                    FFI::Pointer::NULL, type_ptr,
+                                    FFI::Pointer::NULL, length_ptr)
 
-          FFI::MemoryPointer.new(:byte, length_ptr.read_dword) do |buffer_ptr|
+          # The call to RegQueryValueExW below is potentially unsafe:
+          # https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+          #
+          #   "If the data has the REG_SZ, REG_MULTI_SZ or REG_EXPAND_SZ type,
+          #   the string may not have been stored with the proper terminating
+          #   null characters. Therefore, even if the function returns
+          #   ERROR_SUCCESS, the application should ensure that the string is
+          #   properly terminated before using it; otherwise, it may overwrite a
+          #   buffer. (Note that REG_MULTI_SZ strings should have two
+          #   terminating null characters.)"
+          #
+          # Since we don't know if the values will be properly null terminated,
+          # extend the buffer to guarantee we can append one or two wide null
+          # characters, without overwriting any data.
+          base_bytes_len = length_ptr.read_dword
+          pad_bytes_len = case type_ptr.read_dword
+                          when Win32::Registry::REG_SZ, Win32::Registry::REG_EXPAND_SZ
+                            WCHAR_SIZE
+                          when Win32::Registry::REG_MULTI_SZ
+                            WCHAR_SIZE * 2
+                          else
+                            0
+                          end
+
+          FFI::MemoryPointer.new(:byte, base_bytes_len + pad_bytes_len) do |buffer_ptr|
             result = RegQueryValueExW(key.hkey, name_ptr,
-              FFI::Pointer::NULL, type_ptr,
-              buffer_ptr, length_ptr)
+                                      FFI::Pointer::NULL, type_ptr,
+                                      buffer_ptr, length_ptr)
 
-            if result != FFI::ERROR_SUCCESS
+            # Ensure buffer is null terminated with 1 or 2 wchar nulls, depending on the type
+            if result == FFI::ERROR_SUCCESS
+              case type_ptr.read_dword
+              when Win32::Registry::REG_SZ, Win32::Registry::REG_EXPAND_SZ
+                buffer_ptr.put_uint16(base_bytes_len, 0)
+              when Win32::Registry::REG_MULTI_SZ
+                buffer_ptr.put_uint16(base_bytes_len, 0)
+                buffer_ptr.put_uint16(base_bytes_len + WCHAR_SIZE, 0)
+              end
+            else
               # buffer is raw bytes, *not* chars - less a NULL terminator
-              name_length = (name_ptr.size / FFI.type_size(:wchar)) - 1 if name_ptr.size > 0
+              name_length = (name_ptr.size / WCHAR_SIZE) - 1 if name_ptr.size > 0
               msg = _("Failed to read registry value %{value} at %{key}") % { value: name_ptr.read_wide_string(name_length), key: key.keyname }
               raise Puppet::Util::Windows::Error.new(msg, result)
             end
@@ -335,7 +371,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :RegEnumKeyExW,
-      [:handle, :dword, :lpwstr, :lpdword, :lpdword, :lpwstr, :lpdword, :pointer], :win32_long
+                            [:handle, :dword, :lpwstr, :lpdword, :lpdword, :lpwstr, :lpdword, :pointer], :win32_long
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/ms724865(v=vs.85).aspx
     # LONG WINAPI RegEnumValue(
@@ -350,7 +386,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :RegEnumValueW,
-      [:handle, :dword, :lpwstr, :lpdword, :lpdword, :lpdword, :lpbyte, :lpdword], :win32_long
+                            [:handle, :dword, :lpwstr, :lpdword, :lpdword, :lpdword, :lpbyte, :lpdword], :win32_long
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/ms724911(v=vs.85).aspx
     # LONG WINAPI RegQueryValueExW(
@@ -363,7 +399,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :RegQueryValueExW,
-      [:handle, :lpcwstr, :lpdword, :lpdword, :lpbyte, :lpdword], :win32_long
+                            [:handle, :lpcwstr, :lpdword, :lpdword, :lpbyte, :lpdword], :win32_long
 
     # LONG WINAPI RegDeleteValue(
     #   _In_      HKEY hKey,
@@ -371,7 +407,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :RegDeleteValueW,
-      [:handle, :lpcwstr], :win32_long
+                            [:handle, :lpcwstr], :win32_long
 
     # LONG WINAPI RegDeleteKeyEx(
     #   _In_        HKEY hKey,
@@ -381,7 +417,7 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :RegDeleteKeyExW,
-      [:handle, :lpcwstr, :win32_ulong, :dword], :win32_long
+                            [:handle, :lpcwstr, :win32_ulong, :dword], :win32_long
 
     # https://msdn.microsoft.com/en-us/library/windows/desktop/ms724902(v=vs.85).aspx
     # LONG WINAPI RegQueryInfoKey(
@@ -400,7 +436,8 @@ module Puppet::Util::Windows
     # );
     ffi_lib :advapi32
     attach_function_private :RegQueryInfoKeyW,
-      [:handle, :lpwstr, :lpdword, :lpdword, :lpdword, :lpdword, :lpdword,
-        :lpdword, :lpdword, :lpdword, :lpdword, :pointer], :win32_long
+                            [:handle, :lpwstr, :lpdword, :lpdword, :lpdword,
+                             :lpdword, :lpdword, :lpdword, :lpdword, :lpdword,
+                             :lpdword, :pointer], :win32_long
   end
 end

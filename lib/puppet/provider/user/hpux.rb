@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:user).provide :hpuxuseradd, :parent => :useradd do
   desc "User management for HP-UX. This provider uses the undocumented `-F`
     switch to HP-UX's special `usermod` binary to work around the fact that
@@ -5,8 +7,8 @@ Puppet::Type.type(:user).provide :hpuxuseradd, :parent => :useradd do
     New functionality provides for changing trusted computing passwords and
     resetting password expirations under trusted computing."
 
-  defaultfor :operatingsystem => "hp-ux"
-  confine :operatingsystem => "hp-ux"
+  defaultfor 'os.name' => "hp-ux"
+  confine 'os.name' => "hp-ux"
 
   commands :modify => "/usr/sam/lbin/usermod.sam", :delete => "/usr/sam/lbin/userdel.sam", :add => "/usr/sam/lbin/useradd.sam"
   options :comment, :method => :gecos
@@ -24,72 +26,68 @@ Puppet::Type.type(:user).provide :hpuxuseradd, :parent => :useradd do
   has_features :manages_homedir, :allows_duplicates, :manages_passwords
 
   def deletecmd
-    super.insert(1,"-F")
+    super.insert(1, "-F")
   end
 
-  def modifycmd(param,value)
-     cmd = super(param, value)
-     cmd.insert(1,"-F")
-     if trusted then
-       # Append an additional command to reset the password age to 0
-       # until a workaround with expiry module can be found for trusted
-       # computing.
-       cmd << ";"
-       cmd << "/usr/lbin/modprpw"
-       cmd << "-v"
-       cmd << "-l"
-       cmd << "#{resource.name}"
-     end
-     cmd
+  def modifycmd(param, value)
+    cmd = super(param, value)
+    cmd.insert(1, "-F")
+    if trusted then
+      # Append an additional command to reset the password age to 0
+      # until a workaround with expiry module can be found for trusted
+      # computing.
+      cmd << ";"
+      cmd << "/usr/lbin/modprpw"
+      cmd << "-v"
+      cmd << "-l"
+      cmd << resource.name.to_s
+    end
+    cmd
   end
 
   def password
     # Password management routine for trusted and non-trusted systems
-    #temp=""
-    while ent = Etc.getpwent() do # rubocop:disable Lint/AssignmentInCondition
+    # temp=""
+    while ent = Etc.getpwent() # rubocop:disable Lint/AssignmentInCondition
       if ent.name == resource.name
-        temp=ent.name
+        temp = ent.name
         break
       end
     end
     Etc.endpwent()
-    if !temp
+    unless temp
       return nil
     end
 
     ent = Etc.getpwnam(resource.name)
     if ent.passwd == "*"
       # Either no password or trusted password, check trusted
-      file_name="/tcb/files/auth/#{resource.name.chars.first}/#{resource.name}"
+      file_name = "/tcb/files/auth/#{resource.name.chars.first}/#{resource.name}"
       if File.file?(file_name)
         # Found the tcb user for the specific user, now get passwd
         File.open(file_name).each do |line|
-          if ( line =~ /u_pwd/ )
-            temp_passwd=line.split(":")[1].split("=")[1]
-            ent.passwd = temp_passwd
-            return ent.passwd
-          end
+          next unless line =~ /u_pwd/
+
+          temp_passwd = line.split(":")[1].split("=")[1]
+          ent.passwd = temp_passwd
+          return ent.passwd
         end
       else
         debug "No trusted computing user file #{file_name} found."
       end
     else
-      return ent.passwd
+      ent.passwd
     end
   end
 
   def trusted
     # Check to see if the HP-UX box is running in trusted compute mode
     # UID for root should always be 0
-    trusted_sys = exec_getprpw('root','-m uid')
-    if trusted_sys.chomp == "uid=0"
-      return true
-    else
-      return false
-    end
+    trusted_sys = exec_getprpw('root', '-m uid')
+    trusted_sys.chomp == "uid=0"
   end
 
-  def exec_getprpw(user,opts)
+  def exec_getprpw(user, opts)
     Puppet::Util::Execution.execute("/usr/lbin/getprpw #{opts} #{user}", { :combine => true })
   end
 end

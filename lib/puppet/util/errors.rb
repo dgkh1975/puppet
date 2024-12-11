@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Some helper methods for throwing and populating errors.
 #
 # @api public
@@ -20,8 +22,8 @@ module Puppet::Util::Errors
   # @param other [Exception] original exception, source of backtrace info
   # @return [Exception] error parameter
   def adderrorcontext(error, other = nil)
-    error.line ||= self.line if error.respond_to?(:line=) and self.respond_to?(:line) and self.line
-    error.file ||= self.file if error.respond_to?(:file=) and self.respond_to?(:file) and self.file
+    error.line ||= line if error.respond_to?(:line=) and respond_to?(:line) and line
+    error.file ||= file if error.respond_to?(:file=) and respond_to?(:file) and file
     error.original ||= other if error.respond_to?(:original=)
 
     error.set_backtrace(other.backtrace) if other and other.respond_to?(:backtrace)
@@ -39,10 +41,10 @@ module Puppet::Util::Errors
   # @param column [String] the column number for the error (nil or "",  for not known)
   # @return [String] description of file, line, and column
   #
-  def self.error_location(file, line=nil, column=nil)
-    file = nil if (file.is_a?(String) && file.empty?)
-    line = nil if (line.is_a?(String) && line.empty?)
-    column = nil if (column.is_a?(String) && column.empty?)
+  def self.error_location(file, line = nil, column = nil)
+    file = nil if file.is_a?(String) && file.empty?
+    line = nil if line.is_a?(String) && line.empty?
+    column = nil if column.is_a?(String) && column.empty?
     if file and line and column
       _("(file: %{file}, line: %{line}, column: %{column})") % { file: file, line: line, column: column }
     elsif file and line
@@ -67,7 +69,7 @@ module Puppet::Util::Errors
   # @param column [String] the column number for the error (nil or "",  for not known)
   # @return [String] description of file, line, and column
   #
-  def self.error_location_with_space(file, line=nil, column=nil)
+  def self.error_location_with_space(file, line = nil, column = nil)
     error_location_str = error_location(file, line, column)
     if error_location_str.empty?
       ''
@@ -83,10 +85,10 @@ module Puppet::Util::Errors
   # @param line [String] the line number for the error (nil or "", for not known)
   # @return [String] description of file, and line
   def self.error_location_with_unknowns(file, line)
-    file = nil if (file.is_a?(String) && file.empty?)
-    line = nil if (line.is_a?(String) && line.empty?)
-    file = _('unknown') unless file
-    line = _('unknown') unless line
+    file = nil if file.is_a?(String) && file.empty?
+    line = nil if line.is_a?(String) && line.empty?
+    file ||= _('unknown')
+    line ||= _('unknown')
     error_location(file, line)
   end
 

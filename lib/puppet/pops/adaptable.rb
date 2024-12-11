@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Adaptable is a mix-in module that adds adaptability to a class.
 # This means that an adapter can
 # associate itself with an instance of the class and store additional data/have behavior.
@@ -180,18 +182,18 @@ module Adaptable
     # Returns the name of the class, or the name of the type if the class represents an Object type
     # @return [String] the name of the class or type
     def self.type_name
-      self.name
+      name
     end
 
     # Returns a suitable instance variable name for the _name_ of this instance. The name is created by calling
     # Adapter#instance_var_name and then cached.
     # @return [String] the instance variable name for _name_
     # @api private
-    #
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     def self.self_attr_name
       @attr_name_sym ||= :"@#{instance_var_name(type_name)}"
     end
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 end
 end
-

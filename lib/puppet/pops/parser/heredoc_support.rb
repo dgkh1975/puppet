@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Parser
 module HeredocSupport
@@ -6,8 +8,7 @@ module HeredocSupport
   # Pattern for heredoc `@(endtag[:syntax][/escapes])
   # Produces groups for endtag (group 1), syntax (group 2), and escapes (group 3)
   #
-  PATTERN_HEREDOC = %r{@\(([^:/\r\n\)]+)(?::[[:blank:]]*([a-z][a-zA-Z0-9_+]+)[[:blank:]]*)?(?:/((?:\w|[$])*)[[:blank:]]*)?\)}
-
+  PATTERN_HEREDOC = %r{@\(([^:/\r\n)]+)(?::[[:blank:]]*([a-z][a-zA-Z0-9_+]+)[[:blank:]]*)?(?:/((?:\w|[$])*)[[:blank:]]*)?\)}
 
   def heredoc
     scn = @scanner
@@ -31,7 +32,7 @@ module HeredocSupport
     # Is this a dq string style heredoc? (endtag enclosed in "")
     if endtag =~ /^"(.*)"$/
       dqstring_style = true
-      endtag = $1.strip
+      endtag = ::Regexp.last_match(1).strip
     end
 
     lex_error(Issues::HEREDOC_EMPTY_ENDTAG) unless endtag.length >= 1
@@ -71,7 +72,7 @@ module HeredocSupport
     end
     # offset 0 for the heredoc, and its line number
     heredoc_offset = scn.pos
-    heredoc_line = locator.line_for_offset(heredoc_offset)-1
+    heredoc_line = locator.line_for_offset(heredoc_offset) - 1
 
     # Compute message to emit if there is no end (to make it refer to the opening heredoc position).
     eof_error = create_lex_error(Issues::HEREDOC_WITHOUT_END_TAGGED_LINE)
@@ -80,11 +81,12 @@ module HeredocSupport
     # that terminates the heredoc is found.
 
     # (Endline in EBNF form): WS* ('|' WS*)? ('-' WS*)? endtag WS* \r? (\n|$)
-    endline_pattern = /([[:blank:]]*)(?:([|])[[:blank:]]*)?(?:(\-)[[:blank:]]*)?#{Regexp.escape(endtag)}[[:blank:]]*\r?(?:\n|\z)/
+    endline_pattern = /([[:blank:]]*)(?:([|])[[:blank:]]*)?(?:(-)[[:blank:]]*)?#{Regexp.escape(endtag)}[[:blank:]]*\r?(?:\n|\z)/
     lines = []
-    while !scn.eos? do
+    until scn.eos?
       one_line = scn.scan_until(/(?:\n|\z)/)
       raise eof_error unless one_line
+
       md = one_line.match(endline_pattern)
       if md
         leading      = md[1]
@@ -92,7 +94,6 @@ module HeredocSupport
         remove_break = md[3] == '-'
         # Record position where next heredoc (from same line as current @()) should start scanning for content
         ctx[:newline_jump] = scn.pos
-
 
         # Process captured lines - remove leading, and trailing newline
         # get processed string and index of removed margin/leading size per line
@@ -105,10 +106,10 @@ module HeredocSupport
         # Emit a token that provides the grammar with location information about the lines on which the heredoc
         # content is based.
         enqueue([:SUBLOCATE,
-          LexerSupport::TokenValue.new([:SUBLOCATE,
-            lines, lines.reduce(0) {|size, s| size + s.length} ],
-            heredoc_offset,
-            locator)])
+                 LexerSupport::TokenValue.new([:SUBLOCATE,
+                                               lines, lines.reduce(0) { |size, s| size + s.length }],
+                                              heredoc_offset,
+                                              locator)])
 
         sublexer.lex_unquoted_string(str, locator, resulting_escapes, dqstring_style)
         sublexer.interpolate_uq_to(self)
@@ -136,8 +137,8 @@ module HeredocSupport
       # The specification says that leading space up to the margin marker should be removed, but this implementation
       # simply leaves lines that have text in the margin untouched.
       #
-      processed_lines = lines.collect {|s| s.gsub(leading_pattern, '') }
-      margin_per_line = Array.new(processed_lines.length) {|x| lines[x].length - processed_lines[x].length }
+      processed_lines = lines.collect { |s| s.gsub(leading_pattern, '') }
+      margin_per_line = Array.new(processed_lines.length) { |x| lines[x].length - processed_lines[x].length }
       lines = processed_lines
     else
       # Array with a 0 per line
@@ -147,7 +148,6 @@ module HeredocSupport
     result.gsub!(/\r?\n\z/m, '') if remove_break
     [result, margin_per_line]
   end
-
 end
 end
 end

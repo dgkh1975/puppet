@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 module Puppet
   Puppet::Type.type(:file).ensurable do
@@ -71,7 +72,7 @@ module Puppet
       end
     end
 
-    #aliasvalue(:present, :file)
+    # aliasvalue(:present, :file)
     newvalue(:present, :event => :file_created) do
       # Make a file if they want something, but this will match almost
       # anything.
@@ -83,11 +84,11 @@ module Puppet
       parent = File.dirname(@resource[:path])
       unless Puppet::FileSystem.exist? parent
         raise Puppet::Error,
-          "Cannot create #{@resource[:path]}; parent directory #{parent} does not exist"
+              "Cannot create #{@resource[:path]}; parent directory #{parent} does not exist"
       end
       if mode
-        Puppet::Util.withumask(000) do
-          Dir.mkdir(@resource[:path], symbolic_mode_to_int(mode, 0755, true))
+        Puppet::Util.withumask(0o00) do
+          Dir.mkdir(@resource[:path], symbolic_mode_to_int(mode, 0o755, true))
         end
       else
         Dir.mkdir(@resource[:path])
@@ -96,10 +97,10 @@ module Puppet
       return :directory_created
     end
 
-
     newvalue(:link, :event => :link_created, :required_features => :manages_symlinks) do
       property = resource.property(:target)
       fail "Cannot create a symlink without a target" unless property
+
       property.retrieve
       property.mklink
     end
@@ -112,7 +113,10 @@ module Puppet
 
     munge do |value|
       value = super(value)
-      value,resource[:target] = :link,value unless value.is_a? Symbol
+      unless value.is_a? Symbol
+        resource[:target] = value
+        value = :link
+      end
       resource[:links] = :manage if value == :link and resource[:links] != :follow
       value
     end
@@ -144,12 +148,12 @@ module Puppet
     def check
       basedir = File.dirname(@resource[:path])
 
-      if ! Puppet::FileSystem.exist?(basedir)
+      if !Puppet::FileSystem.exist?(basedir)
         raise Puppet::Error,
-          "Can not create #{@resource.title}; parent directory does not exist"
-      elsif ! FileTest.directory?(basedir)
+              "Can not create #{@resource.title}; parent directory does not exist"
+      elsif !FileTest.directory?(basedir)
         raise Puppet::Error,
-          "Can not create #{@resource.title}; #{dirname} is not a directory"
+              "Can not create #{@resource.title}; #{dirname} is not a directory"
       end
     end
 
@@ -160,36 +164,31 @@ module Puppet
         return true
       end
 
-      if self.should == :present
-        return !(currentvalue.nil? or currentvalue == :absent)
+      if should == :present
+        !(currentvalue.nil? or currentvalue == :absent)
       else
-        return super(currentvalue)
+        super(currentvalue)
       end
     end
 
     def retrieve
       stat = @resource.stat
       if stat
-        return stat.ftype.intern
+        stat.ftype.intern
+      elsif should == :false
+        :false
       else
-        if self.should == :false
-          return :false
-        else
-          return :absent
-        end
+        :absent
       end
     end
 
     def sync
-      @resource.remove_existing(self.should)
-      if self.should == :absent
+      @resource.remove_existing(should)
+      if should == :absent
         return :file_removed
       end
 
-      event = super
-
-      event
+      super
     end
   end
 end
-

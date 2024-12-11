@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet'
 require 'fiddle'
 
@@ -21,7 +23,7 @@ class Puppet::Util::AtFork::Solaris
 
   {
     'libcontract.so.1' => [
-      #function name,            return value type, parameter types, ...
+      # function name,            return value type, parameter types, ...
       [:ct_ctl_abandon,          Fiddle::TYPE_INT,  Fiddle::TYPE_INT],
       [:ct_tmpl_activate,        Fiddle::TYPE_INT,  Fiddle::TYPE_INT],
       [:ct_tmpl_clear,           Fiddle::TYPE_INT,  Fiddle::TYPE_INT],
@@ -34,19 +36,19 @@ class Puppet::Util::AtFork::Solaris
       [:ct_status_read,          Fiddle::TYPE_INT,  Fiddle::TYPE_INT, Fiddle::TYPE_INT, Fiddle::TYPE_VOIDP],
 
       [:ct_status_get_id,        Fiddle::TYPE_INT,  Fiddle::TYPE_VOIDP],
-      [:ct_status_free,          Fiddle::TYPE_VOID, Fiddle::TYPE_VOIDP],
+      [:ct_status_free,          Fiddle::TYPE_VOID, Fiddle::TYPE_VOIDP]
     ],
   }.each do |library, functions|
     libhandle = Fiddle::Handle.new(library)
 
     functions.each do |f|
-      define_method f[0], Fiddle::Function.new(libhandle[f[0].to_s], f[2..-1], f[1]).method(:call).to_proc
+      define_method f[0], Fiddle::Function.new(libhandle[f[0].to_s], f[2..], f[1]).method(:call).to_proc
     end
   end
 
-  CTFS_PR_ROOT = File.join('', %w(system contract process))
-  CTFS_PR_TEMPLATE = File.join(CTFS_PR_ROOT, %q(template))
-  CTFS_PR_LATEST = File.join(CTFS_PR_ROOT, %q(latest))
+  CTFS_PR_ROOT = File.join('', %w[system contract process])
+  CTFS_PR_TEMPLATE = File.join(CTFS_PR_ROOT, 'template')
+  CTFS_PR_LATEST = File.join(CTFS_PR_ROOT, 'latest')
 
   CT_PR_PGRPONLY = 0x4
   CT_PR_EV_HWERR = 0x20
@@ -61,27 +63,25 @@ class Puppet::Util::AtFork::Solaris
   end
 
   def activate_new_contract_template
+    tmpl = File.new(CTFS_PR_TEMPLATE, File::RDWR)
+
     begin
-      tmpl = File.open(CTFS_PR_TEMPLATE, File::RDWR)
+      tmpl_fd = tmpl.fileno
 
-      begin
-        tmpl_fd = tmpl.fileno
+      raise_if_error { ct_pr_tmpl_set_param(tmpl_fd, CT_PR_PGRPONLY) }
+      raise_if_error { ct_pr_tmpl_set_fatal(tmpl_fd, CT_PR_EV_HWERR) }
+      raise_if_error { ct_tmpl_set_critical(tmpl_fd, 0) }
+      raise_if_error { ct_tmpl_set_informative(tmpl_fd, CT_PR_EV_HWERR) }
 
-        raise_if_error { ct_pr_tmpl_set_param(tmpl_fd, CT_PR_PGRPONLY) }
-        raise_if_error { ct_pr_tmpl_set_fatal(tmpl_fd, CT_PR_EV_HWERR) }
-        raise_if_error { ct_tmpl_set_critical(tmpl_fd, 0) }
-        raise_if_error { ct_tmpl_set_informative(tmpl_fd, CT_PR_EV_HWERR) }
-
-        raise_if_error { ct_tmpl_activate(tmpl_fd) }
-      rescue
-        tmpl.close
-        raise
-      end
-
-      @tmpl = tmpl
-    rescue => detail
-      Puppet.log_exception(detail, _('Failed to activate a new process contract template'))
+      raise_if_error { ct_tmpl_activate(tmpl_fd) }
+    rescue
+      tmpl.close
+      raise
     end
+
+    @tmpl = tmpl
+  rescue => detail
+    Puppet.log_exception(detail, _('Failed to activate a new process contract template'))
   end
 
   def deactivate_contract_template(parent)
@@ -106,24 +106,22 @@ class Puppet::Util::AtFork::Solaris
   end
 
   def get_latest_child_contract_id
+    stat = File.new(CTFS_PR_LATEST, File::RDONLY)
+
     begin
-      stat = File.open(CTFS_PR_LATEST, File::RDONLY)
+      stathdl = Fiddle::Pointer.new(0)
 
-      begin
-        stathdl = Fiddle::Pointer.new(0)
-
-        raise_if_error { ct_status_read(stat.fileno, CTD_COMMON, stathdl.ref) }
-        ctid = ct_status_get_id(stathdl)
-        ct_status_free(stathdl)
-      ensure
-        stat.close
-      end
-
-      ctid
-    rescue => detail
-      Puppet.log_exception(detail, _('Failed to get latest child process contract id'))
-      nil
+      raise_if_error { ct_status_read(stat.fileno, CTD_COMMON, stathdl.ref) }
+      ctid = ct_status_get_id(stathdl)
+      ct_status_free(stathdl)
+    ensure
+      stat.close
     end
+
+    ctid
+  rescue => detail
+    Puppet.log_exception(detail, _('Failed to get latest child process contract id'))
+    nil
   end
 
   def abandon_latest_child_contract
@@ -131,7 +129,7 @@ class Puppet::Util::AtFork::Solaris
     return if ctid.nil?
 
     begin
-      ctl = File.open(File.join(CTFS_PR_ROOT, ctid.to_s, %q(ctl)), File::WRONLY)
+      ctl = File.new(File.join(CTFS_PR_ROOT, ctid.to_s, 'ctl'), File::WRONLY)
 
       begin
         raise_if_error { ct_ctl_abandon(ctl.fileno) }

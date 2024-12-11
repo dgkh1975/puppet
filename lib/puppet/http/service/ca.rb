@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The CA service is used to handle certificate related REST requests.
 #
 # @api public
@@ -6,7 +8,7 @@ class Puppet::HTTP::Service::Ca < Puppet::HTTP::Service
   HEADERS = { 'Accept' => 'text/plain' }.freeze
 
   # @return [String] default API for the ca service
-  API = '/puppet-ca/v1'.freeze
+  API = '/puppet-ca/v1'
 
   # Use `Puppet::HTTP::Session.route_to(:ca)` to create or get an instance of this class.
   #
@@ -27,17 +29,22 @@ class Puppet::HTTP::Service::Ca < Puppet::HTTP::Service
   # Submit a GET request to retrieve the named certificate from the server.
   #
   # @param [String] name name of the certificate to request
+  # @param [Time] if_modified_since If not nil, only download the cert if it has
+  #   been modified since the specified time.
   # @param [Puppet::SSL::SSLContext] ssl_context
   #
   # @return [Array<Puppet::HTTP::Response, String>] An array containing the
   #   request response and the stringified body of the request response
   #
   # @api public
-  def get_certificate(name, ssl_context: nil)
+  def get_certificate(name, if_modified_since: nil, ssl_context: nil)
+    headers = add_puppet_headers(HEADERS)
+    headers['If-Modified-Since'] = if_modified_since.httpdate if if_modified_since
+
     response = @client.get(
       with_base_url("/certificate/#{name}"),
-      headers: add_puppet_headers(HEADERS),
-      options: {ssl_context: ssl_context}
+      headers: headers,
+      options: { ssl_context: ssl_context }
     )
 
     process_response(response)
@@ -63,7 +70,7 @@ class Puppet::HTTP::Service::Ca < Puppet::HTTP::Service
     response = @client.get(
       with_base_url("/certificate_revocation_list/ca"),
       headers: headers,
-      options: {ssl_context: ssl_context}
+      options: { ssl_context: ssl_context }
     )
 
     process_response(response)
@@ -97,5 +104,30 @@ class Puppet::HTTP::Service::Ca < Puppet::HTTP::Service
     process_response(response)
 
     response
+  end
+
+  # Submit a POST request to send a certificate renewal request to the server
+  #
+  # @param [Puppet::SSL::SSLContext] ssl_context
+  #
+  # @return [Array<Puppet::HTTP::Response, String>] The request response
+  #
+  # @api public
+  def post_certificate_renewal(ssl_context)
+    headers = add_puppet_headers(HEADERS)
+    headers['Content-Type'] = 'text/plain'
+
+    response = @client.post(
+      with_base_url('/certificate_renewal'),
+      '', # Puppet::HTTP::Client.post requires a body, the API endpoint does not
+      headers: headers,
+      options: { ssl_context: ssl_context }
+    )
+
+    raise ArgumentError, _('SSL context must contain a client certificate.') unless ssl_context.client_cert
+
+    process_response(response)
+
+    [response, response.body.to_s]
   end
 end

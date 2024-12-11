@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/indirector/code'
 require_relative '../../../puppet/file_bucket/file'
 require_relative '../../../puppet/util/checksums'
@@ -16,6 +18,7 @@ module Puppet::FileBucketFile
       # If filebucket mode is 'list'
       if request.options[:list_all]
         return nil unless ::File.exist?(request.options[:bucket_path])
+
         return list(request)
       end
       checksum, files_original_path = request_to_checksum_and_path(request)
@@ -27,9 +30,10 @@ module Puppet::FileBucketFile
           other_contents_file = path_for(request.options[:bucket_path], request.options[:diff_with], 'contents')
           raise _("could not find diff_with %{diff}") % { diff: request.options[:diff_with] } unless Puppet::FileSystem.exist?(other_contents_file)
           raise _("Unable to diff on this platform") unless Puppet[:diff] != ""
-          return diff(Puppet::FileSystem.path_string(contents_file), Puppet::FileSystem.path_string(other_contents_file))
+
+          diff(Puppet::FileSystem.path_string(contents_file), Puppet::FileSystem.path_string(other_contents_file))
         else
-          #TRANSLATORS "FileBucket" should not be translated
+          # TRANSLATORS "FileBucket" should not be translated
           Puppet.info _("FileBucket read %{checksum}") % { checksum: checksum }
           model.new(Puppet::FileSystem.binread(contents_file))
         end
@@ -56,35 +60,35 @@ module Puppet::FileBucketFile
         raise Puppet::Error, _("Error while parsing 'fromdate'")
       end
       # Setting hash's default value to [], needed by the following loop
-      bucket = Hash.new {[]}
-      msg = ""
+      bucket = Hash.new { [] }
+      msg = ''.dup
       # Get all files with mtime between 'from' and 'to'
       Pathname.new(request.options[:bucket_path]).find { |item|
-        if item.file? and item.basename.to_s == "paths"
-          filenames = item.read.strip.split("\n")
-          filestat = Time.parse(item.stat.mtime.to_s)
-          if from <= filestat and filestat <= to
-            filenames.each do |filename|
-              bucket[filename] += [[ item.stat.mtime , item.parent.basename ]]
-            end
-          end
+        next unless item.file? and item.basename.to_s == "paths"
+
+        filenames = item.read.strip.split("\n")
+        filestat = Time.parse(item.stat.mtime.to_s)
+        next unless from <= filestat and filestat <= to
+
+        filenames.each do |filename|
+          bucket[filename] += [[item.stat.mtime, item.parent.basename]]
         end
       }
       # Sort the results
-      bucket.each { |filename, contents|
+      bucket.each { |_filename, contents|
         contents.sort_by! do |item|
           # NOTE: Ruby 2.4 may reshuffle item order even if the keys in sequence are sorted already
           item[0]
         end
       }
       # Build the output message. Sorted by names then by dates
-      bucket.sort.each { |filename,contents|
+      bucket.sort.each { |filename, contents|
         contents.each { |mtime, chksum|
           date = mtime.strftime("%F %T")
           msg += "#{chksum} #{date} #{filename}\n"
         }
       }
-      return model.new(msg)
+      model.new(msg)
     end
 
     def head(request)
@@ -121,18 +125,19 @@ module Puppet::FileBucketFile
       # given its possible that request.options[:bucket_path] or Puppet[:bucketdir]
       # contained characters in an encoding that are not represented the
       # same way when the bytes are decoded as UTF-8, continue using system encoding
-      Puppet::FileSystem.open(paths_file, 0640, 'a+:external') do |f|
+      Puppet::FileSystem.open(paths_file, 0o640, 'a+:external') do |f|
         path_match(f, files_original_path)
       end
     end
 
     def path_match(file_handle, files_original_path)
       return true unless files_original_path # if no path was provided, it's a match
+
       file_handle.rewind
       file_handle.each_line do |line|
         return true if line.chomp == files_original_path
       end
-      return false
+      false
     end
 
     # @param bucket_file [Puppet::FileBucket::File] IO object representing
@@ -147,7 +152,7 @@ module Puppet::FileBucketFile
     #   existing and new backup
     # @api private
     def save_to_disk(bucket_file, files_original_path, contents_file, paths_file)
-      Puppet::Util.withumask(0007) do
+      Puppet::Util.withumask(0o007) do
         unless Puppet::FileSystem.dir_exist?(paths_file)
           Puppet::FileSystem.dir_mkpath(paths_file)
         end
@@ -156,14 +161,14 @@ module Puppet::FileBucketFile
         # given its possible that request.options[:bucket_path] or Puppet[:bucketdir]
         # contained characters in an encoding that are not represented the
         # same way when the bytes are decoded as UTF-8, continue using system encoding
-        Puppet::FileSystem.exclusive_open(paths_file, 0640, 'a+:external') do |f|
+        Puppet::FileSystem.exclusive_open(paths_file, 0o640, 'a+:external') do |f|
           if Puppet::FileSystem.exist?(contents_file)
             if verify_identical_file(contents_file, bucket_file)
-              #TRANSLATORS "FileBucket" should not be translated
+              # TRANSLATORS "FileBucket" should not be translated
               Puppet.info _("FileBucket got a duplicate file %{file_checksum}") % { file_checksum: bucket_file.checksum }
               # Don't touch the contents file on Windows, since we can't update the
               # mtime of read-only files there.
-              if !Puppet::Util::Platform.windows?
+              unless Puppet::Util::Platform.windows?
                 Puppet::FileSystem.touch(contents_file)
               end
             elsif contents_file_matches_checksum?(contents_file, bucket_file.checksum_data, bucket_file.checksum_type)
@@ -173,10 +178,10 @@ module Puppet::FileBucketFile
               # needed, but ask the user to validate.
               # Note: Don't print the full path to the bucket file in the
               # exception to avoid disclosing file system layout on server.
-              #TRANSLATORS "FileBucket" should not be translated
+              # TRANSLATORS "FileBucket" should not be translated
               Puppet.err(_("Unable to verify existing FileBucket backup at '%{path}'.") % { path: contents_file.to_path })
               raise Puppet::FileBucket::BucketError, _("Existing backup and new file have different content but same checksum, %{value}. Verify existing backup and remove if incorrect.") %
-                { value: bucket_file.checksum }
+                                                     { value: bucket_file.checksum }
             else
               # PUP-1334 If the contents_file exists but does not match its
               # checksum, our backup has been corrupted. Warn about overwriting
@@ -197,13 +202,15 @@ module Puppet::FileBucketFile
     end
 
     def request_to_checksum_and_path(request)
-      checksum_type, checksum, path = request.key.split(/\//, 3)
+      checksum_type, checksum, path = request.key.split(%r{/}, 3)
       if path == '' # Treat "md5/<checksum>/" like "md5/<checksum>"
         path = nil
       end
       raise ArgumentError, _("Unsupported checksum type %{checksum_type}") % { checksum_type: checksum_type.inspect } if checksum_type != Puppet[:digest_algorithm]
+
       expected = method(checksum_type + "_hex_length").call
       raise _("Invalid checksum %{checksum}") % { checksum: checksum.inspect } if checksum !~ /^[0-9a-f]{#{expected}}$/
+
       [checksum, path]
     end
 
@@ -227,7 +234,7 @@ module Puppet::FileBucketFile
     # @api private
     def verify_identical_file(contents_file, bucket_file)
       (bucket_file.to_binary.bytesize == Puppet::FileSystem.size(contents_file)) &&
-        (bucket_file.stream() {|s| Puppet::FileSystem.compare_stream(contents_file, s) })
+        (bucket_file.stream() { |s| Puppet::FileSystem.compare_stream(contents_file, s) })
     end
 
     # @param contents_file [Pathname] Opaque file path to intended backup
@@ -250,13 +257,12 @@ module Puppet::FileBucketFile
     # @return [void]
     # @api private
     def copy_bucket_file_to_contents_file(contents_file, bucket_file)
-      Puppet::FileSystem.replace_file(contents_file, 0440) do |of|
+      Puppet::FileSystem.replace_file(contents_file, 0o440) do |of|
         # PUP-1044 writes all of the contents
         bucket_file.stream() do |src|
           FileUtils.copy_stream(src, of)
         end
       end
     end
-
   end
 end

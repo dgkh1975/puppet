@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/profiler/logging'
 
 # A profiler implementation that measures the number of seconds a segment of
@@ -11,19 +13,19 @@ class Puppet::Util::Profiler::WallClock < Puppet::Util::Profiler::Logging
   end
 
   def do_finish(context, description, metric_id)
-    {:time => context.stop,
-     :msg => _("took %{context} seconds") % { context: context }}
+    { :time => context.stop,
+      :msg => _("took %{context} seconds") % { context: context } }
   end
 
   class Timer
     FOUR_DECIMAL_DIGITS = '%0.4f'
 
     def initialize
-      @start = Time.now
+      @start = Process.clock_gettime(Process::CLOCK_MONOTONIC, :float_second)
     end
 
     def stop
-      @time = Time.now - @start
+      @time = Process.clock_gettime(Process::CLOCK_MONOTONIC, :float_second) - @start
       @time
     end
 
@@ -32,4 +34,3 @@ class Puppet::Util::Profiler::WallClock < Puppet::Util::Profiler::Logging
     end
   end
 end
-

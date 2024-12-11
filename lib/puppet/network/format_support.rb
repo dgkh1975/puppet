@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/network/format_handler'
 
 # Provides network serialization support when included
@@ -11,21 +13,21 @@ module Puppet::Network::FormatSupport
     def convert_from(format, data)
       get_format(format).intern(self, data)
     rescue => err
-      #TRANSLATORS "intern" is a function name and should not be translated
+      # TRANSLATORS "intern" is a function name and should not be translated
       raise Puppet::Network::FormatHandler::FormatError, _("Could not intern from %{format}: %{err}") % { format: format, err: err }, err.backtrace
     end
 
     def convert_from_multiple(format, data)
       get_format(format).intern_multiple(self, data)
     rescue => err
-      #TRANSLATORS "intern_multiple" is a function name and should not be translated
+      # TRANSLATORS "intern_multiple" is a function name and should not be translated
       raise Puppet::Network::FormatHandler::FormatError, _("Could not intern_multiple from %{format}: %{err}") % { format: format, err: err }, err.backtrace
     end
 
     def render_multiple(format, instances)
       get_format(format).render_multiple(instances)
     rescue => err
-      #TRANSLATORS "render_multiple" is a function name and should not be translated
+      # TRANSLATORS "render_multiple" is a function name and should not be translated
       raise Puppet::Network::FormatHandler::FormatError, _("Could not render_multiple to %{format}: %{err}") % { format: format, err: err }, err.backtrace
     end
 
@@ -66,7 +68,7 @@ module Puppet::Network::FormatSupport
     end
 
     def friendly_name
-      if self.respond_to? :indirection
+      if respond_to? :indirection
         indirection.name
       else
         self
@@ -110,7 +112,7 @@ module Puppet::Network::FormatSupport
 
     self.class.get_format(format).render(self)
   rescue => err
-    #TRANSLATORS "render" is a function name and should not be translated
+    # TRANSLATORS "render" is a function name and should not be translated
     raise Puppet::Network::FormatHandler::FormatError, _("Could not render to %{format}: %{err}") % { format: format, err: err }, err.backtrace
   end
 
@@ -119,7 +121,7 @@ module Puppet::Network::FormatSupport
 
     self.class.get_format(format).mime
   rescue => err
-    #TRANSLATORS "mime" is a function name and should not be translated
+    # TRANSLATORS "mime" is a function name and should not be translated
     raise Puppet::Network::FormatHandler::FormatError, _("Could not mime to %{format}: %{err}") % { format: format, err: err }, err.backtrace
   end
 
@@ -136,4 +138,3 @@ module Puppet::Network::FormatSupport
   # If the method exists it will be called from to_msgpack and other serialization methods.
   # @return [Hash]
 end
-

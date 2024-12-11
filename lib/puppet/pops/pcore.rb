@@ -1,21 +1,23 @@
+# frozen_string_literal: true
+
 require 'uri'
 
 module Puppet::Pops
 module Pcore
   include Types::PuppetObject
 
-  TYPE_URI_RX = Types::TypeFactory.regexp(URI.regexp)
+  TYPE_URI_RX = Types::TypeFactory.regexp(URI::DEFAULT_PARSER.make_regexp)
   TYPE_URI = Types::TypeFactory.pattern(TYPE_URI_RX)
   TYPE_URI_ALIAS = Types::PTypeAliasType.new('Pcore::URI', nil, TYPE_URI)
   TYPE_SIMPLE_TYPE_NAME = Types::TypeFactory.pattern(/\A[A-Z]\w*\z/)
-  TYPE_QUALIFIED_REFERENCE = Types::TypeFactory.pattern(/\A[A-Z][\w]*(?:::[A-Z][\w]*)*\z/)
+  TYPE_QUALIFIED_REFERENCE = Types::TypeFactory.pattern(/\A[A-Z]\w*(?:::[A-Z]\w*)*\z/)
   TYPE_MEMBER_NAME = Types::PPatternType.new([Types::PRegexpType.new(Patterns::PARAM_NAME)])
 
-  KEY_PCORE_URI = 'pcore_uri'.freeze
-  KEY_PCORE_VERSION = 'pcore_version'.freeze
+  KEY_PCORE_URI = 'pcore_uri'
+  KEY_PCORE_VERSION = 'pcore_version'
 
   PCORE_URI = 'http://puppet.com/2016.1/pcore'
-  PCORE_VERSION = SemanticPuppet::Version.new(1,0,0)
+  PCORE_VERSION = SemanticPuppet::Version.new(1, 0, 0)
   PARSABLE_PCORE_VERSIONS = SemanticPuppet::VersionRange.parse('1.x')
 
   RUNTIME_NAME_AUTHORITY = 'http://puppet.com/2016.1/runtime'
@@ -82,7 +84,6 @@ module Pcore
         }
       }
     PUPPET
-
   end
 
   # Create and register a new `Object` type in the Puppet Type System and map it to an implementation class

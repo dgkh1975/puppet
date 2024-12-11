@@ -241,7 +241,7 @@ module Puppet
               # Test agents configured to use directory environments (affects environment
               # loading on the agent, especially with regards to requests/node environment)
               args << "--environmentpath='$confdir/environments'" if directory_environments && agent != master
-              on(agent, puppet("agent", *args), :acceptable_exit_codes => (0..255)) do
+              on(agent, puppet("agent", *args), :acceptable_exit_codes => (0..255)) do |result|
                 agent_results[:puppet_agent] = result
               end
 
@@ -249,25 +249,13 @@ module Puppet
               args << ["--environment", environment] if environment
 
               step "print puppet config for #{description} environment"
-              on(master, puppet(*(["config", "print", "basemodulepath", "modulepath", "manifest", "config_version", config_print] + args)), :acceptable_exit_codes => (0..255)) do
+              on(master, puppet(*(["config", "print", "basemodulepath", "modulepath", "manifest", "config_version", config_print] + args)), :acceptable_exit_codes => (0..255)) do |result|
                 agent_results[:puppet_config] = result
               end
 
               step "puppet apply using #{description} environment"
-              on(master, puppet(*(["apply", '-e', '"include testing_mod"'] + args)), :acceptable_exit_codes => (0..255)) do
+              on(master, puppet(*(["apply", '-e', '"include testing_mod"'] + args)), :acceptable_exit_codes => (0..255)) do |result|
                 agent_results[:puppet_apply] = result
-              end
-
-              # Be aware that Puppet Module Tool will create the module directory path if it
-              # does not exist.  So these tests should be run last...
-              step "install a module into environment"
-              on(master, puppet(*(["module", "install", "pmtacceptance-nginx"] + args)), :acceptable_exit_codes => (0..255)) do
-                agent_results[:puppet_module_install] = result
-              end
-
-              step "uninstall a module from #{description} environment"
-              on(master, puppet(*(["module", "uninstall", "pmtacceptance-nginx"] + args)), :acceptable_exit_codes => (0..255)) do
-                agent_results[:puppet_module_uninstall] = result
               end
             end
           end

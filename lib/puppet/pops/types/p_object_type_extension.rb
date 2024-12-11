@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
-
 # Base class for Parameterized Object implementations. The wrapper impersonates the base
 # object and extends it with methods to filter assignable types and instances based on parameter
 # values.
@@ -11,13 +12,12 @@ class PObjectTypeExtension < PAnyType
 
   def self.register_ptype(loader, ir)
     create_ptype(loader, ir, 'AnyType',
-      'base_type' => {
-        KEY_TYPE => PTypeType::DEFAULT
-      },
-      'init_parameters' => {
-        KEY_TYPE => PArrayType::DEFAULT
-      }
-    )
+                 'base_type' => {
+                   KEY_TYPE => PTypeType::DEFAULT
+                 },
+                 'init_parameters' => {
+                   KEY_TYPE => PArrayType::DEFAULT
+                 })
   end
 
   attr_reader :base_type, :parameters
@@ -53,6 +53,7 @@ class PObjectTypeExtension < PAnyType
   def initialize(base_type, init_parameters)
     pts = base_type.type_parameters(true)
     raise Puppet::ParseError, _('The %{label}-Type cannot be parameterized using []') % { label: base_type.label } if pts.empty?
+
     @base_type = base_type
 
     named_args = init_parameters.size == 1 && init_parameters[0].is_a?(Hash)
@@ -69,6 +70,7 @@ class PObjectTypeExtension < PAnyType
         if tp.nil?
           raise Puppet::ParseError, _("'%{pn}' is not a known type parameter for %{label}-Type") % { pn: pn, label: base_type.label }
         end
+
         by_name[pn] = check_param(tp, pv) unless pv == :default
       end
     else
@@ -82,6 +84,7 @@ class PObjectTypeExtension < PAnyType
     if by_name.empty?
       raise Puppet::ParseError, _('The %{label}-Type cannot be parameterized using an empty parameter list') % { label: base_type.label }
     end
+
     @parameters = by_name
   end
 
@@ -206,12 +209,10 @@ class PObjectTypeExtension < PAnyType
   def test_instance?(o, guard)
     eval = Parser::EvaluatingParser.singleton.evaluator
     @parameters.keys.all? do |pn|
-      begin
-        m = o.public_method(pn)
-        m.arity == 0 ? eval.match?(m.call, @parameters[pn]) : false
-      rescue NameError
-        false
-      end
+      m = o.public_method(pn)
+      m.arity == 0 ? eval.match?(m.call, @parameters[pn]) : false
+    rescue NameError
+      false
     end
   end
 

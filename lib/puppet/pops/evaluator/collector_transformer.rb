@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Evaluator
 class CollectorTransformer
-
   def initialize
     @@query_visitor    ||= Visitor.new(nil, "query", 1, 1)
     @@match_visitor    ||= Visitor.new(nil, "match", 1, 1)
@@ -10,10 +11,11 @@ class CollectorTransformer
   end
 
   def transform(o, scope)
-    #TRANSLATORS 'CollectExpression' is a class name and should not be translated
+    # TRANSLATORS 'CollectExpression' is a class name and should not be translated
     raise ArgumentError, _("Expected CollectExpression") unless o.is_a? Model::CollectExpression
 
     raise "LHS is not a type" unless o.type_expr.is_a? Model::QualifiedReference
+
     type = o.type_expr.value().downcase()
 
     if type == 'class'
@@ -24,13 +26,13 @@ class CollectorTransformer
 
     fail "Resource type #{type} doesn't exist" unless resource_type
 
-    if !o.operations.empty?
+    unless o.operations.empty?
       overrides = {
-        :parameters => o.operations.map{ |x| @@evaluator.evaluate(x, scope)}.flatten,
-        :file       => o.file,
-        :line       => o.line,
-        :source     => scope.source,
-        :scope      => scope
+        :parameters => o.operations.map { |x| @@evaluator.evaluate(x, scope) }.flatten,
+        :file => o.file,
+        :line => o.line,
+        :source => scope.source,
+        :scope => scope
       }
     end
 
@@ -49,7 +51,7 @@ class CollectorTransformer
     newcoll
   end
 
-protected
+  protected
 
   def query(o, scope)
     @@query_visitor.visit_this_1(self, o, scope)
@@ -99,10 +101,11 @@ protected
         if right_code.is_a?(Array)
           tags = right_code
         else
-          tags = [ right_code ]
+          tags = [right_code]
         end
         tags = tags.collect do |t|
           raise ArgumentError, _('Cannot transform a number to a tag') if t.is_a?(Numeric)
+
           t.to_s.downcase
         end
         proc do |resource|
@@ -161,7 +164,7 @@ protected
   end
 
   def query_ParenthesizedExpression(o, scope)
-   query(o.expr, scope)
+    query(o.expr, scope)
   end
 
   def query_Object(o, scope)
@@ -179,19 +182,19 @@ protected
   def match_AndExpression(o, scope)
     left_match = match(o.left_expr, scope)
     right_match = match(o.right_expr, scope)
-    return [left_match, 'and', right_match]
+    [left_match, 'and', right_match]
   end
 
   def match_OrExpression(o, scope)
     left_match = match(o.left_expr, scope)
     right_match = match(o.right_expr, scope)
-    return [left_match, 'or', right_match]
+    [left_match, 'or', right_match]
   end
 
   def match_ComparisonExpression(o, scope)
     left_match = match(o.left_expr, scope)
     right_match = match(o.right_expr, scope)
-    return [left_match, o.operator.to_s, right_match]
+    [left_match, o.operator.to_s, right_match]
   end
 
   def match_VariableExpression(o, scope)
@@ -223,7 +226,7 @@ protected
   end
 
   def match_ParenthesizedExpression(o, scope)
-   match(o.expr, scope)
+    match(o.expr, scope)
   end
 
   def match_Object(o, scope)

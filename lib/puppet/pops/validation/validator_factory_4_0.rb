@@ -1,10 +1,10 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Validation
 # Configures validation suitable for 4.0
 #
 class ValidatorFactory_4_0 < Factory
-  Issues = Issues
-
   # Produces the checker to use
   def checker diagnostic_producer
     if Puppet[:tasks]
@@ -36,6 +36,8 @@ class ValidatorFactory_4_0 < Factory
     p[Issues::NAME_WITH_HYPHEN]               = :error
     p[Issues::EMPTY_RESOURCE_SPECIALIZATION]  = :ignore
     p[Issues::CLASS_NOT_VIRTUALIZABLE]        = :error
+
+    p[Issues::ILLEGAL_NONLITERAL_PARAMETER_TYPE] = :deprecation
     p
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector'
 require_relative '../../puppet/indirector/errors'
 require_relative '../../puppet/indirector/indirection'
@@ -22,7 +24,7 @@ class Puppet::Indirector::Terminus
 
     # Convert a constant to a short name.
     def const2name(const)
-      const.sub(/^[A-Z]/) { |i| i.downcase }.gsub(/[A-Z]/) { |i| "_#{i.downcase}" }.intern
+      const.sub(/^[A-Z]/, &:downcase).gsub(/[A-Z]/) { |i| "_#{i.downcase}" }.intern
     end
 
     # Look up the indirection if we were only provided a name.
@@ -51,10 +53,11 @@ class Puppet::Indirector::Terminus
       if longname =~ /#<Class/
         raise Puppet::DevError, _("Terminus subclasses must have associated constants")
       end
+
       names = longname.split("::")
 
       # Convert everything to a lower-case symbol, converting camelcase to underscore word separation.
-      name = names.pop.sub(/^[A-Z]/) { |i| i.downcase }.gsub(/[A-Z]/) { |i| "_#{i.downcase}" }.intern
+      name = names.pop.sub(/^[A-Z]/, &:downcase).gsub(/[A-Z]/) { |i| "_#{i.downcase}" }.intern
 
       subclass.name = name
 
@@ -71,7 +74,8 @@ class Puppet::Indirector::Terminus
 
       # This subclass is specifically associated with an indirection.
       raise("Invalid name #{longname}") unless names.length > 0
-      processed_name = names.pop.sub(/^[A-Z]/) { |i| i.downcase }.gsub(/[A-Z]/) { |i| "_#{i.downcase}" }
+
+      processed_name = names.pop.sub(/^[A-Z]/, &:downcase).gsub(/[A-Z]/) { |i| "_#{i.downcase}" }
 
       if processed_name.empty?
         raise Puppet::DevError, _("Could not discern indirection model from class constant")
@@ -97,7 +101,7 @@ class Puppet::Indirector::Terminus
 
     # Convert a short name to a constant.
     def name2const(name)
-      name.to_s.capitalize.sub(/_(.)/) { |i| $1.upcase }
+      name.to_s.capitalize.sub(/_(.)/) { |_i| ::Regexp.last_match(1).upcase }
     end
 
     # Register a class, probably autoloaded.

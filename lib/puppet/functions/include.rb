@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Declares one or more classes, causing the resources in them to be
 # evaluated and added to the catalog. Accepts a class name, an array of class
 # names, or a comma-separated list of class names.
@@ -40,11 +42,12 @@ Puppet::Functions.create_function(:include, Puppet::Functions::InternalFunction)
     if Puppet[:tasks]
       raise Puppet::ParseErrorWithIssue.from_issue_and_stack(
         Puppet::Pops::Issues::CATALOG_OPERATION_NOT_SUPPORTED_WHEN_SCRIPTING,
-        {:operation => 'include'})
+        { :operation => 'include' }
+      )
     end
 
     classes = scope.transform_and_assert_classnames(classes.flatten)
-    result = classes.map {|name| Puppet::Pops::Types::TypeFactory.host_class(name) }
+    result = classes.map { |name| Puppet::Pops::Types::TypeFactory.host_class(name) }
     scope.compiler.evaluate_classes(classes, scope, false)
 
     # Result is an Array[Class, 1, n] which allows chaining other operations

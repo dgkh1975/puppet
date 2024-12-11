@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The RubyTypeInstantiator instantiates a data type from the ruby source
 # that calls Puppet::DataTypes.create_type.
 #
@@ -13,19 +15,21 @@ class Puppet::Pops::Loader::RubyDataTypeInstantiator
   # @return [Puppet::Pops::Types::PAnyType] - an instantiated data type associated with the given loader
   #
   def self.create(loader, typed_name, source_ref, ruby_code_string)
-    unless ruby_code_string.is_a?(String) && ruby_code_string =~ /Puppet\:\:DataTypes\.create_type/
+    unless ruby_code_string.is_a?(String) && ruby_code_string =~ /Puppet::DataTypes\.create_type/
       raise ArgumentError, _("The code loaded from %{source_ref} does not seem to be a Puppet 5x API data type - no create_type call.") % { source_ref: source_ref }
     end
+
     # make the private loader available in a binding to allow it to be passed on
     loader_for_type = loader.private_loader
     here = get_binding(loader_for_type)
-    created = eval(ruby_code_string, here, source_ref, 1)
+    created = eval(ruby_code_string, here, source_ref, 1) # rubocop:disable Security/Eval
     unless created.is_a?(Puppet::Pops::Types::PAnyType)
       raise ArgumentError, _("The code loaded from %{source_ref} did not produce a data type when evaluated. Got '%{klass}'") % { source_ref: source_ref, klass: created.class }
     end
     unless created.name.casecmp(typed_name.name) == 0
       raise ArgumentError, _("The code loaded from %{source_ref} produced mis-matched name, expected '%{type_name}', got %{created_name}") % { source_ref: source_ref, type_name: typed_name.name, created_name: created.name }
     end
+
     created
   end
 

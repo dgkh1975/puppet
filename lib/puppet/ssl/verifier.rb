@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/ssl'
 
 # Verify an SSL connection.
 #
 # @api private
 class Puppet::SSL::Verifier
-
   FIVE_MINUTES_AS_SECONDS = 5 * 60
 
   attr_reader :ssl_context
@@ -29,7 +30,7 @@ class Puppet::SSL::Verifier
   # @api private
   def reusable?(verifier)
     verifier.instance_of?(self.class) &&
-      verifier.ssl_context.object_id == @ssl_context.object_id
+      verifier.ssl_context.equal?(@ssl_context) # same object?
   end
 
   # Configure the `http` connection based on the current `ssl_context`.
@@ -117,7 +118,9 @@ class Puppet::SSL::Verifier
         return false
       end
 
-    when OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH # new in ruby-openssl 2.2.0/ruby 3.0
+    # ruby-openssl#74ef8c0cc56b840b772240f2ee2b0fc0aafa2743 now sets the
+    # store_context error when the cert is mismatched
+    when OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH
       @last_error = Puppet::SSL::CertMismatchError.new(peer_cert, @hostname)
       return false
 

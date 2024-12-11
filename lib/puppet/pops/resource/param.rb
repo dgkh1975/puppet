@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # An implementation of the interface Puppet::Resource
 # that adapts the 3.x compiler and catalog expectations on
 # a resource instance. This instance is backed by a
@@ -19,18 +21,17 @@ class Param
   include Puppet::Pops::Types::PuppetObject
 
   def self.register_ptype(loader, ir)
-    @ptype = Pcore::create_object_type(loader, ir, self, 'Puppet::Resource::Param', nil,
-      {
-        Types::KEY_TYPE => Types::PTypeType::DEFAULT,
-        Types::KEY_NAME => Types::PStringType::NON_EMPTY,
-        'name_var' => {
-          Types::KEY_TYPE => Types::PBooleanType::DEFAULT,
-          Types::KEY_VALUE => false
-        }
-      },
-      EMPTY_HASH,
-      [Types::KEY_NAME]
-    )
+    @ptype = Pcore.create_object_type(loader, ir, self, 'Puppet::Resource::Param', nil,
+                                      {
+                                        Types::KEY_TYPE => Types::PTypeType::DEFAULT,
+                                        Types::KEY_NAME => Types::PStringType::NON_EMPTY,
+                                        'name_var' => {
+                                          Types::KEY_TYPE => Types::PBooleanType::DEFAULT,
+                                          Types::KEY_VALUE => false
+                                        }
+                                      },
+                                      EMPTY_HASH,
+                                      [Types::KEY_NAME])
   end
 
   attr_reader :name

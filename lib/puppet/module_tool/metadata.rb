@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/module_tool'
 require_relative '../../puppet/network/format_support'
 require 'uri'
@@ -5,7 +7,6 @@ require_relative '../../puppet/util/json'
 require 'set'
 
 module Puppet::ModuleTool
-
   # This class provides a data structure representing a module's metadata.
   # @api private
   class Metadata
@@ -14,15 +15,15 @@ module Puppet::ModuleTool
     attr_accessor :module_name
 
     DEFAULTS = {
-      'name'          => nil,
-      'version'       => nil,
-      'author'        => nil,
-      'summary'       => nil,
-      'license'       => 'Apache-2.0',
-      'source'        => '',
-      'project_page'  => nil,
-      'issues_url'    => nil,
-      'dependencies'  => Set.new.freeze,
+      'name' => nil,
+      'version' => nil,
+      'author' => nil,
+      'summary' => nil,
+      'license' => 'Apache-2.0',
+      'source' => '',
+      'project_page' => nil,
+      'issues_url' => nil,
+      'dependencies' => Set.new.freeze,
       'data_provider' => nil,
     }
 
@@ -39,7 +40,8 @@ module Puppet::ModuleTool
     # Returns a string that uniquely represents this version of this module.
     def release_name
       return nil unless @data['name'] && @data['version']
-      [ dashed_name, @data['version'] ].join('-')
+
+      [dashed_name, @data['version']].join('-')
     end
 
     alias :name :module_name
@@ -56,13 +58,13 @@ module Puppet::ModuleTool
       merge_dependencies(data) if data['dependencies']
 
       @data.merge!(data)
-      return self
+      self
     end
 
     # Validates the name and version_requirement for a dependency, then creates
     # the Dependency and adds it.
     # Returns the Dependency that was added.
-    def add_dependency(name, version_requirement=nil, repository=nil)
+    def add_dependency(name, version_requirement = nil, repository = nil)
       validate_name(name)
       validate_version_range(version_requirement) if version_requirement
 
@@ -100,7 +102,11 @@ module Puppet::ModuleTool
       data = @data.dup.merge('dependencies' => dependencies)
 
       contents = data.keys.map do |k|
-        value = (Puppet::Util::Json.dump(data[k], :pretty => true) rescue data[k].to_json)
+        value = begin
+          Puppet::Util::Json.dump(data[k], :pretty => true)
+        rescue
+          data[k].to_json
+        end
         %Q("#{k}": #{value})
       end
 
@@ -110,6 +116,7 @@ module Puppet::ModuleTool
     # Expose any metadata keys as callable reader methods.
     def method_missing(name, *args)
       return @data[name.to_s] if @data.key? name.to_s
+
       super
     end
 
@@ -118,7 +125,7 @@ module Puppet::ModuleTool
     # Do basic validation and parsing of the name parameter.
     def process_name(data)
       validate_name(data['name'])
-      author, @module_name = data['name'].split(/[-\/]/, 2)
+      author, @module_name = data['name'].split(%r{[-/]}, 2)
 
       data['author'] ||= author if @data['author'] == DEFAULTS['author']
     end
@@ -136,7 +143,7 @@ module Puppet::ModuleTool
     # GitHub, we can predict sensible defaults for both project_page and
     # issues_url.
     def process_source(data)
-      if data['source'] =~ %r[://]
+      if data['source'] =~ %r{://}
         source_uri = URI.parse(data['source'])
       else
         source_uri = URI.parse("http://#{data['source']}")
@@ -146,11 +153,10 @@ module Puppet::ModuleTool
         source_uri.scheme = 'https'
         source_uri.path.sub!(/\.git$/, '')
         data['project_page'] ||= @data['project_page'] || source_uri.to_s
-        data['issues_url'] ||= @data['issues_url'] || source_uri.to_s.sub(/\/*$/, '') + '/issues'
+        data['issues_url'] ||= @data['issues_url'] || source_uri.to_s.sub(%r{/*$}, '') + '/issues'
       end
-
     rescue URI::Error
-      return
+      nil
     end
 
     # Validates and parses the dependencies.
@@ -165,21 +171,21 @@ module Puppet::ModuleTool
 
     # Validates that the given module name is both namespaced and well-formed.
     def validate_name(name)
-      return if name =~ /\A[a-z0-9]+[-\/][a-z][a-z0-9_]*\Z/i
+      return if name =~ %r{\A[a-z0-9]+[-/][a-z][a-z0-9_]*\Z}i
 
-      namespace, modname = name.split(/[-\/]/, 2)
+      namespace, modname = name.split(%r{[-/]}, 2)
       modname = :namespace_missing if namespace == ''
 
       err = case modname
-      when nil, '', :namespace_missing
-        _("the field must be a namespaced module name")
-      when /[^a-z0-9_]/i
-        _("the module name contains non-alphanumeric (or underscore) characters")
-      when /^[^a-z]/i
-        _("the module name must begin with a letter")
-      else
-        _("the namespace contains non-alphanumeric characters")
-      end
+            when nil, '', :namespace_missing
+              _("the field must be a namespaced module name")
+            when /[^a-z0-9_]/i
+              _("the module name contains non-alphanumeric (or underscore) characters")
+            when /^[^a-z]/i
+              _("the module name must begin with a letter")
+            else
+              _("the namespace contains non-alphanumeric characters")
+            end
 
       raise ArgumentError, _("Invalid 'name' field in metadata.json: %{err}") % { err: err }
     end

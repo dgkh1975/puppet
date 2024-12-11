@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'timeout'
 require_relative '../../puppet/file_system/uniquefile'
 
@@ -15,7 +17,6 @@ end
 # in classes that needs to execute system commands.
 # @api public
 module Puppet::Util::Execution
-
   # This is the full output from a process. The object itself (a String) is the
   # stdout of the process.
   #
@@ -26,7 +27,7 @@ module Puppet::Util::Execution
     attr_reader :exitstatus
 
     # @api private
-    def initialize(value,exitstatus)
+    def initialize(value, exitstatus)
       super(value)
       @exitstatus = exitstatus
     end
@@ -75,9 +76,10 @@ module Puppet::Util::Execution
     # the user/system locale to "C" (via environment variables LANG and LC_*)
     # it enables to have non localized output for some commands and therefore
     # a predictable output
-    english_env = ENV.to_hash.merge( {'LANG' => 'C', 'LC_ALL' => 'C'} )
+    english_env = ENV.to_hash.merge({ 'LANG' => 'C', 'LC_ALL' => 'C' })
     output = Puppet::Util.withenv(english_env) do
-      open("| #{command_str} 2>&1") do |pipe|
+      # We are intentionally using 'pipe' with open to launch a process
+      open("| #{command_str} 2>&1") do |pipe| # rubocop:disable Security/Open
         yield pipe
       end
     end
@@ -137,31 +139,32 @@ module Puppet::Util::Execution
     # specifying these here rather than in the method signature to allow callers to pass in a partial
     # set of overrides without affecting the default values for options that they don't pass in
     default_options = {
-        :failonfail => NoOptionsSpecified.equal?(options),
-        :uid => nil,
-        :gid => nil,
-        :combine => NoOptionsSpecified.equal?(options),
-        :stdinfile => nil,
-        :squelch => false,
-        :override_locale => true,
-        :custom_environment => {},
-        :sensitive => false,
-        :suppress_window => false,
+      :failonfail => NoOptionsSpecified.equal?(options),
+      :uid => nil,
+      :gid => nil,
+      :combine => NoOptionsSpecified.equal?(options),
+      :stdinfile => nil,
+      :squelch => false,
+      :override_locale => true,
+      :custom_environment => {},
+      :sensitive => false,
+      :suppress_window => false,
     }
 
     options = default_options.merge(options)
 
-    if command.is_a?(Array)
+    case command
+    when Array
       command = command.flatten.map(&:to_s)
       command_str = command.join(" ")
-    elsif command.is_a?(String)
+    when String
       command_str = command
     end
 
     # do this after processing 'command' array or string
     command_str = '[redacted]' if options[:sensitive]
 
-    user_log_s = ''
+    user_log_s = ''.dup
     if options[:uid]
       user_log_s << " uid=#{options[:uid]}"
     end
@@ -181,7 +184,7 @@ module Puppet::Util::Execution
     null_file = Puppet::Util::Platform.windows? ? 'NUL' : '/dev/null'
 
     cwd = options[:cwd]
-    if cwd && ! Puppet::FileSystem.directory?(cwd)
+    if cwd && !Puppet::FileSystem.directory?(cwd)
       raise ArgumentError, _("Working directory %{cwd} does not exist!") % { cwd: cwd }
     end
 
@@ -201,7 +204,7 @@ module Puppet::Util::Execution
       stderr = options[:combine] ? stdout : Puppet::FileSystem.open(null_file, nil, 'w')
 
       exec_args = [command, options, stdin, stdout, stderr]
-      output = ''
+      output = ''.dup
 
       # We close stdin/stdout/stderr immediately after fork/exec as they're no longer needed by
       # this process. In most cases they could be closed later, but when `stdout` is the "writer"
@@ -209,21 +212,37 @@ module Puppet::Util::Execution
       execution_stub = Puppet::Util::ExecutionStub.current_value
       if execution_stub
         child_pid = execution_stub.call(*exec_args)
-        [stdin, stdout, stderr].each {|io| io.close rescue nil}
+        [stdin, stdout, stderr].each { |io|
+          begin
+            io.close
+          rescue
+            nil
+          end
+        }
         return child_pid
       elsif Puppet.features.posix?
         child_pid = nil
         begin
           child_pid = execute_posix(*exec_args)
-          [stdin, stdout, stderr].each {|io| io.close rescue nil}
+          [stdin, stdout, stderr].each { |io|
+            begin
+              io.close
+            rescue
+              nil
+            end
+          }
           if options[:squelch]
             exit_status = Process.waitpid2(child_pid).last.exitstatus
           else
             # Use non-blocking read to check for data. After each attempt,
             # check whether the child is done. This is done in case the child
             # forks and inherits stdout, as happens in `foo &`.
-            
-            until results = Process.waitpid2(child_pid, Process::WNOHANG) #rubocop:disable Lint/AssignmentInCondition
+            # If we encounter EOF, though, then switch to a blocking wait for
+            # the child; after EOF, IO.select will never block and the loop
+            # below will use maximum CPU available.
+
+            wait_flags = Process::WNOHANG
+            until results = Process.waitpid2(child_pid, wait_flags) # rubocop:disable Lint/AssignmentInCondition
 
               # If not done, wait for data to read with a timeout
               # This timeout is selected to keep activity low while waiting on
@@ -234,6 +253,7 @@ module Puppet::Util::Execution
                 output << reader.read_nonblock(4096) if ready
               rescue Errno::EAGAIN
               rescue EOFError
+                wait_flags = 0
               end
             end
 
@@ -268,7 +288,13 @@ module Puppet::Util::Execution
       elsif Puppet::Util::Platform.windows?
         process_info = execute_windows(*exec_args)
         begin
-          [stdin, stderr].each {|io| io.close rescue nil}
+          [stdin, stderr].each { |io|
+            begin
+              io.close
+            rescue
+              nil
+            end
+          }
           exit_status = Puppet::Util::Windows::Process.wait_process(process_info.process_handle)
 
           # read output in if required
@@ -287,11 +313,17 @@ module Puppet::Util::Execution
       end
     ensure
       # Make sure all handles are closed in case an exception was thrown attempting to execute.
-      [stdin, stdout, stderr].each {|io| io.close rescue nil}
-      if !options[:squelch]
+      [stdin, stdout, stderr].each { |io|
+        begin
+          io.close
+        rescue
+          nil
+        end
+      }
+      unless options[:squelch]
         # if we opened a pipe, we need to clean it up.
         reader.close if reader
-        stdout.close! if Puppet::Util::Platform.windows?
+        stdout.close! if stdout && Puppet::Util::Platform.windows?
       end
     end
 
@@ -303,10 +335,10 @@ module Puppet::Util::Execution
   # @return [String] the path to the Ruby executable
   # @api private
   #
-  def self.ruby_path()
+  def self.ruby_path
     File.join(RbConfig::CONFIG['bindir'],
-              RbConfig::CONFIG['ruby_install_name'] + RbConfig::CONFIG['EXEEXT']).
-      sub(/.*\s.*/m, '"\&"')
+              RbConfig::CONFIG['ruby_install_name'] + RbConfig::CONFIG['EXEEXT'])
+        .sub(/.*\s.*/m, '"\&"')
   end
 
   # Because some modules provide their own version of this method.
@@ -314,13 +346,12 @@ module Puppet::Util::Execution
     alias util_execute execute
   end
 
-
   # This is private method.
   # @comment see call to private_class_method after method definition
   # @api private
   #
   def self.execute_posix(command, options, stdin, stdout, stderr)
-    child_pid = Puppet::Util.safe_posix_fork(stdin, stdout, stderr) do
+    Puppet::Util.safe_posix_fork(stdin, stdout, stderr) do
       # We can't just call Array(command), and rely on it returning
       # things like ['foo'], when passed ['foo'], because
       # Array(command) will call command.to_a internally, which when
@@ -338,7 +369,7 @@ module Puppet::Util::Execution
         Puppet::Util::SUIDManager.change_privileges(options[:uid], options[:gid], true)
 
         # if the caller has requested that we override locale environment variables,
-        if (options[:override_locale]) then
+        if options[:override_locale] then
           # loop over them and clear them
           Puppet::Util::POSIX::LOCALE_ENV_VARS.each { |name| ENV.delete(name) }
           # set LANG and LC_ALL to 'C' so that the command will have consistent, predictable output
@@ -364,10 +395,8 @@ module Puppet::Util::Execution
         exit!(1)
       end
     end
-    child_pid
   end
   private_class_method :execute_posix
-
 
   # This is private method.
   # @comment see call to private_class_method after method definition
@@ -375,16 +404,15 @@ module Puppet::Util::Execution
   #
   def self.execute_windows(command, options, stdin, stdout, stderr)
     command = command.map do |part|
-      part.include?(' ') ? %Q["#{part.gsub(/"/, '\"')}"] : part
+      part.include?(' ') ? %Q("#{part.gsub(/"/, '\"')}") : part
     end.join(" ") if command.is_a?(Array)
 
     options[:custom_environment] ||= {}
-    Puppet::Util.withenv(options[:custom_environment], :windows) do
+    Puppet::Util.withenv(options[:custom_environment]) do
       Puppet::Util::Windows::Process.execute(command, options, stdin, stdout, stderr)
     end
   end
   private_class_method :execute_windows
-
 
   # This is private method.
   # @comment see call to private_class_method after method definition

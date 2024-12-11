@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Evaluate the dispatches defined as {Puppet::Pops::Functions::Dispatch}
 # instances to call the appropriate method on the
 # {Puppet::Pops::Functions::Function} instance.
@@ -7,8 +9,8 @@ class Puppet::Pops::Functions::Dispatcher
   attr_reader :dispatchers
 
   # @api private
-  def initialize()
-    @dispatchers = [ ]
+  def initialize
+    @dispatchers = []
   end
 
   # Answers if dispatching has been defined
@@ -17,6 +19,10 @@ class Puppet::Pops::Functions::Dispatcher
   # @api private
   def empty?
     @dispatchers.empty?
+  end
+
+  def find_matching_dispatcher(args, &block)
+    @dispatchers.find { |d| d.type.callable_with?(args, block) }
   end
 
   # Dispatches the call to the first found signature (entry with matching type).
@@ -28,19 +34,18 @@ class Puppet::Pops::Functions::Dispatcher
   #
   # @api private
   def dispatch(instance, calling_scope, args, &block)
-    found = @dispatchers.find { |d| d.type.callable_with?(args, block) }
-    unless found
+    dispatcher = find_matching_dispatcher(args, &block)
+    unless dispatcher
       args_type = Puppet::Pops::Types::TypeCalculator.singleton.infer_set(block_given? ? args + [block] : args)
       raise ArgumentError, Puppet::Pops::Types::TypeMismatchDescriber.describe_signatures(instance.class.name, signatures, args_type)
     end
-
-    if found.argument_mismatch_handler?
-      msg = found.invoke(instance, calling_scope, args)
+    if dispatcher.argument_mismatch_handler?
+      msg = dispatcher.invoke(instance, calling_scope, args)
       raise ArgumentError, "'#{instance.class.name}' #{msg}"
     end
 
     catch(:next) do
-      found.invoke(instance, calling_scope, args, &block)
+      dispatcher.invoke(instance, calling_scope, args, &block)
     end
   end
 
@@ -53,19 +58,19 @@ class Puppet::Pops::Functions::Dispatcher
   # Produces a CallableType for a single signature, and a Variant[<callables>] otherwise
   #
   # @api private
-  def to_type()
+  def to_type
     # make a copy to make sure it can be contained by someone else (even if it is not contained here, it
     # should be treated as immutable).
     #
-    callables = dispatchers.map { | dispatch | dispatch.type }
+    callables = dispatchers.map(&:type)
 
     # multiple signatures, produce a Variant type of Callable1-n (must copy them)
     # single signature, produce single Callable
-    callables.size > 1 ?  Puppet::Pops::Types::TypeFactory.variant(*callables) : callables.pop
+    callables.size > 1 ? Puppet::Pops::Types::TypeFactory.variant(*callables) : callables.pop
   end
 
   # @api private
   def signatures
-    @dispatchers.reject { |dispatcher| dispatcher.argument_mismatch_handler? }
+    @dispatchers.reject(&:argument_mismatch_handler?)
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Parser
 # This module is an integral part of the Lexer.
@@ -5,7 +7,6 @@ module Parser
 #
 require 'strscan'
 module EppSupport
-
   TOKEN_RENDER_STRING = [:RENDER_STRING, nil, 0]
   TOKEN_RENDER_EXPR   = [:RENDER_EXPR, nil, 0]
 
@@ -14,7 +15,7 @@ module EppSupport
   #
   def fullscan_epp
     result = []
-    scan_epp {|token, value| result.push([token, value]) }
+    scan_epp { |token, value| result.push([token, value]) }
     result
   end
 
@@ -43,10 +44,10 @@ module EppSupport
     interpolate_epp
 
     # This is the lexer's main loop
-    until queue.empty? && scn.eos? do
+    until queue.empty? && scn.eos?
       token = queue.shift || lex_token
       if token
-        yield [ ctx[:after] = token[0], token[1] ]
+        yield [ctx[:after] = token[0], token[1]]
       end
     end
     if ctx[:epp_open_position]
@@ -57,7 +58,7 @@ module EppSupport
     yield [false, false]
   end
 
-  def interpolate_epp(skip_leading=false)
+  def interpolate_epp(skip_leading = false)
     scn = @scanner
     ctx = @lexing_context
     eppscanner = EppScanner.new(scn)
@@ -177,16 +178,17 @@ module EppSupport
     #
     # @return [String, nil] the scanned and processed text, or nil if at the end of the input.
     #
-    def scan(skip_leading=false)
+    def scan(skip_leading = false)
       @mode = :text
       @skip_leading = skip_leading
 
       return nil if scanner.eos?
-      s = ""
+
+      s = ''.dup
       until scanner.eos?
         part = @scanner.scan_until(/(<%)|\z/)
         if @skip_leading
-          part.sub!(/^[ \t]*\r?(?:\n|\z)?/,'')
+          part.sub!(/^[ \t]*\r?(?:\n|\z)?/, '')
           @skip_leading = false
         end
         # The spec for %%> is to transform it into a literal %>. This is done here, as %%> otherwise would go
@@ -259,7 +261,6 @@ module EppSupport
       end
     end
   end
-
 end
 end
 end

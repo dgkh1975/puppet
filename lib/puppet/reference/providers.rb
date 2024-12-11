@@ -1,23 +1,25 @@
+# frozen_string_literal: true
+
 providers = Puppet::Util::Reference.newreference :providers, :title => "Provider Suitability Report", :depth => 1, :dynamic => true, :doc => "Which providers are valid for this machine" do
   types = []
   Puppet::Type.loadall
   Puppet::Type.eachtype do |klass|
     next unless klass && klass.providers.length > 0
+
     types << klass
   end
-  types.sort! { |a,b| a.name.to_s <=> b.name.to_s }
+  types.sort! { |a, b| a.name.to_s <=> b.name.to_s }
 
   command_line = Puppet::Util::CommandLine.new
-  types.reject! { |type| ! command_line.args.include?(type.name.to_s) } unless command_line.args.empty?
+  types.reject! { |type| !command_line.args.include?(type.name.to_s) } unless command_line.args.empty?
 
-  ret = "Details about this host:\n\n"
+  ret = "Details about this host:\n\n".dup
 
   # Throw some facts in there, so we know where the report is from.
-  ["Ruby Version", "Puppet Version", "Operating System", "Operating System Release"].each do |label|
-    name = label.gsub(/\s+/, '')
-    value = Puppet.runtime[:facter].value(name)
-    ret << option(label, value)
-  end
+  ret << option('Ruby Version', Facter.value('ruby.version'))
+  ret << option('Puppet Version', Facter.value('puppetversion'))
+  ret << option('Operating System', Facter.value('os.name'))
+  ret << option('Operating System Release', Facter.value('os.release.full'))
   ret << "\n"
 
   count = 1
@@ -28,7 +30,7 @@ providers = Puppet::Util::Reference.newreference :providers, :title => "Provider
     ret << "\n" # add a trailing newline
 
     # Now build up a table of provider suitability.
-    headers = %w{Provider Suitable?} + features.collect { |f| f.to_s }.sort
+    headers = %w[Provider Suitable?] + features.collect(&:to_s).sort
 
     table_data = {}
 
@@ -69,7 +71,7 @@ providers = Puppet::Util::Reference.newreference :providers, :title => "Provider
           when :false
             details << _("  - Got %{values} false tests that should have been true\n") % { values: values }
           when :feature
-            details << _("  - Missing features %{values}\n") % { values: values.collect { |f| f.to_s }.join(",") }
+            details << _("  - Missing features %{values}\n") % { values: values.collect(&:to_s).join(",") }
           end
         end
         notes << details

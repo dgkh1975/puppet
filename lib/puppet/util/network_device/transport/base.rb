@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 require_relative '../../../../puppet/util/network_device'
 require_relative '../../../../puppet/util/network_device/transport'
@@ -22,5 +23,4 @@ class Puppet::Util::NetworkDevice::Transport::Base
       yield output if block_given?
     end
   end
-
 end

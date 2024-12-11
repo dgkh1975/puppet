@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'erb'
 require 'fileutils'
 require_relative '../../puppet/util/autoload'
@@ -38,6 +40,7 @@ module Puppet
         def format=(format)
           format = format.to_sym
           raise _("unsupported format '%{format}'.") % { format: format } unless self.class.supported_format?(format)
+
           @format = format
         end
 
@@ -46,7 +49,7 @@ module Puppet
         # @return [Boolean] Returns true if the output is up-to-date or false if not.
         def up_to_date?(outputdir)
           f = effective_output_path(outputdir)
-          Puppet::FileSystem::exist?(f) && (Puppet::FileSystem::stat(@path) <=> Puppet::FileSystem::stat(f)) <= 0
+          Puppet::FileSystem.exist?(f) && (Puppet::FileSystem.stat(@path) <=> Puppet::FileSystem.stat(f)) <= 0
         end
 
         # Gets the filename of the output file.
@@ -125,13 +128,18 @@ module Puppet
           Puppet.debug "Searching '#{mod.name}' module for custom types."
           Dir.glob("#{directory}/*.rb") do |file|
             next unless Puppet::FileSystem.file?(file)
+
             Puppet.debug "Found custom type source file '#{file}'."
             inputs << Input.new(mod.path, file, format)
           end
         end
 
         # Sort the inputs by path
-        inputs.sort_by! { |input| input.path }
+        inputs.sort_by!(&:path)
+      end
+
+      def self.bad_input?
+        @bad_input
       end
 
       # Generates files for the given inputs.
@@ -147,8 +155,8 @@ module Puppet
       def self.generate(inputs, outputdir = nil, force = false)
         # remove files for non existing inputs
         unless outputdir.nil?
-          filenames_to_keep = inputs.map {|i| i.output_name }
-          existing_files = Puppet::FileSystem.children(outputdir).map {|f| Puppet::FileSystem.basename(f) }
+          filenames_to_keep = inputs.map(&:output_name)
+          existing_files = Puppet::FileSystem.children(outputdir).map { |f| Puppet::FileSystem.basename(f) }
           files_to_remove = existing_files - filenames_to_keep
           files_to_remove.each do |f|
             Puppet::FileSystem.unlink(File.join(outputdir, f))
@@ -162,14 +170,17 @@ module Puppet
         end
 
         templates = {}
-        templates.default_proc = lambda { |hash, key|
+        templates.default_proc = lambda { |_hash, key|
           raise _("template was not found at '%{key}'.") % { key: key } unless Puppet::FileSystem.file?(key)
-          template = ERB.new(File.read(key), nil, '-')
+
+          template = Puppet::Util.create_erb(File.read(key))
           template.filename = key
           template
         }
 
         up_to_date = true
+        @bad_input = false
+
         Puppet.notice _('Generating Puppet resource types.')
         inputs.each do |input|
           if !force && input.up_to_date?(outputdir)
@@ -187,6 +198,7 @@ module Puppet
             raise
           rescue Exception => e
             # Log the exception and move on to the next input
+            @bad_input = true
             Puppet.log_exception(e, _("Failed to load custom type '%{type_name}' from '%{input}': %{message}") % { type_name: type_name, input: input, message: e.message })
             next
           end
@@ -205,6 +217,7 @@ module Puppet
           begin
             model = Models::Type::Type.new(type)
           rescue Exception => e
+            @bad_input = true
             # Move on to the next input
             Puppet.log_exception(e, "#{input}: #{e.message}")
             next
@@ -214,6 +227,7 @@ module Puppet
           begin
             result = model.render(templates[input.template_path])
           rescue Exception => e
+            @bad_input = true
             Puppet.log_exception(e)
             raise
           end
@@ -227,6 +241,7 @@ module Puppet
               file.write(result)
             end
           rescue Exception => e
+            @bad_input = true
             Puppet.log_exception(e, _("Failed to generate '%{effective_output_path}': %{message}") % { effective_output_path: effective_output_path, message: e.message })
             # Move on to the next input
             next

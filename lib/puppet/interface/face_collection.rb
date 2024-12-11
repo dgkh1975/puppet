@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Interface::FaceCollection
   @faces = Hash.new { |hash, key| hash[key] = {} }
 
@@ -9,9 +11,9 @@ module Puppet::Interface::FaceCollection
       names = @loader.files_to_load(Puppet.lookup(:current_environment)).map do |fn|
         ::File.basename(fn, '.rb')
       end.uniq
-      names.each {|name| self[name, :current]}
+      names.each { |name| self[name, :current] }
     end
-    @faces.keys.select {|name| @faces[name].length > 0 }
+    @faces.keys.select { |name| @faces[name].length > 0 }
   end
 
   def self.[](name, version)
@@ -26,18 +28,19 @@ module Puppet::Interface::FaceCollection
     # elsewhere.  Usually this will start from :current and all...
     face = self[name, version]
     return nil unless face
+
     action = face.get_action(action_name)
     unless action
       # ...we need to search for it bound to an o{lder,ther} version.  Since
       # we load all actions when the face is first references, this will be in
       # memory in the known set of versions of the face.
-      (@faces[name].keys - [ :current ]).sort.reverse_each do |vers|
+      (@faces[name].keys - [:current]).sort.reverse_each do |vers|
         action = @faces[name][vers].get_action(action_name)
         break if action
       end
     end
 
-    return action
+    action
   end
 
   # get face from memory, without loading.
@@ -45,14 +48,14 @@ module Puppet::Interface::FaceCollection
     return nil unless @faces.has_key? name
     return @faces[name][:current] if pattern == :current
 
-    versions = @faces[name].keys - [ :current ]
+    versions = @faces[name].keys - [:current]
     range = pattern.is_a?(SemanticPuppet::Version) ? SemanticPuppet::VersionRange.new(pattern, pattern) : SemanticPuppet::VersionRange.parse(pattern)
     found = find_matching(range, versions)
-    return @faces[name][found]
+    @faces[name][found]
   end
 
   def self.find_matching(range, versions)
-    versions.select { |v| range === v }.sort.last
+    versions.select { |v| range === v }.max
   end
 
   # try to load the face, and return it.
@@ -92,7 +95,7 @@ module Puppet::Interface::FaceCollection
         # versions here and return the last item in that set.
         #
         # --daniel 2011-04-06
-        latest_ver = @faces[name].keys.sort.last
+        latest_ver = @faces[name].keys.max
         @faces[name][:current] = @faces[name][latest_ver]
       end
     end
@@ -102,20 +105,21 @@ module Puppet::Interface::FaceCollection
       safely_require name, version
     end
 
-    return get_face(name, version)
+    get_face(name, version)
   end
 
   def self.safely_require(name, version = nil)
     path = @loader.expand(version ? ::File.join(version.to_s, name.to_s) : name)
     require path
     true
-
   rescue LoadError => e
-    raise unless e.message =~ %r{-- #{path}$}
+    raise unless e.message =~ /-- #{path}$/
+
     # ...guess we didn't find the file; return a much better problem.
     nil
   rescue SyntaxError => e
-    raise unless e.message =~ %r{#{path}\.rb:\d+: }
+    raise unless e.message =~ /#{path}\.rb:\d+: /
+
     Puppet.err _("Failed to load face %{name}:\n%{detail}") % { name: name, detail: e }
     # ...but we just carry on after complaining.
     nil
@@ -127,9 +131,9 @@ module Puppet::Interface::FaceCollection
 
   def self.underscorize(name)
     unless name.to_s =~ /^[-_a-z][-_a-z0-9]*$/i then
-      #TRANSLATORS 'face' refers to a programming API in Puppet
+      # TRANSLATORS 'face' refers to a programming API in Puppet
       raise ArgumentError, _("%{name} (%{class_name}) is not a valid face name") %
-          { name: name.inspect, class_name: name.class }
+                           { name: name.inspect, class_name: name.class }
     end
 
     name.to_s.downcase.split(/[-_]/).join('_').to_sym

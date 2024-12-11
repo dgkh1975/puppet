@@ -1,15 +1,17 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows'
 
 Puppet::Type.type(:group).provide :windows_adsi do
   desc "Local group management for Windows. Group members can be both users and groups.
     Additionally, local groups can contain domain users."
 
-  defaultfor :operatingsystem => :windows
-  confine    :operatingsystem => :windows
+  defaultfor 'os.name' => :windows
+  confine    'os.name' => :windows
 
   has_features :manages_members
 
-  def initialize(value={})
+  def initialize(value = {})
     super(value)
     @deleted = false
   end
@@ -38,10 +40,11 @@ Puppet::Type.type(:group).provide :windows_adsi do
   end
 
   def members_to_s(users)
-    return '' if users.nil? or !users.kind_of?(Array)
+    return '' if users.nil? or !users.is_a?(Array)
+
     users = users.map do |user_name|
       sid = Puppet::Util::Windows::SID.name_to_principal(user_name)
-      if !sid
+      unless sid
         resource.debug("#{user_name} (unresolvable to SID)")
         next user_name
       end
@@ -54,11 +57,11 @@ Puppet::Type.type(:group).provide :windows_adsi do
       resource.debug("#{sid.domain}\\#{account} (#{sid.sid})")
       sid.domain ? "#{sid.domain}\\#{account}" : account
     end
-    return users.join(',')
+    users.join(',')
   end
 
   def member_valid?(user_name)
-    ! Puppet::Util::Windows::SID.name_to_principal(user_name).nil?
+    !Puppet::Util::Windows::SID.name_to_principal(user_name).nil?
   end
 
   def group

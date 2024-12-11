@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Network
   module Authorization
     class << self

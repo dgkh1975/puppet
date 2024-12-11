@@ -1,15 +1,13 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/util/platform'
 
 module Puppet
-
   def self.default_diffargs
-    if (Puppet.runtime[:facter].value(:kernel) == "AIX" && Puppet.runtime[:facter].value(:kernelmajversion) == "5300")
-      ""
-    else
-      "-u"
-    end
+    '-u'
   end
 
+  # If you modify this, update puppet/type/file/checksum.rb too
   def self.default_digest_algorithm
     'sha256'
   end
@@ -34,6 +32,7 @@ module Puppet
 
   def self.default_cadir
     return "" if Puppet::Util::Platform.windows?
+
     old_ca_dir = "#{Puppet[:ssldir]}/ca"
     new_ca_dir = "/etc/puppetlabs/puppetserver/ca"
 
@@ -49,29 +48,15 @@ module Puppet
   end
 
   def self.default_basemodulepath
-    if Puppet::Util::Platform.windows?
-      path = ['$codedir/modules']
-      installdir = ENV["FACTER_env_windows_installdir"]
-      if installdir
-        path << "#{installdir}/puppet/modules"
-      end
-      path.join(File::PATH_SEPARATOR)
-    else
-      '$codedir/modules:/opt/puppetlabs/puppet/modules'
+    path = ['$codedir/modules']
+    if (run_mode_dir = Puppet.run_mode.common_module_dir)
+      path << run_mode_dir
     end
+    path.join(File::PATH_SEPARATOR)
   end
 
   def self.default_vendormoduledir
-    if Puppet::Util::Platform.windows?
-      installdir = ENV["FACTER_env_windows_installdir"]
-      if installdir
-        "#{installdir}\\puppet\\vendor_modules"
-      else
-        nil
-      end
-    else
-      '/opt/puppetlabs/puppet/vendor_modules'
-    end
+    Puppet.run_mode.vendor_module_dir
   end
 
   ############################################################################################
@@ -79,7 +64,7 @@ module Puppet
   #   see the docs for Settings.define_settings
   ############################################################################################
 
-  AS_DURATION = %q{This setting can be a time interval in seconds (30 or 30s), minutes (30m), hours (6h), days (2d), or years (5y).}
+  AS_DURATION = 'This setting can be a time interval in seconds (30 or 30s), minutes (30m), hours (6h), days (2d), or years (5y).'
 
   # @api public
   # @param args [Puppet::Settings] the settings object to define default settings for
@@ -120,7 +105,7 @@ module Puppet
         :desc     => "The name of the application, if we are running as one.  The
           default is essentially $0 without the path or `.rb`.",
     }
-  )
+    )
 
   settings.define_settings(:main,
     :logdir => {
@@ -134,7 +119,7 @@ module Puppet
     :log_level => {
       :default    => 'notice',
       :type       => :enum,
-      :values     => ["debug","info","notice","warning","err","alert","emerg","crit"],
+      :values     => %w[debug info notice warning err alert emerg crit],
       :desc       => "Default logging level for messages from Puppet. Allowed values are:
 
         * debug
@@ -168,11 +153,17 @@ module Puppet
         values = munge(value)
         valid   = %w[deprecations undefined_variables undefined_resources]
         invalid = values - (values & valid)
-        if not invalid.empty?
+        unless invalid.empty?
           raise ArgumentError, _("Cannot disable unrecognized warning types '%{invalid}'.") % { invalid: invalid.join(',') } +
               ' ' + _("Valid values are '%{values}'.") % { values: valid.join(', ') }
         end
       end
+    },
+    :skip_logging_catalog_request_destination => {
+      :default => false,
+      :type    => :boolean,
+      :desc => "Specifies whether to suppress the notice of which compiler
+        supplied the catalog. A value of `true` suppresses the notice.",
     },
     :merge_dependency_warnings => {
       :default => false,
@@ -188,14 +179,14 @@ module Puppet
         ",
     },
     :strict => {
-      :default    => :warning,
+      :default    => :error,
       :type       => :symbolic_enum,
       :values     => [:off, :warning, :error],
       :desc       => "The strictness level of puppet. Allowed values are:
 
         * off     - do not perform extra validation, do not report
-        * warning - perform extra validation, report as warning (default)
-        * error   - perform extra validation, fail with error
+        * warning - perform extra validation, report as warning
+        * error   - perform extra validation, fail with error (default)
 
         The strictness level is for both language semantics and runtime
         evaluation validation. In addition to controlling the behavior with
@@ -369,11 +360,13 @@ module Puppet
           be set in `[server]`, `[agent]`, or an environment config section.",
         :call_hook => :on_define_and_write,
         :hook             => proc do |value|
-          Puppet::Util.set_env('PATH', '') if Puppet::Util.get_env('PATH').nil?
-          Puppet::Util.set_env('PATH', value) unless value == 'none'
-          paths = Puppet::Util.get_env('PATH').split(File::PATH_SEPARATOR)
+          ENV['PATH'] = '' if ENV['PATH'].nil?
+          ENV['PATH'] = value unless value == 'none'
+          paths = ENV['PATH'].split(File::PATH_SEPARATOR)
           Puppet::Util::Platform.default_paths.each do |path|
-            Puppet::Util.set_env('PATH', Puppet::Util.get_env('PATH') + File::PATH_SEPARATOR + path) unless paths.include?(path)
+            next if paths.include?(path)
+
+            ENV['PATH'] = ENV.fetch('PATH', nil) + File::PATH_SEPARATOR + path
           end
           value
         end
@@ -421,6 +414,32 @@ module Puppet
         <https://puppet.com/docs/puppet/latest/environments_about.html>",
       :type    => :path,
     },
+    :report_configured_environmentpath => {
+      :type     => :boolean,
+      :default  => true,
+      :desc     => <<-'EOT'
+      Specifies how environment paths are reported. When the value of
+      `versioned_environment_dirs` is `true`, Puppet applies the readlink function to
+      the `environmentpath` setting when constructing the environment's modulepath. The
+      full readlinked path is referred to as the "resolved path," and the configured
+      path potentially containing symlinks is the "configured path." When reporting
+      where resources come from, users may choose between the configured and resolved
+      path.
+
+      When set to `false`, the resolved paths are reported instead of the configured paths.
+      EOT
+    },
+    :use_last_environment => {
+      :type     => :boolean,
+      :default  => true,
+      :desc     => <<-'EOT'
+      Puppet saves both the initial and converged environment in the last_run_summary file.
+      If they differ, and this setting is set to true, we will use the last converged
+      environment and skip the node request.
+
+      When set to false, we will do the node request and ignore the environment data from the last_run_summary file.
+      EOT
+    },
     :always_retry_plugins => {
         :type     => :boolean,
         :default  => true,
@@ -440,10 +459,10 @@ module Puppet
         feature.  This behavior is almost always appropriate for the server,
         and can result in a significant performance improvement for types and
         features that are checked frequently.
-      EOT
+        EOT
     },
     :diff_args => {
-        :default  => lambda { default_diffargs },
+        :default  => -> { default_diffargs },
         :desc     => "Which arguments to pass to the diff command when printing differences between
           files. The command to use can be chosen with the `diff` setting.",
     },
@@ -465,19 +484,19 @@ module Puppet
     },
     :daemonize => {
         :type     => :boolean,
-        :default  => (Puppet::Util::Platform.windows? ? false : true),
+        :default  => !Puppet::Util::Platform.windows?,
         :desc     => "Whether to send the process into the background.  This defaults
           to true on POSIX systems, and to false on Windows (where Puppet
           currently cannot daemonize).",
         :short    => "D",
         :hook     => proc do |value|
-          if value and Puppet::Util::Platform.windows?
-            raise "Cannot daemonize on Windows"
-          end
-      end
+                       if value and Puppet::Util::Platform.windows?
+                         raise "Cannot daemonize on Windows"
+                       end
+                     end
     },
     :maximum_uid => {
-        :default  => 4294967290,
+        :default  => 4_294_967_290,
         :type     => :integer,
         :desc     => "The maximum allowed UID.  Some platforms use negative UIDs
           but then ship with tools that do not know how to handle signed ints,
@@ -626,7 +645,7 @@ module Puppet
     :http_proxy_password =>{
       :default    => "none",
       :hook       => proc do |value|
-        if value =~ /[@!# \/]/
+        if value =~ %r{[@!# /]}
           raise "Passwords set in the http_proxy_password setting must be valid as part of a URL, and any reserved characters must be URL-encoded. We received: #{value}"
         end
       end,
@@ -687,7 +706,7 @@ Fine grained control of filetimeouts is deprecated. In future
 releases this value will only determine if file content is cached.
 
 Valid values are 0 (never cache) and 15 (15 second minimum wait time).
-            WARNING
+          WARNING
         end
       end
     },
@@ -761,6 +780,12 @@ Valid values are 0 (never cache) and 15 (15 second minimum wait time).
       :owner    => "service",
       :group    => "service",
       :desc    => "The directory where catalog previews per node are generated."
+    },
+    :location_trusted => {
+      :default => false,
+      :type     => :boolean,
+      :desc    => "This will allow sending the name + password and the cookie header to all hosts that puppet may redirect to.
+        This may or may not introduce a security breach if puppet redirects you to a site to which you'll send your authentication info and cookies."
     }
   )
 
@@ -785,11 +810,10 @@ Valid values are 0 (never cache) and 15 (15 second minimum wait time).
 
     settings.define_settings(
     :main,
-
     # We have to downcase the fqdn, because the current ssl stuff (as opposed to in master) doesn't have good facilities for
     # manipulating naming.
     :certname => {
-      :default => lambda { Puppet::Settings.default_certname.downcase },
+      :default => -> { Puppet::Settings.default_certname.downcase },
       :desc => "The name to use when handling certificates. When a node
         requests a certificate from the CA Puppet Server, it uses the value of the
         `certname` setting as its requested Subject CN.
@@ -1057,7 +1081,7 @@ EOT
                    Default is `prime256v1`."
     },
     :digest_algorithm => {
-        :default  => lambda { default_digest_algorithm },
+        :default  => -> { default_digest_algorithm },
         :type     => :enum,
         :values   => valid_digest_algorithms,
         :desc     => "Which digest algorithm to use for file resources and the filebucket.
@@ -1065,7 +1089,7 @@ EOT
                       #{default_digest_algorithm}.",
     },
     :supported_checksum_types => {
-      :default => lambda { default_file_checksum_types },
+      :default => -> { default_file_checksum_types },
       :type    => :array,
       :desc    => "Checksum types supported by this agent for use in file resources of a
                    static catalog. Values must be comma-separated. Valid types are
@@ -1075,7 +1099,7 @@ EOT
         values = munge(value)
 
         invalid = values - Puppet.valid_file_checksum_types
-        if not invalid.empty?
+        unless invalid.empty?
           raise ArgumentError, _("Invalid value '%{value}' for parameter %{name}. Allowed values are '%{allowed_values}'") % {
             value: invalid.first, name: @name, allowed_values: Puppet.valid_file_checksum_types.join("', '")
           }
@@ -1100,7 +1124,7 @@ EOT
       :desc    => "The name to use the Certificate Authority certificate.",
     },
     :cadir => {
-      :default => lambda { default_cadir },
+      :default => -> { default_cadir },
       :type => :directory,
       :desc => "The root directory for the certificate authority.",
     },
@@ -1180,22 +1204,59 @@ EOT
       :desc       => "The default TTL for new certificates.
       #{AS_DURATION}",
     },
-    :crl_refresh_interval => {
+    :ca_refresh_interval => {
+      :default    => "1d",
       :type       => :duration,
-      :desc       => "How often the Puppet agent refreshes its local CRL. By
-         default the CRL is only downloaded once, and never refreshed. If a
-         duration is specified, then the agent will refresh its CRL whenever it
-         next runs and the elapsed time since the CRL was last refreshed exceeds
-         the duration.
+      :desc       => "How often the Puppet agent refreshes its local CA
+         certificates. By default, CA certificates are refreshed every 24 hours. If a
+         different interval is specified, the agent refreshes its CA certificates during
+         the next agent run if the elapsed time since the certificates were last
+         refreshed exceeds the specified duration.
 
-         In general, the duration should be greater than the `runinterval`.
-         Setting it to an equal or lesser value will cause the CRL to be
+         In general, the interval should be greater than the `runinterval`
+         value. Setting the `ca_refresh_interval` value to 0 or an equal or
+         lesser value than `runinterval` causes the CA certificates to be
          refreshed on every run.
+
+         If the agent downloads new CA certs, the agent uses those for subsequent
+         network requests. If the refresh request fails or if the CA certs are
+         unchanged on the server, then the agent run will continue using the
+         local CA certs it already has. #{AS_DURATION}",
+    },
+    :crl_refresh_interval => {
+      :default    => "1d",
+      :type       => :duration,
+      :desc       => "How often the Puppet agent refreshes its local Certificate
+         Revocation List (CRL). By default, the CRL is refreshed every 24 hours. If
+         a different interval is specified, the agent refreshes its CRL on the next
+         Puppet agent run if the elapsed time since the CRL was last refreshed
+         exceeds the specified interval.
+
+         In general, the interval should be greater than the `runinterval` value.
+         Setting the `crl_refresh_interval` value to 0 or an equal or lesser value
+         than `runinterval` causes the CRL to be refreshed on every run.
 
          If the agent downloads a new CRL, the agent will use it for subsequent
          network requests. If the refresh request fails or if the CRL is
          unchanged on the server, then the agent run will continue using the
          local CRL it already has.#{AS_DURATION}",
+    },
+    :hostcert_renewal_interval => {
+      :default => "30d",
+      :type    => :duration,
+      :desc => "How often the Puppet agent renews its client certificate. By
+         default, the client certificate is renewed 30 days before the certificate
+         expires. If a different interval is specified, the agent renews its client
+         certificate during the next agent run, assuming that the client certificate has
+         expired within the specified duration.
+
+         In general, the `hostcert_renewal_interval` value should be greater than the
+         `runinterval` value. Setting the `hostcert_renewal_interval` value to 0 disables
+         automatic renewal.
+
+         If the agent downloads a new certificate, the agent will use it
+         for subsequent network requests. If the refresh request fails, the agent run
+         continues to use its existing certificate. #{AS_DURATION}",
     },
     :keylength => {
       :default    => 4096,
@@ -1210,7 +1271,7 @@ EOT
     }
   )
 
-  # Define the config default.
+    # Define the config default.
 
     settings.define_settings(:application,
       :config_file_name => {
@@ -1234,8 +1295,8 @@ EOT
       :sourceaddress => {
         :default    => nil,
         :desc       => "The address the agent should use to initiate requests.",
-      },
-  )
+      }
+    )
 
   settings.define_settings(:environment,
     :manifest => {
@@ -1355,7 +1416,7 @@ EOT
       :desc       => "File that provides mapping between custom SSL oids and user-friendly names"
     },
     :basemodulepath => {
-      :default => lambda { default_basemodulepath },
+      :default => -> { default_basemodulepath },
       :type => :path,
       :desc => "The search path for **global** modules. Should be specified as a
         list of directories separated by the system path separator character. (The
@@ -1367,7 +1428,7 @@ EOT
         <https://puppet.com/docs/puppet/latest/environments_about.html>",
     },
     :vendormoduledir => {
-      :default => lambda { default_vendormoduledir },
+      :default => -> { default_vendormoduledir },
       :type => :string,
       :desc => "The directory containing **vendored** modules. These modules will
       be used by _all_ environments like those in the `basemodulepath`. The only
@@ -1432,6 +1493,14 @@ EOT
         `puppet/reports/NAME.rb`.)
 
         To turn off reports entirely, set this to `none`",
+    },
+    :exclude_unchanged_resources => {
+      :default => true,
+      :type => :boolean,
+      :desc => "Specifies how unchanged resources are listed in reports. When
+        set to `true`, resources that have had no changes after catalog application
+        will not have corresponding unchanged resource status updates listed in a
+        report."
     },
     :reportdir => {
       :default => "$vardir/reports",
@@ -1517,7 +1586,7 @@ EOT
       :type => :file,
       :mode => "0640",
       :desc => "Transactional storage file for persisting data between
-        transactions for the purposes of infering information (such as
+        transactions for the purposes of inferring information (such as
         corrective_change) on new data received."
     },
     :clientyamldir => {
@@ -1553,7 +1622,7 @@ EOT
       :owner => "root",
       :mode => "0640",
       :desc => "The file in which puppet agent stores a list of the resources
-        associated with the retrieved configuration."  },
+        associated with the retrieved configuration." },
     :puppetdlog => {
       :default => "$logdir/puppetd.log",
       :type => :file,
@@ -1596,7 +1665,7 @@ EOT
       :desc       => "Whether the server will search for SRV records in DNS for the current domain.",
     },
     :srv_domain => {
-      :default    => lambda { Puppet::Settings.domain_fact },
+      :default    => -> { Puppet::Settings.domain_fact },
       :desc       => "The domain which will be queried to find the SRV records of servers to use.",
     },
     :http_extra_headers => {
@@ -1674,6 +1743,21 @@ EOT
       instances will be serialized using this method, since not all classes
       can be guaranteed to support this format, but it will be used for all
       classes that support it.",
+      :hook => proc { |value|
+        if value == "pson" && !Puppet.features.pson?
+          raise(Puppet::Settings::ValidationError, "The 'puppet-pson' gem must be installed to use the PSON serialization format.")
+        end
+      }
+    },
+    :allow_pson_serialization => {
+      :default    => false,
+      :type       => :boolean,
+      :desc => "Whether to allow PSON serialization. When unable to serialize to
+        JSON or other formats, Puppet falls back to PSON. This option affects the
+        configuration management service responses of Puppet Server and the process by
+        which the agent saves its cached catalog. With a default value of `false`, this
+        option is useful in preventing the loss of data because rich data cannot be
+        serialized via PSON.",
     },
     :agent_catalog_run_lockfile => {
       :default    => "$statedir/agent_catalog_run.lock",
@@ -1695,6 +1779,14 @@ EOT
         new configurations, where you want to fix the broken configuration
         rather than reverting to a known-good one.",
     },
+    :include_legacy_facts => {
+      :type       => :boolean,
+      :default    => false,
+      :desc       => "Whether to include legacy facts when requesting a catalog. This
+        option can be set to `false` if all puppet manifests, hiera.yaml, and hiera
+        configuration layers no longer access legacy facts, such as `$osfamily`, and
+        instead access structured facts, such as `$facts['os']['family']`."
+    },
     :fact_name_length_soft_limit => {
       :default    => 2560,
       :type       => :integer,
@@ -1711,9 +1803,11 @@ EOT
       :desc       => "The soft limit for the number of top level facts.",
     },
     :number_of_facts_soft_limit => {
-      :default    => 2048,
+      :default    => 10_240,
       :type       => :integer,
-      :desc       => "The soft limit for the total number of facts.",
+      :desc       => "The soft limit for the total number of fact values. This counts the
+        child elements of all facts (e.g. all items of an array or a hash), not just top
+        level facts.",
     },
     :payload_soft_limit => {
       :default    => 16 * 1024 * 1024,
@@ -1945,7 +2039,7 @@ EOT
       :type       => :boolean,
       :desc       => "Whether plugins should be synced with the central server. This setting is
         deprecated.",
-      :hook => proc { |value|
+      :hook => proc { |_value|
         #TRANSLATORS 'pluginsync' is a setting and should not be translated
         Puppet.deprecation_warning(_("Setting 'pluginsync' is deprecated."))
       }
@@ -1963,7 +2057,7 @@ EOT
     }
   )
 
-  # Central fact information.
+    # Central fact information.
 
     settings.define_settings(
     :main,
@@ -1978,7 +2072,6 @@ EOT
       :hook => proc do |value|
         paths = value.split(File::PATH_SEPARATOR)
         facter = Puppet.runtime[:facter]
-        facter.reset
         facter.search(*paths)
       end
     }
@@ -2005,6 +2098,16 @@ EOT
         being evaluated.  This allows you to interactively see exactly
         what is being done.",
     },
+    :preprocess_deferred => {
+      :default => false,
+      :type => :boolean,
+      :desc => "Whether Puppet should call deferred functions before applying
+        the catalog. If set to `true`, all prerequisites required for the
+        deferred function must be satisfied before the Puppet run. If set to
+        `false`, deferred functions follow Puppet relationships and
+        ordering. In this way, Puppet can install the prerequisites required for a
+        deferred function and call the deferred function in the same run.",
+    },
     :summarize => {
         :default  => false,
         :type     => :boolean,
@@ -2025,17 +2128,19 @@ EOT
           can produce node information. The command must:
 
           * Take the name of a node as a command-line argument.
+
           * Return a YAML hash with up to three keys:
             * `classes` --- A list of classes, as an array or hash.
             * `environment` --- A string.
             * `parameters` --- A list of top-scope variables to set, as a hash.
+
           * For unknown nodes, exit with a non-zero exit code.
 
           Generally, an ENC script makes requests to an external data source.
 
           For more info, see [the ENC documentation](https://puppet.com/docs/puppet/latest/nodes_external.html).",
     }
-    )
+  )
 
         settings.define_settings(
         :ldap,
@@ -2105,7 +2210,7 @@ EOT
           have one already set.  Generally, it should be the 'ou=Hosts'
           branch under your main directory.",
     }
-  )
+      )
 
   settings.define_settings(:server,
     :storeconfigs => {
@@ -2169,7 +2274,7 @@ EOT
     EOT
     },
   :strict_variables => {
-    :default => false,
+    :default => true,
     :type => :boolean,
     :desc => <<-'EOT'
       Causes an evaluation error when referencing unknown variables. (This does not affect

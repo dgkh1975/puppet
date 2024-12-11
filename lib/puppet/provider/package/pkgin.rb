@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 
 Puppet::Type.type(:package).provide :pkgin, :parent => Puppet::Provider::Package do
@@ -5,20 +7,19 @@ Puppet::Type.type(:package).provide :pkgin, :parent => Puppet::Provider::Package
 
   commands :pkgin => "pkgin"
 
-  defaultfor :operatingsystem => [ :smartos, :netbsd ]
+  defaultfor 'os.name' => [:smartos, :netbsd]
 
   has_feature :installable, :uninstallable, :upgradeable, :versionable
 
   def self.parse_pkgin_line(package)
-
     # e.g.
     #   vim-7.2.446;Vim editor (vi clone) without GUI
     match, name, version, status = *package.match(/([^\s;]+)-([^\s;]+)[;\s](=|>|<)?.+$/)
     if match
       {
-        :name     => name,
-        :status   => status,
-        :ensure   => version
+        :name => name,
+        :status => status,
+        :ensure => version
       }
     end
   end
@@ -47,7 +48,7 @@ Puppet::Type.type(:package).provide :pkgin, :parent => Puppet::Provider::Package
       end
     end
 
-    packages.first.update( :ensure => :absent )
+    packages.first.update(:ensure => :absent)
   end
 
   def parse_pkgsearch_line
@@ -58,12 +59,12 @@ Puppet::Type.type(:package).provide :pkgin, :parent => Puppet::Provider::Package
     # Remove the last three lines of help text.
     packages.slice!(-4, 4)
 
-    pkglist = packages.map{ |line| self.class.parse_pkgin_line(line) }
-    pkglist.select{ |package| resource[:name] == package[:name] }
+    pkglist = packages.map { |line| self.class.parse_pkgin_line(line) }
+    pkglist.select { |package| resource[:name] == package[:name] }
   end
 
   def install
-    if String === @resource[:ensure]
+    if @resource[:ensure].is_a?(String)
       pkgin("-y", :install, "#{resource[:name]}-#{resource[:ensure]}")
     else
       pkgin("-y", :install, resource[:name])
@@ -75,13 +76,13 @@ Puppet::Type.type(:package).provide :pkgin, :parent => Puppet::Provider::Package
   end
 
   def latest
-    package = parse_pkgsearch_line.detect{ |p| p[:status] == '<' }
-    return properties[:ensure] if not package
-    return package[:ensure]
+    package = parse_pkgsearch_line.detect { |p| p[:status] == '<' }
+    return properties[:ensure] unless package
+
+    package[:ensure]
   end
 
   def update
     pkgin("-y", :install, resource[:name])
   end
-
 end

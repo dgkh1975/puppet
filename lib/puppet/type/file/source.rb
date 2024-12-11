@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/file_serving/content'
 require_relative '../../../puppet/file_serving/metadata'
 require_relative '../../../puppet/file_serving/terminus_helper'
@@ -11,8 +13,8 @@ module Puppet
   # this state, during retrieval, modifies the appropriate other states
   # so that things get taken care of appropriately.
   Puppet::Type.type(:file).newparam(:source) do
-
     attr_accessor :source, :local
+
     desc <<-'EOT'
       A source file, which will be copied into place on the local system. This
       attribute is mutually exclusive with `content` and `target`. Allowed
@@ -72,7 +74,7 @@ module Puppet
           file { '/etc/nfs.conf':
             source => [
               "puppet:///modules/nfs/conf.${host}",
-              "puppet:///modules/nfs/conf.${operatingsystem}",
+              "puppet:///modules/nfs/conf.${os['name']}",
               'puppet:///modules/nfs/conf'
             ]
           }
@@ -94,7 +96,7 @@ module Puppet
 
         self.fail "Cannot use relative URLs '#{source}'" unless uri.absolute?
         self.fail "Cannot use opaque URLs '#{source}'" unless uri.hierarchical?
-        unless %w{file puppet http https}.include?(uri.scheme)
+        unless %w[file puppet http https].include?(uri.scheme)
           self.fail "Cannot use URLs of type '#{uri.scheme}' as source for fileserving"
         end
       end
@@ -128,9 +130,9 @@ module Puppet
     def change_to_s(currentvalue, newvalue)
       # newvalue = "{md5}#{@metadata.checksum}"
       if resource.property(:ensure).retrieve == :absent
-        return "creating from source #{metadata.source} with contents #{metadata.checksum}"
+        "creating from source #{metadata.source} with contents #{metadata.checksum}"
       else
-        return "replacing from source #{metadata.source} with contents #{metadata.checksum}"
+        "replacing from source #{metadata.source} with contents #{metadata.checksum}"
       end
     end
 
@@ -185,26 +187,25 @@ module Puppet
       return @metadata if @metadata
 
       return nil unless value
-      value.each do |source|
-        begin
-          options = {
-            :environment          => resource.catalog.environment_instance,
-            :links                => resource[:links],
-            :checksum_type        => resource[:checksum],
-            :source_permissions   => resource[:source_permissions]
-          }
 
-          data = Puppet::FileServing::Metadata.indirection.find(source, options)
-          if data
-            @metadata = data
-            @metadata.source = source
-            break
-          end
-        rescue => detail
-          self.fail Puppet::Error, "Could not retrieve file metadata for #{source}: #{detail}", detail
+      value.each do |source|
+        options = {
+          :environment => resource.catalog.environment_instance,
+          :links => resource[:links],
+          :checksum_type => resource[:checksum],
+          :source_permissions => resource[:source_permissions]
+        }
+
+        data = Puppet::FileServing::Metadata.indirection.find(source, options)
+        if data
+          @metadata = data
+          @metadata.source = source
+          break
         end
+      rescue => detail
+        self.fail Puppet::Error, "Could not retrieve file metadata for #{source}: #{detail}", detail
       end
-      self.fail "Could not retrieve information from environment #{resource.catalog.environment} source(s) #{value.join(", ")}" unless @metadata
+      self.fail "Could not retrieve information from environment #{resource.catalog.environment} source(s) #{value.join(', ')}" unless @metadata
       @metadata
     end
 
@@ -217,7 +218,7 @@ module Puppet
     end
 
     def server?
-       uri && uri.host && !uri.host.empty?
+      uri && uri.host && !uri.host.empty?
     end
 
     def server
@@ -248,7 +249,7 @@ module Puppet
     end
 
     def found?
-      ! (metadata.nil? or metadata.ftype.nil?)
+      !(metadata.nil? or metadata.ftype.nil?)
     end
 
     def copy_source_value(metadata_method)
@@ -263,7 +264,7 @@ module Puppet
         value = value.to_s(8) if param_name == :mode && value.is_a?(Numeric)
         resource[param_name] = value
 
-        if (metadata_method == :checksum)
+        if metadata_method == :checksum
           # If copying checksum, also copy checksum_type
           resource[:checksum] = metadata.checksum_type
         end
@@ -282,7 +283,7 @@ module Puppet
 
     def chunk_file_from_disk(local_path)
       File.open(local_path, "rb") do |src|
-        while chunk = src.read(8192) #rubocop:disable Lint/AssignmentInCondition
+        while chunk = src.read(8192) # rubocop:disable Lint/AssignmentInCondition
           yield chunk
         end
       end
@@ -313,8 +314,8 @@ module Puppet
 
     def get_from_http_source(url, &block)
       client = Puppet.runtime[:http]
-      client.get(url, options: {include_system_store: true}) do |response|
-        raise Puppet::HTTP::ResponseError.new(response) unless response.success?
+      client.get(url, options: { include_system_store: true }) do |response|
+        raise Puppet::HTTP::ResponseError, response unless response.success?
 
         response.read_body(&block)
       end
@@ -366,14 +367,14 @@ module Puppet
 
     defaultto :ignore
     newvalues(:use, :use_when_creating, :ignore)
-     munge do |value|
+    munge do |value|
       value = value ? value.to_sym : :ignore
       if @resource.file && @resource.line && value != :ignore
-        #TRANSLATORS "source_permissions" is a parameter name and should not be translated
+        # TRANSLATORS "source_permissions" is a parameter name and should not be translated
         Puppet.puppet_deprecation_warning(_("The `source_permissions` parameter is deprecated. Explicitly set `owner`, `group`, and `mode`."), file: @resource.file, line: @resource.line)
       end
 
       value
-     end
+    end
   end
 end

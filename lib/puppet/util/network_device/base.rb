@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/autoload'
 require 'uri'
 require_relative '../../../puppet/util/network_device/transport'
 require_relative '../../../puppet/util/network_device/transport/base'
 
 class Puppet::Util::NetworkDevice::Base
-
   attr_accessor :url, :transport
 
   def initialize(url, options = {})
@@ -15,7 +16,7 @@ class Puppet::Util::NetworkDevice::Base
     if @autoloader.load(@url.scheme, Puppet.lookup(:current_environment))
       @transport = Puppet::Util::NetworkDevice::Transport.const_get(@url.scheme.capitalize).new(options[:debug])
       @transport.host = @url.host
-      @transport.port = @url.port || case @url.scheme ; when "ssh" ; 22 ; when "telnet" ; 23 ; end
+      @transport.port = @url.port || case @url.scheme; when "ssh"; 22; when "telnet"; 23; end
       @transport.user = @url.user
       @transport.password = @url.password
     end

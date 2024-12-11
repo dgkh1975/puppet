@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/indirector/code'
 
 module Puppet::FileBucketFile
@@ -50,4 +52,3 @@ module Puppet::FileBucketFile
     end
   end
 end
-

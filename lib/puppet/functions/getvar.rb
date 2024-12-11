@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Digs into a variable with dot notation to get a value from a structure.
 #
 # **To get the value from a variable** (that may or may not exist), call the function with
@@ -45,7 +47,7 @@
 Puppet::Functions.create_function(:getvar, Puppet::Functions::InternalFunction) do
   dispatch :get_from_navigation do
     scope_param
-     param 'Pattern[/\A(?:::)?(?:[a-z]\w*::)*[a-z_]\w*(?:\.|\Z)/]', :get_string
+    param 'Pattern[/\A(?:::)?(?:[a-z]\w*::)*[a-z_]\w*(?:\.|\Z)/]', :get_string
     optional_param 'Any', :default_value
     optional_block_param 'Callable[1,1]', :block
   end
@@ -56,7 +58,7 @@ Puppet::Functions.create_function(:getvar, Puppet::Functions::InternalFunction) 
     optional_block_param 'Callable', :block
   end
 
-  def invalid_variable_error(navigation, default_value=nil, &block)
+  def invalid_variable_error(navigation, default_value = nil, &block)
     _("The given string does not start with a valid variable name")
   end
 
@@ -67,10 +69,10 @@ Puppet::Functions.create_function(:getvar, Puppet::Functions::InternalFunction) 
     matches = navigation.match(/^((::)?(\w+::)*\w+)(.*)\z/)
     navigation = matches[4]
     if navigation[0] == '.'
-      navigation = navigation[1..-1]
+      navigation = navigation[1..]
     else
       unless navigation.empty?
-        raise ArgumentError, _("First character after var name in get string must be a '.' - got %{char}") % {char: navigation[0]}
+        raise ArgumentError, _("First character after var name in get string must be a '.' - got %{char}") % { char: navigation[0] }
       end
     end
     get_from_var_name(scope, matches[1], navigation, default_value, &block)
@@ -80,7 +82,7 @@ Puppet::Functions.create_function(:getvar, Puppet::Functions::InternalFunction) 
   #
   def get_from_var_name(scope, var_string, navigation, default_value = nil, &block)
     catch(:undefined_variable) do
-      return call_function_with_scope(scope,'get', scope.lookupvar(var_string), navigation, default_value, &block)
+      return call_function_with_scope(scope, 'get', scope.lookupvar(var_string), navigation, default_value, &block)
     end
     default_value
   end

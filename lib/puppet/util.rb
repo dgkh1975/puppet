@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A module to collect utility functions.
 
 require 'English'
@@ -7,6 +9,7 @@ require 'uri'
 require 'pathname'
 require 'ostruct'
 require_relative 'util/platform'
+require_relative 'util/windows'
 require_relative 'util/symbolic_file_mode'
 require_relative '../puppet/file_system/uniquefile'
 require 'securerandom'
@@ -33,103 +36,58 @@ module Util
   end
   module_function :default_env
 
-  # @param name [String] The name of the environment variable to retrieve
-  # @param mode [Symbol] Which operating system mode to use e.g. :posix or :windows.  Use nil to autodetect
-  # @return [String] Value of the specified environment variable.  nil if it does not exist
+  def create_erb(content)
+    ERB.new(content, trim_mode: '-')
+  end
+  module_function :create_erb
+
+  # @deprecated Use ENV instead
   # @api private
   def get_env(name, mode = default_env)
-    if mode == :windows
-      Puppet::Util::Windows::Process.get_environment_strings.each do |key, value |
-        if name.casecmp(key) == 0 then
-          return value
-        end
-      end
-      return nil
-    else
-      ENV[name]
-    end
+    ENV.fetch(name, nil)
   end
   module_function :get_env
 
-  # @param mode [Symbol] Which operating system mode to use e.g. :posix or :windows.  Use nil to autodetect
-  # @return [Hash] A hashtable of all environment variables
+  # @deprecated Use ENV instead
   # @api private
   def get_environment(mode = default_env)
-    case mode
-      when :posix
-        ENV.to_hash
-      when :windows
-        Puppet::Util::Windows::Process.get_environment_strings
-      else
-        raise _("Unable to retrieve the environment for mode %{mode}") % { mode: mode }
-    end
+    ENV.to_hash
   end
   module_function :get_environment
 
-  # Removes all environment variables
-  # @param mode [Symbol] Which operating system mode to use e.g. :posix or :windows.  Use nil to autodetect
+  # @deprecated Use ENV instead
   # @api private
   def clear_environment(mode = default_env)
-    case mode
-      when :posix
-        ENV.clear
-      when :windows
-        Puppet::Util::Windows::Process.get_environment_strings.each do |key, _|
-          Puppet::Util::Windows::Process.set_environment_variable(key, nil)
-        end
-      else
-        raise _("Unable to clear the environment for mode %{mode}") % { mode: mode }
-    end
+    ENV.clear
   end
   module_function :clear_environment
 
-  # @param name [String] The name of the environment variable to set
-  # @param value [String] The value to set the variable to.  nil deletes the environment variable
-  # @param mode [Symbol] Which operating system mode to use e.g. :posix or :windows.  Use nil to autodetect
+  # @deprecated Use ENV instead
   # @api private
   def set_env(name, value = nil, mode = default_env)
-    case mode
-      when :posix
-        ENV[name] = value
-      when :windows
-        Puppet::Util::Windows::Process.set_environment_variable(name,value)
-      else
-        raise _("Unable to set the environment variable %{name} for mode %{mode}") % { name: name, mode: mode }
-    end
+    ENV[name] = value
   end
   module_function :set_env
 
-  # @param name [Hash] Environment variables to merge into the existing environment.  nil values will remove the variable
-  # @param mode [Symbol] Which operating system mode to use e.g. :posix or :windows.  Use nil to autodetect
+  # @deprecated Use ENV instead
   # @api private
   def merge_environment(env_hash, mode = default_env)
-    case mode
-      when :posix
-        env_hash.each { |name, val| ENV[name.to_s] = val }
-      when :windows
-        env_hash.each do |name, val|
-          Puppet::Util::Windows::Process.set_environment_variable(name.to_s, val)
-        end
-      else
-        raise _("Unable to merge given values into the current environment for mode %{mode}") % { mode: mode }
-    end
+    ENV.merge!(hash.transform_keys(&:to_s))
   end
   module_function :merge_environment
 
   # Run some code with a specific environment.  Resets the environment back to
   # what it was at the end of the code.
-  # Windows can store Unicode chars in the environment as keys or values, but
-  # Ruby's ENV tries to roundtrip them through the local codepage, which can
-  # cause encoding problems - underlying helpers use Windows APIs on Windows
-  # see https://bugs.ruby-lang.org/issues/8822
+  #
+  # @param hash [Hash{String,Symbol => String}] Environment variables to override the current environment.
+  # @param mode [Symbol] ignored
   def withenv(hash, mode = :posix)
-    saved = get_environment(mode)
-    merge_environment(hash, mode)
-    yield
-  ensure
-    if saved
-      clear_environment(mode)
-      merge_environment(saved, mode)
+    saved = ENV.to_hash
+    begin
+      ENV.merge!(hash.transform_keys(&:to_s))
+      yield
+    ensure
+      ENV.replace(saved)
     end
   end
   module_function :withenv
@@ -145,7 +103,6 @@ module Util
     end
   end
 
-
   # Change the process to a different user
   def self.chuser
     group = Puppet[:group]
@@ -158,7 +115,7 @@ module Util
 
         # Don't exit on failed group changes, since it's
         # not fatal
-        #exit(74)
+        # exit(74)
       end
     end
 
@@ -220,7 +177,7 @@ module Util
                args.pop
              end
 
-    #TRANSLATORS 'benchmark' is a method name and should not be translated
+    # TRANSLATORS 'benchmark' is a method name and should not be translated
     raise Puppet::DevError, _("Failed to provide level to benchmark") unless level
 
     unless level == :none or object.respond_to? level
@@ -233,7 +190,7 @@ module Util
         yield
       }
       object.send(level, msg % { seconds: "%0.2f" % seconds })
-      return seconds
+      seconds
     else
       yield
     end
@@ -251,36 +208,34 @@ module Util
     if absolute_path?(bin)
       return bin if FileTest.file? bin and FileTest.executable? bin
     else
-      exts = Puppet::Util.get_env('PATHEXT')
+      exts = ENV.fetch('PATHEXT', nil)
       exts = exts ? exts.split(File::PATH_SEPARATOR) : %w[.COM .EXE .BAT .CMD]
-      Puppet::Util.get_env('PATH').split(File::PATH_SEPARATOR).each do |dir|
-        begin
-          dest = File.expand_path(File.join(dir, bin))
-        rescue ArgumentError => e
-          # if the user's PATH contains a literal tilde (~) character and HOME is not set, we may get
-          # an ArgumentError here.  Let's check to see if that is the case; if not, re-raise whatever error
-          # was thrown.
-          if e.to_s =~ /HOME/ and (Puppet::Util.get_env('HOME').nil? || Puppet::Util.get_env('HOME') == "")
-            # if we get here they have a tilde in their PATH.  We'll issue a single warning about this and then
-            # ignore this path element and carry on with our lives.
-            #TRANSLATORS PATH and HOME are environment variables and should not be translated
-            Puppet::Util::Warnings.warnonce(_("PATH contains a ~ character, and HOME is not set; ignoring PATH element '%{dir}'.") % { dir: dir })
-          elsif e.to_s =~ /doesn't exist|can't find user/
-            # ...otherwise, we just skip the non-existent entry, and do nothing.
-            #TRANSLATORS PATH is an environment variable and should not be translated
-            Puppet::Util::Warnings.warnonce(_("Couldn't expand PATH containing a ~ character; ignoring PATH element '%{dir}'.") % { dir: dir })
-          else
-            raise
-          end
+      ENV.fetch('PATH').split(File::PATH_SEPARATOR).each do |dir|
+        dest = File.expand_path(File.join(dir, bin))
+      rescue ArgumentError => e
+        # if the user's PATH contains a literal tilde (~) character and HOME is not set, we may get
+        # an ArgumentError here.  Let's check to see if that is the case; if not, re-raise whatever error
+        # was thrown.
+        if e.to_s =~ /HOME/ and (ENV['HOME'].nil? || ENV.fetch('HOME', nil) == "")
+          # if we get here they have a tilde in their PATH.  We'll issue a single warning about this and then
+          # ignore this path element and carry on with our lives.
+          # TRANSLATORS PATH and HOME are environment variables and should not be translated
+          Puppet::Util::Warnings.warnonce(_("PATH contains a ~ character, and HOME is not set; ignoring PATH element '%{dir}'.") % { dir: dir })
+        elsif e.to_s =~ /doesn't exist|can't find user/
+          # ...otherwise, we just skip the non-existent entry, and do nothing.
+          # TRANSLATORS PATH is an environment variable and should not be translated
+          Puppet::Util::Warnings.warnonce(_("Couldn't expand PATH containing a ~ character; ignoring PATH element '%{dir}'.") % { dir: dir })
         else
-          if Puppet::Util::Platform.windows? && File.extname(dest).empty?
-            exts.each do |ext|
-              destext = File.expand_path(dest + ext)
-              return destext if FileTest.file? destext and FileTest.executable? destext
-            end
-          end
-          return dest if FileTest.file? dest and FileTest.executable? dest
+          raise
         end
+      else
+        if Puppet::Util::Platform.windows? && File.extname(dest).empty?
+          exts.each do |ext|
+            destext = File.expand_path(dest + ext)
+            return destext if FileTest.file? destext and FileTest.executable? destext
+          end
+        end
+        return dest if FileTest.file? dest and FileTest.executable? dest
       end
     end
     nil
@@ -293,9 +248,9 @@ module Util
   # Escape once for the string literal, and once for the regex.
   slash = '[\\\\/]'
   label = '[^\\\\/]+'
-  AbsolutePathWindows = %r!^(?:(?:[A-Z]:#{slash})|(?:#{slash}#{slash}#{label}#{slash}#{label})|(?:#{slash}#{slash}\?#{slash}#{label}))!io
-  AbsolutePathPosix   = %r!^/!
-  def absolute_path?(path, platform=nil)
+  AbsolutePathWindows = /^(?:(?:[A-Z]:#{slash})|(?:#{slash}#{slash}#{label}#{slash}#{label})|(?:#{slash}#{slash}\?#{slash}#{label}))/io
+  AbsolutePathPosix   = %r{^/}
+  def absolute_path?(path, platform = nil)
     unless path.is_a?(String)
       Puppet.warning("Cannot check if #{path} is an absolute path because it is a '#{path.class}' and not a String'")
       return false
@@ -318,7 +273,7 @@ module Util
               raise Puppet::DevError, _("unknown platform %{platform} in absolute_path") % { platform: platform }
             end
 
-    !! (path =~ regex)
+    !!(path =~ regex)
   end
   module_function :absolute_path?
 
@@ -331,11 +286,11 @@ module Util
     if Puppet::Util::Platform.windows?
       path = path.tr('\\', '/')
 
-      unc = /^\/\/([^\/]+)(\/.+)/.match(path)
+      unc = %r{^//([^/]+)(/.+)}.match(path)
       if unc
         params[:host] = unc[1]
         path = unc[2]
-      elsif path =~ /^[a-z]:\//i
+      elsif path =~ %r{^[a-z]:/}i
         path = '/' + path
       end
     end
@@ -367,7 +322,7 @@ module Util
       if uri.host && !uri.host.empty?
         path = "//#{uri.host}" + path # UNC
       else
-        path.sub!(/^\//, '')
+        path.sub!(%r{^/}, '')
       end
     end
 
@@ -375,7 +330,7 @@ module Util
   end
   module_function :uri_to_path
 
-  RFC_3986_URI_REGEX = /^(?<scheme>([^:\/?#]+):)?(?<authority>\/\/([^\/?#]*))?(?<path>[^?#]*)(\?(?<query>[^#]*))?(#(?<fragment>.*))?$/
+  RFC_3986_URI_REGEX = %r{^(?<scheme>(?:[^:/?#]+):)?(?<authority>//(?:[^/?#]*))?(?<path>[^?#]*)(?:\?(?<query>[^#]*))?(?:#(?<fragment>.*))?$}
 
   # Percent-encodes a URI query parameter per RFC3986 - https://tools.ietf.org/html/rfc3986
   #
@@ -450,10 +405,9 @@ module Util
   #   query will encode + as %2B and space as %20
   #   fragment behaves like query
   def uri_encode(path, opts = { :allow_fragment => false })
-    raise ArgumentError.new(_('path may not be nil')) if path.nil?
+    raise ArgumentError, _('path may not be nil') if path.nil?
 
-    # ensure string starts as UTF-8 for the sake of Ruby 1.9.3
-    encoded = ''.encode!(Encoding::UTF_8)
+    encoded = ''.dup
 
     # parse uri into named matches, then reassemble properly encoded
     parts = path.match(RFC_3986_URI_REGEX)
@@ -469,7 +423,7 @@ module Util
     encoded += rfc2396_escape(parts[:path]) unless parts[:path].nil?
 
     # each query parameter
-    if !parts[:query].nil?
+    unless parts[:query].nil?
       query_string = parts[:query].split('&').map do |pair|
         # can optionally be separated by an =
         pair.split('=').map do |v|
@@ -486,18 +440,18 @@ module Util
   module_function :uri_encode
 
   # From https://github.com/ruby/ruby/blob/v2_7_3/lib/uri/rfc2396_parser.rb#L24-L46
-  ALPHA = "a-zA-Z".freeze
-  ALNUM = "#{ALPHA}\\d".freeze
-  UNRESERVED = "\\-_.!~*'()#{ALNUM}".freeze
-  RESERVED = ";/?:@&=+$,\\[\\]".freeze
+  ALPHA = "a-zA-Z"
+  ALNUM = "#{ALPHA}\\d"
+  UNRESERVED = "\\-_.!~*'()#{ALNUM}"
+  RESERVED = ";/?:@&=+$,\\[\\]"
   UNSAFE = Regexp.new("[^#{UNRESERVED}#{RESERVED}]").freeze
 
-  HEX = "a-fA-F\\d".freeze
+  HEX = "a-fA-F\\d"
   ESCAPED = Regexp.new("%[#{HEX}]{2}").freeze
 
   def rfc2396_escape(str)
     str.gsub(UNSAFE) do |match|
-      tmp = ''
+      tmp = ''.dup
       match.each_byte do |uc|
         tmp << sprintf('%%%02X', uc)
       end
@@ -509,12 +463,12 @@ module Util
   def uri_unescape(str)
     enc = str.encoding
     enc = Encoding::UTF_8 if enc == Encoding::US_ASCII
-    str.gsub(ESCAPED) { [$&[1, 2]].pack('H2').force_encoding(enc) }
+    str.gsub(ESCAPED) { [::Regexp.last_match(0)[1, 2]].pack('H2').force_encoding(enc) }
   end
   module_function :uri_unescape
 
-  def safe_posix_fork(stdin=$stdin, stdout=$stdout, stderr=$stderr, &block)
-    child_pid = Kernel.fork do
+  def safe_posix_fork(stdin = $stdin, stdout = $stdout, stderr = $stderr, &block)
+    Kernel.fork do
       STDIN.reopen(stdin)
       STDOUT.reopen(stdout)
       STDERR.reopen(stderr)
@@ -526,16 +480,25 @@ module Util
       begin
         Dir.foreach('/proc/self/fd') do |f|
           if f != '.' && f != '..' && f.to_i >= 3
-            IO::new(f.to_i).close rescue nil
+            begin
+              IO.new(f.to_i).close
+            rescue
+              nil
+            end
           end
         end
-      rescue Errno::ENOENT # /proc/self/fd not found
-        3.upto(256){|fd| IO::new(fd).close rescue nil}
+      rescue Errno::ENOENT, Errno::ENOTDIR # /proc/self/fd not found, /proc/self not a dir
+        3.upto(256) { |fd|
+          begin
+            IO.new(fd).close
+          rescue
+            nil
+          end
+        }
       end
 
       block.call if block
     end
-    child_pid
   end
   module_function :safe_posix_fork
 
@@ -551,11 +514,9 @@ module Util
 
   # Just benchmark, with no logging.
   def thinmark
-    seconds = Benchmark.realtime {
+    Benchmark.realtime {
       yield
     }
-
-    seconds
   end
 
   module_function :thinmark
@@ -589,7 +550,11 @@ module Util
   def self.resolve_stackframe(frame)
     _, path, rest = /^(.*):(\d+.*)$/.match(frame).to_a
     if path
-      path = Pathname(path).realpath rescue path
+      path = begin
+        Pathname(path).realpath
+      rescue
+        path
+      end
       "#{path}:#{rest}"
     else
       frame
@@ -623,7 +588,7 @@ module Util
   # The staging_location is a location to render the temporary file before
   # moving the file to it's final location.
 
-  DEFAULT_POSIX_MODE = 0644
+  DEFAULT_POSIX_MODE = 0o644
   DEFAULT_WINDOWS_MODE = nil
 
   def replace_file(file, default_mode, staging_location: nil, validate_callback: nil, &block)
@@ -635,12 +600,10 @@ module Util
       end
 
       mode = symbolic_mode_to_int(normalize_symbolic_mode(default_mode))
+    elsif Puppet::Util::Platform.windows?
+      mode = DEFAULT_WINDOWS_MODE
     else
-      if Puppet::Util::Platform.windows?
-        mode = DEFAULT_WINDOWS_MODE
-      else
-        mode = DEFAULT_POSIX_MODE
-      end
+      mode = DEFAULT_POSIX_MODE
     end
 
     begin
@@ -653,19 +616,18 @@ module Util
         tempfile = Puppet::FileSystem::Uniquefile.new(Puppet::FileSystem.basename_string(file), Puppet::FileSystem.dir_string(file))
       end
 
-
       effective_mode =
-      if !Puppet::Util::Platform.windows?
-        # Grab the current file mode, and fall back to the defaults.
+        unless Puppet::Util::Platform.windows?
+          # Grab the current file mode, and fall back to the defaults.
 
-        if Puppet::FileSystem.exist?(file)
-          stat = Puppet::FileSystem.lstat(file)
-          tempfile.chown(stat.uid, stat.gid)
-          stat.mode
-        else
-          mode
+          if Puppet::FileSystem.exist?(file)
+            stat = Puppet::FileSystem.lstat(file)
+            tempfile.chown(stat.uid, stat.gid)
+            stat.mode
+          else
+            mode
+          end
         end
-      end
 
       # OK, now allow the caller to write the content of the file.
       yield tempfile
@@ -673,7 +635,7 @@ module Util
       if effective_mode
         # We only care about the bottom four slots, which make the real mode,
         # and not the rest of the platform stat call fluff and stuff.
-        tempfile.chmod(effective_mode & 07777)
+        tempfile.chmod(effective_mode & 0o7777)
       end
 
       # Now, make sure the data (which includes the mode) is safe on disk.
@@ -698,7 +660,7 @@ module Util
 
       if Puppet::Util::Platform.windows?
         # Windows ReplaceFile needs a file to exist, so touch handles this
-        if !Puppet::FileSystem.exist?(file)
+        unless Puppet::FileSystem.exist?(file)
           Puppet::FileSystem.touch(file)
           if mode
             Puppet::Util::Windows::Security.set_mode(mode, Puppet::FileSystem.path_string(file))
@@ -714,6 +676,7 @@ module Util
         if Puppet::FileSystem.exist?(file) && Puppet::FileSystem.directory?(file)
           raise Errno::EISDIR, _("Is a directory: %{directory}") % { directory: file }
         end
+
         File.rename(tempfile.path, Puppet::FileSystem.path_string(file))
       end
     ensure
@@ -723,7 +686,6 @@ module Util
         tempfile.close!
       end
     end
-
 
     # Ideally, we would now fsync the directory as well, but Ruby doesn't
     # have support for that, and it doesn't matter /that/ much...
@@ -751,20 +713,20 @@ module Util
   #  code (e.g. webrick), and we have no idea what they might throw.
   rescue Exception => err
     ## NOTE: when debugging spec failures, these two lines can be very useful
-    #puts err.inspect
-    #puts Puppet::Util.pretty_backtrace(err.backtrace)
+    # puts err.inspect
+    # puts Puppet::Util.pretty_backtrace(err.backtrace)
     Puppet.log_exception(err, "#{message}: #{err}")
     Puppet::Util::Log.force_flushqueue()
     exit(code)
   end
   module_function :exit_on_fail
 
-  def deterministic_rand(seed,max)
+  def deterministic_rand(seed, max)
     deterministic_rand_int(seed, max).to_s
   end
   module_function :deterministic_rand
 
-  def deterministic_rand_int(seed,max)
+  def deterministic_rand_int(seed, max)
     Random.new(seed).rand(max)
   end
   module_function :deterministic_rand_int
@@ -784,7 +746,6 @@ module Util
   module_function :skip_external_facts
 end
 end
-
 
 require_relative 'util/errors'
 require_relative 'util/metaid'

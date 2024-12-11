@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 class Puppet::Network::HTTP::Route
-  MethodNotAllowedHandler = lambda do |req, res|
+  MethodNotAllowedHandler = lambda do |req, _res|
     raise Puppet::Network::HTTP::Error::HTTPMethodNotAllowedError.new("method #{req.method} not allowed for route #{req.path}", Puppet::Network::HTTP::Issues::UNSUPPORTED_METHOD)
   end
 
@@ -26,39 +28,39 @@ class Puppet::Network::HTTP::Route
 
   def get(*handlers)
     @method_handlers[:GET] = handlers
-    return self
+    self
   end
 
   def head(*handlers)
     @method_handlers[:HEAD] = handlers
-    return self
+    self
   end
 
   def options(*handlers)
     @method_handlers[:OPTIONS] = handlers
-    return self
+    self
   end
 
   def post(*handlers)
     @method_handlers[:POST] = handlers
-    return self
+    self
   end
 
   def put(*handlers)
     @method_handlers[:PUT] = handlers
-    return self
+    self
   end
 
   def delete(*handlers)
     @method_handlers[:DELETE] = handlers
-    return self
+    self
   end
 
   def any(*handlers)
-    @method_handlers.each do |method, registered_handlers|
+    @method_handlers.each do |method, _registered_handlers|
       @method_handlers[method] = handlers
     end
-    return self
+    self
   end
 
   def chain(*routes)
@@ -67,13 +69,14 @@ class Puppet::Network::HTTP::Route
   end
 
   def matches?(request)
-    Puppet.debug { "Evaluating match for #{self.inspect}" }
+    Puppet.debug { "Evaluating match for #{inspect}" }
     if match(request.routing_path)
       return true
     else
       Puppet.debug { "Did not match path (#{request.routing_path.inspect})" }
     end
-    return false
+
+    false
   end
 
   def process(request, response)

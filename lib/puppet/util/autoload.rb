@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pathname'
 require_relative '../../puppet/util/rubygems'
 require_relative '../../puppet/util/warnings'
@@ -59,8 +61,10 @@ class Puppet::Util::Autoload
     def changed?(name, env)
       name = cleanpath(name).chomp('.rb')
       return true unless loaded.include?(name)
+
       file, old_mtime = loaded[name]
       return true unless file == get_file(name, env)
+
       begin
         old_mtime.to_i != File.mtime(file).to_i
       rescue Errno::ENOENT
@@ -73,11 +77,12 @@ class Puppet::Util::Autoload
     def load_file(name, env)
       file = get_file(name.to_s, env)
       return false unless file
+
       begin
         mark_loaded(name, file)
         Kernel.load file
-        return true
-      rescue SystemExit,NoMemoryError
+        true
+      rescue SystemExit, NoMemoryError
         raise
       rescue Exception => detail
         message = _("Could not autoload %{name}: %{detail}") % { name: name, detail: detail }
@@ -106,13 +111,13 @@ class Puppet::Util::Autoload
     # returns nil if no file is found
     # @api private
     def get_file(name, env)
-      name = name + '.rb' unless name =~ /\.rb$/
+      name += '.rb' unless name =~ /\.rb$/
       path = search_directories(env).find { |dir| Puppet::FileSystem.exist?(File.join(dir, name)) }
       path and File.join(path, name)
     end
 
     def files_to_load(path, env)
-      search_directories(env).map {|dir| files_in_dir(dir, path) }.flatten.uniq
+      search_directories(env).map { |dir| files_in_dir(dir, path) }.flatten.uniq
     end
 
     # @api private
@@ -175,6 +180,7 @@ class Puppet::Util::Autoload
   def initialize(obj, path)
     @path = path.to_s
     raise ArgumentError, _("Autoload paths cannot be fully qualified") if Puppet::Util.absolute_path?(@path)
+
     @object = obj
   end
 

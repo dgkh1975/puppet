@@ -318,6 +318,15 @@ file { '#{@coderoot}/hiera.yaml':
 ',
 }
 
+## facts file
+file { '#{@coderoot}/facts.yaml':
+  ensure => file,
+  mode => "0644",
+  content => '---
+  my_data_key: "my_data_value"
+',
+}
+
 file { '#{@coderoot}/hieradata/global.yaml':
   ensure => file,
   mode => "0644",
@@ -2066,6 +2075,7 @@ codedir = #{@coderoot}
 environmentpath = #{@coderoot}/environments
 hiera_config = #{@coderoot}/hiera.yaml
 environment = env1
+server = #{master.connection.hostname}
 ",
 }
 MANI1
@@ -2085,6 +2095,7 @@ codedir = #{@coderoot}
 environmentpath = #{@coderoot}/environments
 hiera_config = #{@coderoot}/hiera.yaml
 environment = env2
+server = #{master.connection.hostname}
 ",
 }
 MANI2
@@ -2104,6 +2115,7 @@ codedir = #{@coderoot}
 environmentpath = #{@coderoot}/environments
 hiera_config = #{@coderoot}/hiera.yaml
 environment = env3
+server = #{master.connection.hostname}
 ",
 }
 MANI3
@@ -2123,6 +2135,7 @@ codedir = #{@coderoot}
 environmentpath = #{@coderoot}/environments
 hiera_config = #{@coderoot}/hiera.yaml
 environment = env4
+server = #{master.connection.hostname}
 ",
 }
 MANI4
@@ -2158,9 +2171,21 @@ external_nodes = #{@coderoot}/enc.rb
 [main]
 environmentpath = #{@coderoot}/environments
 hiera_config = #{@coderoot}/hiera.yaml
+server = #{master.connection.hostname}
 ",
 }
 MANIENC
+
+teardown do
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/certs/#{@node1}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/certs/#{@node2}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/ca/signed/#{@node1}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/ca/signed/#{@node2}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/private_keys/#{@node1}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/private_keys/#{@node2}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/public_keys/#{@node1}.pem")
+  on(master, "rm -f /etc/puppetlabs/puppet/ssl/public_keys/#{@node2}.pem")
+end
 
 step 'apply main manifest'
 apply_manifest_on(master, @manifest, :catch_failures => true)
@@ -2553,7 +2578,26 @@ with_puppet_running_on master, @master_opts, @coderoot do
   apply_manifest_on(master, @encmanifest, :catch_failures => true)
 
   step "--compile uses environment specified in ENC"
-  r = on(master, puppet('lookup', '--compile', "--node #{@node1}", "--confdir #{@confdir}", 'environment_key'))
+  r = on(master, puppet('lookup', '--compile', "--node #{@node1}", "--confdir #{@confdir}", "--facts #{@coderoot}/facts.yaml", 'environment_key'))
+  result = r.stderr
+  assert_match(
+    /CA is not available/,
+    result,
+    "lookup in ENC specified environment failed"
+  )
+
+  step "handle certificate"
+  on(master, "puppetserver ca generate --certname #{@node1}")
+  on(master, "puppetserver ca generate --certname #{@node2}")
+  on(master, "mkdir -p #{@testroot}/puppet/ssl/certs")
+  on(master, "mkdir -p #{@testroot}/puppet/ssl/private_keys")
+  on(master, "cp -a /etc/puppetlabs/puppet/ssl/certs/ca.pem #{@testroot}/puppet/ssl/certs")
+  on(master, "cp -a /etc/puppetlabs/puppet/ssl/crl.pem #{@testroot}/puppet/ssl")
+  on(master, "cp -a /etc/puppetlabs/puppet/ssl/private_keys/#{master.connection.hostname}.pem #{@testroot}/puppet/ssl/private_keys")
+  on(master, "cp -a /etc/puppetlabs/puppet/ssl/certs/#{master.connection.hostname}.pem #{@testroot}/puppet/ssl/certs")
+
+  step "--compile uses environment specified in ENC"
+  r = on(master, puppet('lookup', '--compile', "--node #{@node1}", "--confdir #{@confdir}", "--facts #{@coderoot}/facts.yaml", 'environment_key'))
   result = r.stdout
   assert_match(
     /env-env2-ruby-function/,
@@ -2562,7 +2606,7 @@ with_puppet_running_on master, @master_opts, @coderoot do
   )
 
   step "without --compile does not use environment specified in ENC"
-  r = on(master, puppet('lookup', "--node #{@node1}", "--confdir #{@confdir}", 'environment_key'))
+  r = on(master, puppet('lookup', "--node #{@node1}", "--confdir #{@confdir}", "--facts #{@coderoot}/facts.yaml", 'environment_key'))
   result = r.stdout
   assert_match(
     /env-production hiera provided value/,
@@ -2570,4 +2614,12 @@ with_puppet_running_on master, @master_opts, @coderoot do
     "lookup in production environment failed"
   )
 
+  step "lookup fails when there are no facts available"
+  r = on(master, puppet('lookup', '--compile', "--node #{@node1}", "--confdir #{@confdir}", 'environment_key'), :acceptable_exit_codes => [1])
+  result = r.stderr
+  assert_match(
+    /No facts available/,
+    result,
+    "Expected to raise when there were no facts available."
+  )
 end

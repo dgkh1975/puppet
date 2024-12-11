@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'hiera/scope'
 require_relative 'configured_data_provider'
 
@@ -11,16 +13,15 @@ class GlobalDataProvider < ConfiguredDataProvider
 
   def unchecked_key_lookup(key, lookup_invocation, merge)
     config = config(lookup_invocation)
-    if(config.version == 3)
+    if config.version == 3
       # Hiera version 3 needs access to special scope variables
       scope = lookup_invocation.scope
       unless scope.is_a?(Hiera::Scope)
         return lookup_invocation.with_scope(Hiera::Scope.new(scope)) do |hiera_invocation|
-
           # Confine to global scope unless an environment data provider has been defined (same as for hiera_xxx functions)
           adapter = lookup_invocation.lookup_adapter
           hiera_invocation.set_global_only unless adapter.global_only? || adapter.has_environment_data_provider?(lookup_invocation)
-          hiera_invocation.lookup(key, lookup_invocation.module_name) { unchecked_key_lookup(key , hiera_invocation, merge) }
+          hiera_invocation.lookup(key, lookup_invocation.module_name) { unchecked_key_lookup(key, hiera_invocation, merge) }
         end
       end
 

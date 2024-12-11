@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Evaluator
 # The RelationshipOperator implements the semantics of the -> <- ~> <~ operators creating relationships or notification
@@ -9,7 +11,6 @@ module Evaluator
 # module. Later when more is cleaned up this can be simplified further.
 #
 class RelationshipOperator
-
   # Provides access to the Puppet 3.x runtime (scope, etc.)
   # This separation has been made to make it easier to later migrate the evaluator to an improved runtime.
   #
@@ -17,6 +18,7 @@ class RelationshipOperator
 
   class IllegalRelationshipOperandError < RuntimeError
     attr_reader :operand
+
     def initialize operand
       @operand = operand
     end
@@ -24,6 +26,7 @@ class RelationshipOperator
 
   class NotCatalogTypeError < RuntimeError
     attr_reader :type
+
     def initialize type
       @type = type
     end
@@ -44,7 +47,7 @@ class RelationshipOperator
   # Catch all non transformable objects
   # @api private
   def transform_Object(o, scope)
-    raise IllegalRelationshipOperandError.new(o)
+    raise IllegalRelationshipOperandError, o
   end
 
   # A Resource is by definition a Catalog type, but of 3.x type
@@ -87,7 +90,7 @@ class RelationshipOperator
 
   # Array content needs to be transformed
   def transform_Array(o, scope)
-    o.map{|x| transform(x, scope) }
+    o.map { |x| transform(x, scope) }
   end
 
   # Asserts (and returns) the type if it is a PCatalogEntryType
@@ -95,8 +98,9 @@ class RelationshipOperator
   #
   def assert_catalog_type(o, scope)
     unless @type_calculator.assignable?(@catalog_type, o)
-      raise NotCatalogTypeError.new(o)
+      raise NotCatalogTypeError, o
     end
+
     # TODO must check if this is an abstract PResourceType (i.e. without a type_name) - which should fail ?
     # e.g. File -> File (and other similar constructs) - maybe the catalog protects against this since references
     # may be to future objects...
@@ -119,11 +123,11 @@ class RelationshipOperator
   # To implement this, the general evaluator needs to be able to track each evaluation result and associate
   # it with a corresponding expression. This structure should then be passed to the relationship operator.
   #
-  def evaluate (left_right_evaluated, relationship_expression, scope)
+  def evaluate(left_right_evaluated, relationship_expression, scope)
     # assert operator (should have been validated, but this logic makes assumptions which would
     # screw things up royally). Better safe than sorry.
     unless RELATIONSHIP_OPERATORS.include?(relationship_expression.operator)
-      fail(Issues::UNSUPPORTED_OPERATOR, relationship_expression, {:operator => relationship_expression.operator})
+      fail(Issues::UNSUPPORTED_OPERATOR, relationship_expression, { :operator => relationship_expression.operator })
     end
 
     begin
@@ -139,7 +143,7 @@ class RelationshipOperator
       # into an array, and thus the resulting left and right must be flattened individually
       # Once flattened, the operands should be sets (to remove duplicate entries)
       #
-      real = left_right_evaluated.collect {|x| [x].flatten.collect {|y| transform(y, scope) }}
+      real = left_right_evaluated.collect { |x| [x].flatten.collect { |y| transform(y, scope) } }
       real[0].flatten!
       real[1].flatten!
       real[0].uniq!
@@ -149,12 +153,12 @@ class RelationshipOperator
       source, target = reverse_operator?(relationship_expression) ? real.reverse : real
 
       # Add the relationships to the catalog
-      source.each {|s| target.each {|t| add_relationship(s, t, RELATION_TYPE[relationship_expression.operator], scope) }}
+      source.each { |s| target.each { |t| add_relationship(s, t, RELATION_TYPE[relationship_expression.operator], scope) } }
 
       # The result is the transformed source RHS unless it is empty, in which case the transformed LHS is returned.
       # This closes the gap created by an empty set of references in a chain of relationship
       # such that X -> [ ] -> Y results in  X -> Y.
-      #result = real[1].empty? ? real[0] : real[1]
+      # result = real[1].empty? ? real[0] : real[1]
       if real[1].empty?
         # right side empty, simply use the left (whatever it may be)
         result = real[0]
@@ -169,11 +173,10 @@ class RelationshipOperator
         result = right
       end
       result
-
     rescue NotCatalogTypeError => e
-      fail(Issues::NOT_CATALOG_TYPE, relationship_expression, {:type => @type_calculator.string(e.type)})
+      fail(Issues::NOT_CATALOG_TYPE, relationship_expression, { :type => @type_calculator.string(e.type) })
     rescue IllegalRelationshipOperandError => e
-      fail(Issues::ILLEGAL_RELATIONSHIP_OPERAND_TYPE, relationship_expression, {:operand => e.operand})
+      fail(Issues::ILLEGAL_RELATIONSHIP_OPERAND_TYPE, relationship_expression, { :operand => e.operand })
     end
   end
 

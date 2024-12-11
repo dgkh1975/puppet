@@ -1,19 +1,22 @@
+# frozen_string_literal: true
+
 # This class defines the private API of the MigrationChecker support.
 # @api private
 #
 class Puppet::Pops::Migration::MigrationChecker
-
-  def initialize()
+  def initialize
   end
 
+  # rubocop:disable Naming/MemoizedInstanceVariableName
   def self.singleton
-    @null_checker ||= self.new
+    @null_checker ||= new
   end
+  # rubocop:enable Naming/MemoizedInstanceVariableName
 
   # Produces a hash of available migrations; a map from a symbolic name in string form to a brief description.
   # This version has no such supported migrations.
-  def available_migrations()
-    { }
+  def available_migrations
+    {}
   end
 
   # For 3.8/4.0

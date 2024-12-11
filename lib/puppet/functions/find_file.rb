@@ -1,9 +1,15 @@
+# frozen_string_literal: true
+
 # Finds an existing file from a module and returns its path.
 #
 # This function accepts an argument that is a String as a `<MODULE NAME>/<FILE>`
 # reference, which searches for `<FILE>` relative to a module's `files`
 # directory. (For example, the reference `mysql/mysqltuner.pl` will search for the
 # file `<MODULES DIRECTORY>/mysql/files/mysqltuner.pl`.)
+#
+# If this function is run via puppet agent, it checks for file existence on the
+# Puppet Primary server. If run via puppet apply, it checks on the local host.
+# In both cases, the check is performed before any resources are changed.
 #
 # This function can also accept:
 #

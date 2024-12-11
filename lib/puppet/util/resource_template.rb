@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util'
 require_relative '../../puppet/util/logging'
 require 'erb'
@@ -40,11 +42,12 @@ class Puppet::Util::ResourceTemplate
 
   def evaluate
     set_resource_variables
-    ERB.new(Puppet::FileSystem.read(@file, :encoding => 'utf-8'), 0, "-").result(binding)
+    Puppet::Util.create_erb(Puppet::FileSystem.read(@file, :encoding => 'utf-8')).result(binding)
   end
 
   def initialize(file, resource)
     raise ArgumentError, _("Template %{file} does not exist") % { file: file } unless Puppet::FileSystem.exist?(file)
+
     @file = file
     @resource = resource
   end
@@ -58,4 +61,3 @@ class Puppet::Util::ResourceTemplate
     end
   end
 end
-

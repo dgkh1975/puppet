@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 module Puppet::Pops::Types
 module Iterable
-
 class TreeIterator
   include Iterable
 
@@ -8,7 +9,7 @@ class TreeIterator
     PArrayType::DEFAULT,
     PHashType::DEFAULT,
     PObjectType::DEFAULT
-    )
+  )
 
   # Creates a TreeIterator that by default treats all Array, Hash and Object instances as
   # containers - the 'containers' option can be set to a type that denotes which types of values
@@ -24,9 +25,9 @@ class TreeIterator
   #   `include_containers` to also be `true` to take effect).
   # @option options [Boolean] :include_containers ('true') If containers should be included in the iteration
   # @option options [Boolean] :include_values ('true') If non containers (values) should be included in the iteration
-  # @option options [Boolean] :include_refs ('false') If (non containment) referenced values in Objects should be included 
+  # @option options [Boolean] :include_refs ('false') If (non containment) referenced values in Objects should be included
   #
-  def initialize(enum, options=EMPTY_HASH)
+  def initialize(enum, options = EMPTY_HASH)
     @root = enum
     @element_t = nil
     @value_stack = [enum]
@@ -35,8 +36,9 @@ class TreeIterator
     @recursed = false
     @containers_t = options['container_type'] || DEFAULT_CONTAINERS
     unless DEFAULT_CONTAINERS.assignable?(@containers_t)
-      raise ArgumentError, _("Only Array, Hash, and Object types can be used as container types. Got %{type}") % {type: @containers_t}
+      raise ArgumentError, _("Only Array, Hash, and Object types can be used as container types. Got %{type}") % { type: @containers_t }
     end
+
     @with_root       = extract_option(options, 'include_root', true)
     @with_containers = extract_option(options, 'include_containers', true)
     @with_values     = extract_option(options, 'include_values', true)
@@ -44,6 +46,7 @@ class TreeIterator
     unless @with_containers || @with_values
       raise ArgumentError, _("Options 'include_containers' and 'include_values' cannot both be false")
     end
+
     @include_refs = !!options['include_refs']
   end
 
@@ -91,27 +94,24 @@ class TreeIterator
 
   def indexer_on(val)
     return nil unless @containers_t.instance?(val)
+
     if val.is_a?(Array)
       val.size.times
     elsif val.is_a?(Hash)
       val.each_key
+    elsif @include_refs
+      val._pcore_type.attributes.each_key
     else
-      if @include_refs
-        val._pcore_type.attributes.each_key
-      else
-        val._pcore_type.attributes.reject {|k,v| v.kind == PObjectType::ATTRIBUTE_KIND_REFERENCE }.each_key
-      end
+      val._pcore_type.attributes.reject { |_k, v| v.kind == PObjectType::ATTRIBUTE_KIND_REFERENCE }.each_key
     end
   end
   private :indexer_on
 
   def has_next?(iterator)
-    begin
-      iterator.peek
-      true
-    rescue StopIteration
-      false
-    end
+    iterator.peek
+    true
+  rescue StopIteration
+    false
   end
   private :has_next?
 
@@ -123,7 +123,6 @@ class TreeIterator
 end
 
 class DepthFirstTreeIterator < TreeIterator
-
   # Creates a DepthFirstTreeIterator that by default treats all Array, Hash and Object instances as
   # containers - the 'containers' option can be set to a type that denotes which types of values
   # should be treated as containers - a `Variant[Array, Hash]` would for instance not treat
@@ -168,7 +167,6 @@ class DepthFirstTreeIterator < TreeIterator
           redo unless @with_values
         end
         return [@current_path.dup, value]
-
       rescue StopIteration
         # end of current value's range of content
         # pop all until out of next values
@@ -226,7 +224,6 @@ class BreadthFirstTreeIterator < TreeIterator
           next unless @with_containers
         end
         return [@current_path.dup, value]
-
       rescue StopIteration
         # end of current value's range of content
         # shift all until out of next values
@@ -248,7 +245,6 @@ class BreadthFirstTreeIterator < TreeIterator
     @recursed = true
   end
   private :shift_level
-
 end
 end
 end

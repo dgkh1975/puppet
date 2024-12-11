@@ -53,7 +53,7 @@ describe Puppet::HTTP::Client, unless: Puppet::Util::Platform.jruby? do
         expect {
           client.get(URI("https://127.0.0.1:#{port}"), options: {ssl_context: alt_context})
         }.to raise_error(Puppet::SSL::CertVerifyError,
-                         %r{certificate verify failed.* .self signed certificate in certificate chain for CN=Test CA.})
+                         %r{certificate verify failed.* .self.signed certificate in certificate chain for CN=Test CA.})
       end
     end
 
@@ -77,7 +77,13 @@ describe Puppet::HTTP::Client, unless: Puppet::Util::Platform.jruby? do
       }
     }
 
-    it "mutually authenticates the connection" do
+    let(:cert_file) do
+      res = tmpfile('cert_file')
+      File.write(res, https_server.ca_cert)
+      res
+    end
+
+    it "mutually authenticates the connection using an explicit context" do
       client_context = ssl_provider.create_context(
         cacerts: [https_server.ca_cert], crls: [https_server.ca_crl],
         client_cert: https_server.server_cert, private_key: https_server.server_key
@@ -86,6 +92,47 @@ describe Puppet::HTTP::Client, unless: Puppet::Util::Platform.jruby? do
       https_server.start_server(ctx_proc: ctx_proc) do |port|
         res = client.get(URI("https://127.0.0.1:#{port}"), options: {ssl_context: client_context})
         expect(res).to be_success
+      end
+    end
+
+    it "mutually authenticates the connection when the client and server certs are issued from different CAs" do
+      # this is the client cert's CA, key and cert
+      Puppet[:localcacert] = fixtures('ssl/unknown-ca.pem')
+      Puppet[:hostprivkey] = fixtures('ssl/unknown-127.0.0.1-key.pem')
+      Puppet[:hostcert] = fixtures('ssl/unknown-127.0.0.1.pem')
+
+      # this is the server cert's CA that the client needs in order to authenticate the server
+      Puppet[:ssl_trust_store] = fixtures('ssl/ca.pem')
+
+      # need to pass both the client and server CAs. The former is needed so the server can authenticate our client cert
+      https_server = PuppetSpec::HTTPSServer.new(ca_cert: [cert_fixture('ca.pem'), cert_fixture('unknown-ca.pem')])
+      https_server.start_server(ctx_proc: ctx_proc) do |port|
+        res = client.get(URI("https://127.0.0.1:#{port}"), options: {include_system_store: true})
+        expect(res).to be_success
+      end
+    end
+
+    it "connects when the server's CA is in the system store and the connection is mutually authenticated using create_context" do
+      Puppet::Util.withenv("SSL_CERT_FILE" => cert_file) do
+        client_context = ssl_provider.create_context(
+          cacerts: [], crls: [],
+          client_cert: https_server.server_cert, private_key: https_server.server_key,
+          revocation: false, include_system_store: true
+        )
+        https_server.start_server(ctx_proc: ctx_proc) do |port|
+          res = client.get(URI("https://127.0.0.1:#{port}"), options: {ssl_context: client_context})
+          expect(res).to be_success
+        end
+      end
+    end
+
+    it "connects when the server's CA is in the system store and the connection is mutually authenticated using load_context" do
+      Puppet::Util.withenv("SSL_CERT_FILE" => cert_file) do
+        client_context = ssl_provider.load_context(revocation: false, include_system_store: true)
+        https_server.start_server(ctx_proc: ctx_proc) do |port|
+          res = client.get(URI("https://127.0.0.1:#{port}"), options: {ssl_context: client_context})
+          expect(res).to be_success
+        end
       end
     end
   end
@@ -102,12 +149,12 @@ describe Puppet::HTTP::Client, unless: Puppet::Util::Platform.jruby? do
 
     it "connects when the server's CA is in the system store" do
       # create a temp cacert bundle
-      ssl_file = tmpfile('systemstore')
-      File.write(ssl_file, https_server.ca_cert)
+      cert_file = tmpfile('cert_file')
+      File.write(cert_file, https_server.ca_cert)
 
       # override path to system cacert bundle, this must be done before
       # the SSLContext is created and the call to X509::Store.set_default_paths
-      Puppet::Util.withenv("SSL_CERT_FILE" => ssl_file) do
+      Puppet::Util.withenv("SSL_CERT_FILE" => cert_file) do
         system_context = ssl_provider.create_system_context(cacerts: [])
         https_server.start_server do |port|
           res = client.get(URI("https://127.0.0.1:#{port}"), options: {ssl_context: system_context})
@@ -123,7 +170,23 @@ describe Puppet::HTTP::Client, unless: Puppet::Util::Platform.jruby? do
         expect {
           client.get(URI("https://127.0.0.1:#{port}"), options: {ssl_context: system_context})
         }.to raise_error(Puppet::SSL::CertVerifyError,
-                         %r{certificate verify failed.* .self signed certificate in certificate chain for CN=Test CA.})
+                         %r{certificate verify failed.* .self.signed certificate in certificate chain for CN=Test CA.})
+      end
+    end
+  end
+
+  context 'ensure that retrying does not attempt to read the body after closing the connection' do
+    let(:client) { Puppet::HTTP::Client.new(retry_limit: 1) }
+    it 'raises a retry error instead' do
+      response_proc = -> (req, res) {
+        res['Retry-After'] = 1
+        res.status = 503
+      }
+
+      https_server.start_server(response_proc: response_proc) do |port|
+        uri = URI("https://127.0.0.1:#{port}")
+        kwargs = {headers: {'Content-Type' => 'text/plain'}, options: {ssl_context: root_context}}
+        expect{client.post(uri, '', **kwargs)}.to raise_error(Puppet::HTTP::TooManyRetryAfters)
       end
     end
   end

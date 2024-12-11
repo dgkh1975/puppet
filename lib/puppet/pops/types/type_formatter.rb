@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative '../../../puppet/concurrent/thread_local_singleton'
 
 module Puppet::Pops
@@ -97,7 +98,6 @@ class TypeFormatter
     end
   end
 
-
   def append_default
     @bld << 'default'
   end
@@ -142,13 +142,13 @@ class TypeFormatter
   end
 
   # @api private
-  def string_PAnyType(_)     ; @bld << 'Any'     ; end
+  def string_PAnyType(_); @bld << 'Any'; end
 
   # @api private
-  def string_PUndefType(_)   ; @bld << 'Undef'   ; end
+  def string_PUndefType(_); @bld << 'Undef'; end
 
   # @api private
-  def string_PDefaultType(_) ; @bld << 'Default' ; end
+  def string_PDefaultType(_); @bld << 'Default'; end
 
   # @api private
   def string_PBooleanType(t)
@@ -156,16 +156,16 @@ class TypeFormatter
   end
 
   # @api private
-  def string_PScalarType(_)  ; @bld << 'Scalar'  ; end
+  def string_PScalarType(_); @bld << 'Scalar'; end
 
   # @api private
-  def string_PScalarDataType(_)  ; @bld << 'ScalarData'  ; end
+  def string_PScalarDataType(_); @bld << 'ScalarData'; end
 
   # @api private
-  def string_PNumericType(_) ; @bld << 'Numeric' ; end
+  def string_PNumericType(_); @bld << 'Numeric'; end
 
   # @api private
-  def string_PBinaryType(_)  ; @bld << 'Binary' ; end
+  def string_PBinaryType(_); @bld << 'Binary'; end
 
   # @api private
   def string_PIntegerType(t)
@@ -179,12 +179,12 @@ class TypeFormatter
 
   # @api private
   def string_PInitType(t)
-    append_array('Init', t.type.nil?)  { append_strings([t.type, *t.init_args]) }
+    append_array('Init', t.type.nil?) { append_strings([t.type, *t.init_args]) }
   end
 
   # @api private
   def string_PIterableType(t)
-    append_array('Iterable', t.element_type.nil?)  { append_string(t.element_type) }
+    append_array('Iterable', t.element_type.nil?) { append_string(t.element_type) }
   end
 
   # @api private
@@ -194,7 +194,7 @@ class TypeFormatter
 
   # @api private
   def string_PFloatType(t)
-    append_array('Float', t.unbounded? ) { append_elements(range_array_part(t)) }
+    append_array('Float', t.unbounded?) { append_elements(range_array_part(t)) }
   end
 
   # @api private
@@ -280,22 +280,20 @@ class TypeFormatter
   def string_PCallableType(t)
     if t.return_type.nil?
       append_array('Callable', t.param_types.nil?) { append_callable_params(t) }
+    elsif t.param_types.nil?
+      append_array('Callable', false) { append_strings([[], t.return_type], false) }
     else
-      if t.param_types.nil?
-        append_array('Callable', false) { append_strings([[], t.return_type], false) }
-      else
-        append_array('Callable', false) do
-          append_array('', false) { append_callable_params(t) }
-          @bld << COMMA_SEP
-          append_string(t.return_type)
-        end
+      append_array('Callable', false) do
+        append_array('', false) { append_callable_params(t) }
+        @bld << COMMA_SEP
+        append_string(t.return_type)
       end
     end
   end
 
   def append_callable_params(t)
     # translate to string, and skip Unit types
-    append_strings(t.param_types.types.reject {|t2| t2.class == PUnitType }, true)
+    append_strings(t.param_types.types.reject { |t2| t2.instance_of?(PUnitType) }, true)
 
     if t.param_types.types.empty?
       append_strings([0, 0], true)
@@ -311,7 +309,7 @@ class TypeFormatter
 
   # @api private
   def string_PStructType(t)
-    append_array('Struct', t.elements.empty?) { append_hash(Hash[t.elements.map {|e| struct_element_pair(e) }]) }
+    append_array('Struct', t.elements.empty?) { append_hash(t.elements.to_h { |e| struct_element_pair(e) }) }
   end
 
   # @api private
@@ -332,11 +330,10 @@ class TypeFormatter
     append_array('Pattern', t.patterns.empty?) { append_strings(t.patterns.map(&:regexp)) }
   end
 
-
   # @api private
   def string_PCollectionType(t)
     range = range_array_part(t.size_type)
-    append_array('Collection', range.empty? ) { append_elements(range) }
+    append_array('Collection', range.empty?) { append_elements(range) }
   end
 
   def string_Object(t)
@@ -445,7 +442,7 @@ class TypeFormatter
   # @api private
   def string_PNotUndefType(t)
     contained_type = t.type
-    append_array('NotUndef', contained_type.nil? || contained_type.class == PAnyType) do
+    append_array('NotUndef', contained_type.nil? || contained_type.instance_of?(PAnyType)) do
       if contained_type.is_a?(PStringType) && !contained_type.value.nil?
         append_string(contained_type.value)
       else
@@ -474,13 +471,13 @@ class TypeFormatter
   # @api private
   def string_PTypeSetType(t)
     append_array('TypeSet') do
-      append_hash(t._pcore_init_hash.each, proc { |k| @bld << symbolic_key(k) }) do |k,v|
+      append_hash(t._pcore_init_hash.each, proc { |k| @bld << symbolic_key(k) }) do |k, v|
         case k
         when KEY_TYPES
           old_ts = @type_set
           @type_set = t
           begin
-            append_hash(v, proc { |tk| @bld << symbolic_key(tk) }) do |tk, tv|
+            append_hash(v, proc { |tk| @bld << symbolic_key(tk) }) do |_tk, tv|
               if tv.is_a?(Hash)
                 append_object_hash(tv)
               else
@@ -555,12 +552,10 @@ class TypeFormatter
         @bld << ' = '
         append_string(t.resolved_type)
       end
+    elsif expand && @type_set.defines_type?(t)
+      append_string(t.resolved_type)
     else
-      if expand && @type_set.defines_type?(t)
-        append_string(t.resolved_type)
-      else
-        @bld << @type_set.name_for(t, t.name)
-      end
+      @bld << @type_set.name_for(t, t.name)
     end
   end
 
@@ -585,7 +580,7 @@ class TypeFormatter
   end
 
   # @api private
-  def string_FalseClass(t)   ; @bld << 'false'       ; end
+  def string_FalseClass(t); @bld << 'false'; end
 
   # @api private
   def string_Hash(t)
@@ -598,13 +593,13 @@ class TypeFormatter
   end
 
   # @api private
-  def string_NilClass(t)     ; @bld << (@ruby ? 'nil' : 'undef') ; end
+  def string_NilClass(t); @bld << (@ruby ? 'nil' : 'undef'); end
 
   # @api private
-  def string_Numeric(t)      ; @bld << t.to_s    ; end
+  def string_Numeric(t); @bld << t.to_s; end
 
   # @api private
-  def string_Regexp(t)       ; @bld << PRegexpType.regexp_to_s_with_delimiters(t); end
+  def string_Regexp(t); @bld << PRegexpType.regexp_to_s_with_delimiters(t); end
 
   # @api private
   def string_String(t)
@@ -613,22 +608,22 @@ class TypeFormatter
   end
 
   # @api private
-  def string_Symbol(t)       ; @bld << t.to_s    ; end
+  def string_Symbol(t); @bld << t.to_s; end
 
   # @api private
-  def string_TrueClass(t)    ; @bld << 'true'    ; end
+  def string_TrueClass(t); @bld << 'true'; end
 
   # @api private
-  def string_Version(t)      ; @bld << "'#{t}'"  ; end
+  def string_Version(t); @bld << "'#{t}'"; end
 
   # @api private
-  def string_VersionRange(t) ; @bld << "'#{t}'"  ; end
+  def string_VersionRange(t); @bld << "'#{t}'"; end
 
   # @api private
-  def string_Timespan(t)    ; @bld << "'#{t}'"  ; end
+  def string_Timespan(t); @bld << "'#{t}'"; end
 
   # @api private
-  def string_Timestamp(t)    ; @bld << "'#{t}'"  ; end
+  def string_Timestamp(t); @bld << "'#{t}'"; end
 
   # Debugging to_s to reduce the amount of output
   def to_s
@@ -692,42 +687,41 @@ class TypeFormatter
   end
 
   def append_object_hash(hash)
-    begin
-      @expanded = false
-      append_array('Object') do
-        append_hash(hash, proc { |k| @bld << symbolic_key(k) }) do |k,v|
-          case k
-          when KEY_ATTRIBUTES, KEY_FUNCTIONS
-            # Types might need to be output as type references
-            append_hash(v) do |_, fv|
-              if fv.is_a?(Hash)
-                append_hash(fv, proc { |fak| @bld << symbolic_key(fak) }) do |fak,fav|
-                  case fak
-                  when KEY_KIND
-                    @bld << fav
-                  else
-                    append_string(fav)
-                  end
+    @expanded = false
+    append_array('Object') do
+      append_hash(hash, proc { |k| @bld << symbolic_key(k) }) do |k, v|
+        case k
+        when KEY_ATTRIBUTES, KEY_FUNCTIONS
+          # Types might need to be output as type references
+          append_hash(v) do |_, fv|
+            if fv.is_a?(Hash)
+              append_hash(fv, proc { |fak| @bld << symbolic_key(fak) }) do |fak, fav|
+                case fak
+                when KEY_KIND
+                  @bld << fav
+                else
+                  append_string(fav)
                 end
-              else
-                append_string(fv)
               end
+            else
+              append_string(fv)
             end
-          when KEY_EQUALITY
-            append_array('') { append_strings(v) } if v.is_a?(Array)
-          else
-            append_string(v)
           end
+        when KEY_EQUALITY
+          append_array('') { append_strings(v) } if v.is_a?(Array)
+        else
+          append_string(v)
         end
       end
-    ensure
-      @expanded = true
     end
+  ensure
+    @expanded = true
   end
 
   def append_elements(array, to_be_continued = false)
     case array.size
     when 0
+      # do nothing
     when 1
       @bld << array[0]
       @bld << COMMA_SEP if to_be_continued
@@ -740,6 +734,7 @@ class TypeFormatter
   def append_strings(array, to_be_continued = false)
     case array.size
     when 0
+      # do nothing
     when 1
       append_string(array[0])
       @bld << COMMA_SEP if to_be_continued

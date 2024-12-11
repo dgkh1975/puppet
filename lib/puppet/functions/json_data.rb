@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The `json_data` is a hiera 5 `data_hash` data provider function.
 # See [the configuration guide documentation](https://puppet.com/docs/puppet/latest/hiera_config_yaml_5.html#configuring-a-hierarchy-level-built-in-backends) for
 # how to use this function.
@@ -18,12 +20,10 @@ Puppet::Functions.create_function(:json_data) do
   def json_data(options, context)
     path = options['path']
     context.cached_file_data(path) do |content|
-      begin
-        Puppet::Util::Json.load(content)
-      rescue Puppet::Util::Json::ParseError => ex
-        # Filename not included in message, so we add it here.
-        raise Puppet::DataBinding::LookupError, "Unable to parse (%{path}): %{message}" % { path: path, message: ex.message }
-      end
+      Puppet::Util::Json.load(content)
+    rescue Puppet::Util::Json::ParseError => ex
+      # Filename not included in message, so we add it here.
+      raise Puppet::DataBinding::LookupError, "Unable to parse (%{path}): %{message}" % { path: path, message: ex.message }
     end
   end
 

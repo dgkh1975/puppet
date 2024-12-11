@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/module_tool'
 require_relative '../../puppet/network/format_support'
 
 module Puppet::ModuleTool
-
   class Dependency
     include Puppet::Network::FormatSupport
 
@@ -22,7 +23,7 @@ module Puppet::ModuleTool
     # We override Object's ==, eql, and hash so we can more easily find identical
     # dependencies.
     def ==(o)
-      self.hash == o.hash
+      hash == o.hash
     end
 
     alias :eql? :==
@@ -33,8 +34,8 @@ module Puppet::ModuleTool
 
     def to_data_hash
       result = { :name => @full_module_name }
-      result[:version_requirement] = @version_requirement if @version_requirement && ! @version_requirement.nil?
-      result[:repository] = @repository.to_s if @repository && ! @repository.nil?
+      result[:version_requirement] = @version_requirement if @version_requirement && !@version_requirement.nil?
+      result[:repository] = @repository.to_s if @repository && !@repository.nil?
       result
     end
   end

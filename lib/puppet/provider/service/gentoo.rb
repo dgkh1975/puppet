@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Manage gentoo services.  Start/stop is the same as InitSvc, but enable/disable
 # is special.
 Puppet::Type.type(:service).provide :gentoo, :parent => :init do
@@ -10,12 +12,12 @@ Puppet::Type.type(:service).provide :gentoo, :parent => :init do
 
   commands :update => "/sbin/rc-update"
 
-  confine :operatingsystem => :gentoo
+  confine 'os.name' => :gentoo
 
   def disable
-      output = update :del, @resource[:name], :default
-  rescue Puppet::ExecutionFailure
-      raise Puppet::Error, "Could not disable #{self.name}: #{output}", $!.backtrace
+    output = update :del, @resource[:name], :default
+  rescue Puppet::ExecutionFailure => e
+    raise Puppet::Error, "Could not disable #{name}: #{output}", e.backtrace
   end
 
   def enabled?
@@ -31,15 +33,15 @@ Puppet::Type.type(:service).provide :gentoo, :parent => :init do
 
     # If it's enabled then it will print output showing service | runlevel
     if output =~ /^\s*#{@resource[:name]}\s*\|\s*(boot|default)/
-      return :true
+      :true
     else
-      return :false
+      :false
     end
   end
 
   def enable
-      output = update :add, @resource[:name], :default
-  rescue Puppet::ExecutionFailure
-      raise Puppet::Error, "Could not enable #{self.name}: #{output}", $!.backtrace
+    output = update :add, @resource[:name], :default
+  rescue Puppet::ExecutionFailure => e
+    raise Puppet::Error, "Could not enable #{name}: #{output}", e.backtrace
   end
 end

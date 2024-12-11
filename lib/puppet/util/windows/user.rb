@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/windows'
 
 require 'ffi'
@@ -11,7 +13,7 @@ module Puppet::Util::Windows::User
 
     # if Vista or later, check for unrestricted process token
     elevated_supported = Puppet::Util::Windows::Process.supports_elevated_security?
-    return elevated_supported ? Puppet::Util::Windows::Process.elevated_security? : true
+    elevated_supported ? Puppet::Util::Windows::Process.elevated_security? : true
   end
   module_function :admin?
 
@@ -19,7 +21,7 @@ module Puppet::Util::Windows::User
   # This account is not recognized by the security subsystem, so you cannot specify its name in a call to the `LookupAccountName` function.
   # https://docs.microsoft.com/en-us/windows/win32/services/localsystem-account
   def localsystem?(name)
-    ["LocalSystem", ".\\LocalSystem", "#{Puppet::Util::Windows::ADSI.computer_name}\\LocalSystem"].any?{ |s| s.casecmp(name) == 0 }
+    ["LocalSystem", ".\\LocalSystem", "#{Puppet::Util::Windows::ADSI.computer_name}\\LocalSystem"].any? { |s| s.casecmp(name) == 0 }
   end
   module_function :localsystem?
 
@@ -50,17 +52,17 @@ module Puppet::Util::Windows::User
         size_pointer.write_uint32(SECURITY_MAX_SID_SIZE)
 
         if CreateWellKnownSid(:WinBuiltinAdministratorsSid, FFI::Pointer::NULL, sid_pointer, size_pointer) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to create administrators SID"))
+          raise Puppet::Util::Windows::Error, _("Failed to create administrators SID")
         end
       end
 
       if IsValidSid(sid_pointer) == FFI::WIN32_FALSE
-        raise Puppet::Util::Windows::Error.new(_("Invalid SID"))
+        raise Puppet::Util::Windows::Error, _("Invalid SID")
       end
 
       FFI::MemoryPointer.new(:win32_bool, 1) do |ismember_pointer|
         if CheckTokenMembership(FFI::Pointer::NULL_HANDLE, sid_pointer, ismember_pointer) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to check membership"))
+          raise Puppet::Util::Windows::Error, _("Failed to check membership")
         end
 
         # Is administrators SID enabled in calling thread's access token?
@@ -73,19 +75,16 @@ module Puppet::Util::Windows::User
   module_function :check_token_membership
 
   def password_is?(name, password, domain = '.')
-    begin
-      logon_user(name, password, domain) { |token| }
-    rescue Puppet::Util::Windows::Error => detail
+    logon_user(name, password, domain) { |token| }
+  rescue Puppet::Util::Windows::Error => detail
+    authenticated_error_codes = Set[
+      ERROR_ACCOUNT_RESTRICTION,
+      ERROR_INVALID_LOGON_HOURS,
+      ERROR_INVALID_WORKSTATION,
+      ERROR_ACCOUNT_DISABLED,
+    ]
 
-      authenticated_error_codes = Set[
-        ERROR_ACCOUNT_RESTRICTION,
-        ERROR_INVALID_LOGON_HOURS,
-        ERROR_INVALID_WORKSTATION,
-        ERROR_ACCOUNT_DISABLED,
-      ]
-
-      return authenticated_error_codes.include?(detail.code)
-    end
+    authenticated_error_codes.include?(detail.code)
   end
   module_function :password_is?
 
@@ -97,10 +96,10 @@ module Puppet::Util::Windows::User
     token = nil
     begin
       FFI::MemoryPointer.new(:handle, 1) do |token_pointer|
-        #try logon using network else try logon using interactive mode
+        # try logon using network else try logon using interactive mode
         if logon_user_by_logon_type(name, domain, password, fLOGON32_LOGON_NETWORK, fLOGON32_PROVIDER_DEFAULT, token_pointer) == FFI::WIN32_FALSE
           if logon_user_by_logon_type(name, domain, password, fLOGON32_LOGON_INTERACTIVE, fLOGON32_PROVIDER_DEFAULT, token_pointer) == FFI::WIN32_FALSE
-            raise Puppet::Util::Windows::Error.new(_("Failed to logon user %{name}") % {name: name.inspect})
+            raise Puppet::Util::Windows::Error, _("Failed to logon user %{name}") % { name: name.inspect }
           end
         end
 
@@ -131,13 +130,13 @@ module Puppet::Util::Windows::User
 
         # Load the profile. Since it doesn't exist, it will be created
         if LoadUserProfileW(token, pi.pointer) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to load user profile %{user}") % { user: user.inspect })
+          raise Puppet::Util::Windows::Error, _("Failed to load user profile %{user}") % { user: user.inspect }
         end
 
         Puppet.debug("Loaded profile for #{user}")
 
         if UnloadUserProfile(token, pi[:hProfile]) == FFI::WIN32_FALSE
-          raise Puppet::Util::Windows::Error.new(_("Failed to unload user profile %{user}") % { user: user.inspect })
+          raise Puppet::Util::Windows::Error, _("Failed to unload user profile %{user}") % { user: user.inspect }
         end
       end
     end
@@ -247,19 +246,19 @@ module Puppet::Util::Windows::User
     error_code = LsaNtStatusToWinError(status)
 
     error_reason = case error_code.to_s(16)
-    when '0' # ERROR_SUCCESS
-      return # Method call succeded
-    when '2' # ERROR_FILE_NOT_FOUND
-      return # No rights/privilleges assigned to given user
-    when '5' # ERROR_ACCESS_DENIED
-      "Access is denied. Please make sure that puppet is running as administrator."
-    when '521' # ERROR_NO_SUCH_PRIVILEGE
-      "One or more of the given rights/privilleges are incorrect."
-    when '6ba' # RPC_S_SERVER_UNAVAILABLE
-      "The RPC server is unavailable or given domain name is invalid."
-    end
+                   when '0' # ERROR_SUCCESS
+                     return # Method call succeded
+                   when '2' # ERROR_FILE_NOT_FOUND
+                     return # No rights/privilleges assigned to given user
+                   when '5' # ERROR_ACCESS_DENIED
+                     "Access is denied. Please make sure that puppet is running as administrator."
+                   when '521' # ERROR_NO_SUCH_PRIVILEGE
+                     "One or more of the given rights/privilleges are incorrect."
+                   when '6ba' # RPC_S_SERVER_UNAVAILABLE
+                     "The RPC server is unavailable or given domain name is invalid."
+                   end
 
-    raise Puppet::Error.new("Calling `#{method_name}` returned 'Win32 Error Code 0x%08X'. #{error_reason}" % error_code)
+    raise Puppet::Error, "Calling `#{method_name}` returned 'Win32 Error Code 0x%08X'. #{error_reason}" % error_code
   end
   private_class_method :check_lsa_nt_status_and_raise_failures
 
@@ -276,7 +275,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LogonUserW,
-    [:lpwstr, :lpwstr, :lpwstr, :dword, :dword, :phandle], :win32_bool
+                          [:lpwstr, :lpwstr, :lpwstr, :dword, :dword, :phandle], :win32_bool
 
   # https://msdn.microsoft.com/en-us/library/windows/desktop/bb773378(v=vs.85).aspx
   # typedef struct _PROFILEINFO {
@@ -309,7 +308,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :userenv
   attach_function_private :LoadUserProfileW,
-    [:handle, :pointer], :win32_bool
+                          [:handle, :pointer], :win32_bool
 
   # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762282(v=vs.85).aspx
   # BOOL WINAPI UnloadUserProfile(
@@ -318,7 +317,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :userenv
   attach_function_private :UnloadUserProfile,
-    [:handle, :handle], :win32_bool
+                          [:handle, :handle], :win32_bool
 
   # https://msdn.microsoft.com/en-us/library/windows/desktop/aa376389(v=vs.85).aspx
   # BOOL WINAPI CheckTokenMembership(
@@ -328,9 +327,10 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :CheckTokenMembership,
-    [:handle, :pointer, :pbool], :win32_bool
+                          [:handle, :pointer, :pbool], :win32_bool
 
   # https://msdn.microsoft.com/en-us/library/windows/desktop/aa379650(v=vs.85).aspx
+  # rubocop:disable Layout/SpaceBeforeComma
   WELL_KNOWN_SID_TYPE = enum(
     :WinNullSid                                   , 0,
     :WinWorldSid                                  , 1,
@@ -428,6 +428,7 @@ module Puppet::Util::Windows::User
     :WinCapabilityEnterpriseAuthenticationSid     , 93,
     :WinCapabilityRemovableStorageSid             , 94
   )
+  # rubocop:enable Layout/SpaceBeforeComma
 
   # https://msdn.microsoft.com/en-us/library/windows/desktop/aa446585(v=vs.85).aspx
   # BOOL WINAPI CreateWellKnownSid(
@@ -438,7 +439,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :CreateWellKnownSid,
-    [WELL_KNOWN_SID_TYPE, :pointer, :pointer, :lpdword], :win32_bool
+                          [WELL_KNOWN_SID_TYPE, :pointer, :pointer, :lpdword], :win32_bool
 
   # https://msdn.microsoft.com/en-us/library/windows/desktop/aa379151(v=vs.85).aspx
   # BOOL WINAPI IsValidSid(
@@ -446,7 +447,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :IsValidSid,
-    [:pointer], :win32_bool
+                          [:pointer], :win32_bool
 
   # https://docs.microsoft.com/en-us/windows/win32/api/lsalookup/ns-lsalookup-lsa_object_attributes
   # typedef struct _LSA_OBJECT_ATTRIBUTES {
@@ -459,11 +460,11 @@ module Puppet::Util::Windows::User
   # } LSA_OBJECT_ATTRIBUTES, *PLSA_OBJECT_ATTRIBUTES;
   class LSA_OBJECT_ATTRIBUTES < FFI::Struct
     layout :Length, :ulong,
-      :RootDirectory, :handle,
-      :ObjectName, :plsa_unicode_string,
-      :Attributes, :ulong,
-      :SecurityDescriptor, :pvoid,
-      :SecurityQualityOfService, :pvoid
+           :RootDirectory, :handle,
+           :ObjectName, :plsa_unicode_string,
+           :Attributes, :ulong,
+           :SecurityDescriptor, :pvoid,
+           :SecurityQualityOfService, :pvoid
   end
 
   # https://docs.microsoft.com/en-us/windows/win32/api/lsalookup/ns-lsalookup-lsa_unicode_string
@@ -474,8 +475,8 @@ module Puppet::Util::Windows::User
   # } LSA_UNICODE_STRING, *PLSA_UNICODE_STRING;
   class LSA_UNICODE_STRING < FFI::Struct
     layout :Length, :ushort,
-      :MaximumLength, :ushort,
-      :Buffer, :pwstr
+           :MaximumLength, :ushort,
+           :Buffer, :pwstr
   end
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsaenumerateaccountrights
@@ -488,7 +489,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaEnumerateAccountRights,
-    [:lsa_handle, :psid, :plsa_unicode_string, :pulong], :ntstatus
+                          [:lsa_handle, :psid, :plsa_unicode_string, :pulong], :ntstatus
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsaaddaccountrights
   # NTSTATUS LsaAddAccountRights(
@@ -499,7 +500,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaAddAccountRights,
-    [:lsa_handle, :psid, :plsa_unicode_string, :ulong], :ntstatus
+                          [:lsa_handle, :psid, :plsa_unicode_string, :ulong], :ntstatus
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsaremoveaccountrights
   # NTSTATUS LsaRemoveAccountRights(
@@ -511,7 +512,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaRemoveAccountRights,
-    [:lsa_handle, :psid, :bool, :plsa_unicode_string, :ulong], :ntstatus
+                          [:lsa_handle, :psid, :bool, :plsa_unicode_string, :ulong], :ntstatus
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsaopenpolicy
   # NTSTATUS LsaOpenPolicy(
@@ -522,7 +523,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaOpenPolicy,
-    [:plsa_unicode_string, :plsa_object_attributes, :access_mask, :plsa_handle], :ntstatus
+                          [:plsa_unicode_string, :plsa_object_attributes, :access_mask, :plsa_handle], :ntstatus
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsaclose
   # NTSTATUS LsaClose(
@@ -530,7 +531,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaClose,
-    [:lsa_handle], :ntstatus
+                          [:lsa_handle], :ntstatus
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsafreememory
   # NTSTATUS LsaFreeMemory(
@@ -538,7 +539,7 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaFreeMemory,
-    [:pvoid], :ntstatus
+                          [:pvoid], :ntstatus
 
   # https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-lsantstatustowinerror
   # ULONG LsaNtStatusToWinError(
@@ -546,5 +547,5 @@ module Puppet::Util::Windows::User
   # );
   ffi_lib :advapi32
   attach_function_private :LsaNtStatusToWinError,
-    [:ntstatus], :ulong
+                          [:ntstatus], :ulong
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
   class PAbstractTimeDataType < PScalarType
@@ -15,7 +17,7 @@ module Types
     # @return [Boolean] `true` if this range intersects with the other range
     # @api public
     def intersect?(o)
-      self.class == o.class && !(@to < o.numeric_from || o.numeric_to < @from)
+      instance_of?(o.class) && !(@to < o.numeric_from || o.numeric_to < @from)
     end
 
     # Returns the lower bound of the numeric range or `nil` if no lower bound is set.
@@ -70,6 +72,7 @@ module Types
         impl_class.new(arg * Time::NSECS_PER_SEC)
       else
         raise ArgumentError, "Unable to create a #{impl_class.name} from a #{arg.class.name}" unless arg.nil? || arg == :default
+
         nil
       end
     end
@@ -91,16 +94,15 @@ module Types
     end
 
     def _assignable?(o, guard)
-      self.class == o.class && numeric_from <= o.numeric_from && numeric_to >= o.numeric_to
+      instance_of?(o.class) && numeric_from <= o.numeric_from && numeric_to >= o.numeric_to
     end
   end
 
   class PTimespanType < PAbstractTimeDataType
     def self.register_ptype(loader, ir)
       create_ptype(loader, ir, 'ScalarType',
-        'from' => { KEY_TYPE => POptionalType.new(PTimespanType::DEFAULT), KEY_VALUE => nil },
-        'to' => { KEY_TYPE => POptionalType.new(PTimespanType::DEFAULT), KEY_VALUE => nil }
-      )
+                   'from' => { KEY_TYPE => POptionalType.new(PTimespanType::DEFAULT), KEY_VALUE => nil },
+                   'to' => { KEY_TYPE => POptionalType.new(PTimespanType::DEFAULT), KEY_VALUE => nil })
     end
 
     def self.new_function(type)

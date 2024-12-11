@@ -1,18 +1,20 @@
+# frozen_string_literal: true
+
 # This class is not actually public API, but the method
 # {Puppet::Interface::OptionManager#option option} is public when used
 # as part of the Faces DSL (i.e. from within a
 # {Puppet::Interface.define define} block).
 # @api public
 module Puppet::Interface::OptionManager
-
   # @api private
   def display_global_options(*args)
     @display_global_options ||= []
     [args].flatten.each do |refopt|
       unless Puppet.settings.include?(refopt)
-        #TRANSLATORS 'Puppet.settings' references to the Puppet settings options and should not be translated
+        # TRANSLATORS 'Puppet.settings' references to the Puppet settings options and should not be translated
         raise ArgumentError, _("Global option %{option} does not exist in Puppet.settings") % { option: refopt }
       end
+
       @display_global_options << refopt if refopt
     end
     @display_global_options.uniq!
@@ -26,13 +28,13 @@ module Puppet::Interface::OptionManager
 
   # @api private
   def walk_inheritance_tree(start, sym)
-    result = (start || [])
-    if self.is_a?(Class) and superclass.respond_to?(sym)
+    result = start || []
+    if is_a?(Class) and superclass.respond_to?(sym)
       result = superclass.send(sym) + result
     elsif self.class.respond_to?(sym)
       result = self.class.send(sym) + result
     end
-    return result
+    result
   end
 
   # Declare that this app can take a specific option, and provide the
@@ -56,7 +58,7 @@ module Puppet::Interface::OptionManager
       conflict = get_option(name)
       if conflict
         raise ArgumentError, _("Option %{option} conflicts with existing option %{conflict}") %
-            { option: option, conflict: conflict }
+                             { option: option, conflict: conflict }
       end
 
       actions.each do |action|
@@ -64,7 +66,7 @@ module Puppet::Interface::OptionManager
         conflict = action.get_option(name)
         if conflict
           raise ArgumentError, _("Option %{option} conflicts with existing option %{conflict} on %{action}") %
-              { option: option, conflict: conflict, action: action }
+                               { option: option, conflict: conflict, action: action }
         end
       end
     end
@@ -75,7 +77,7 @@ module Puppet::Interface::OptionManager
       @options_hash[name] = option
     end
 
-    return option
+    option
   end
 
   # @api private
@@ -89,14 +91,14 @@ module Puppet::Interface::OptionManager
 
     result = @options_hash[name.to_sym]
     if result.nil? and with_inherited_options then
-      if self.is_a?(Class) and superclass.respond_to?(:get_option)
+      if is_a?(Class) and superclass.respond_to?(:get_option)
         result = superclass.get_option(name)
       elsif self.class.respond_to?(:get_option)
         result = self.class.get_option(name)
       end
     end
 
-    return result
+    result
   end
 
   # @api private

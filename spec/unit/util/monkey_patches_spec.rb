@@ -2,6 +2,48 @@ require 'spec_helper'
 
 require 'puppet/util/monkey_patches'
 
+describe Dir do
+  describe '.exists?' do
+    it 'returns false if the directory does not exist' do
+      expect(Dir.exists?('/madeupdirectory')).to be false
+    end
+
+    it 'returns true if the directory exists' do
+      expect(Dir.exists?(__dir__)).to be true
+    end
+
+    if RUBY_VERSION >= '3.2'
+      it 'logs a warning message' do
+        expect(Dir).to receive(:warn).with("Dir.exists?('#{__dir__}') is deprecated, use Dir.exist? instead")
+        with_verbose_enabled do
+          Dir.exists?(__dir__)
+        end
+      end
+    end
+  end
+end
+
+describe File do
+  describe '.exists?' do
+    it 'returns false if the directory does not exist' do
+      expect(File.exists?('spec/unit/util/made_up_file')).to be false
+    end
+
+    it 'returns true if the file exists' do
+      expect(File.exists?(__FILE__)).to be true
+    end
+
+    if RUBY_VERSION >= '3.2'
+      it 'logs a warning message' do
+        expect(File).to receive(:warn).with("File.exists?('#{__FILE__}') is deprecated, use File.exist? instead")
+        with_verbose_enabled do
+          File.exists?(__FILE__)
+        end
+      end
+    end
+  end
+end
+
 describe Symbol do
   after :all do
     $unique_warnings.delete('symbol_comparison') if $unique_warnings
@@ -29,19 +71,8 @@ describe Symbol do
 end
 
 describe OpenSSL::SSL::SSLContext do
-  it 'disables SSLv2 via the SSLContext#options bitmask' do
-    expect(subject.options & OpenSSL::SSL::OP_NO_SSLv2).to eq(OpenSSL::SSL::OP_NO_SSLv2)
-  end
-
   it 'disables SSLv3 via the SSLContext#options bitmask' do
     expect(subject.options & OpenSSL::SSL::OP_NO_SSLv3).to eq(OpenSSL::SSL::OP_NO_SSLv3)
-  end
-
-  it 'explicitly disable SSLv2 ciphers using the ! prefix so they cannot be re-added' do
-    cipher_str = OpenSSL::SSL::SSLContext::DEFAULT_PARAMS[:ciphers]
-    if cipher_str
-      expect(cipher_str.split(':')).to include('!SSLv2')
-    end
   end
 
   it 'does not exclude SSLv3 ciphers shared with TLSv1' do
@@ -54,13 +85,6 @@ describe OpenSSL::SSL::SSLContext do
   it 'sets parameters on initialization' do
     expect_any_instance_of(described_class).to receive(:set_params)
     subject
-  end
-
-  it 'has no ciphers with version SSLv2 enabled' do
-    ciphers = subject.ciphers.select do |name, version, bits, alg_bits|
-      /SSLv2/.match(version)
-    end
-    expect(ciphers).to be_empty
   end
 end
 

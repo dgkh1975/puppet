@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/util/warnings'
 
@@ -50,13 +52,11 @@ class Puppet::Util::Feature
       #    * the result was true/false
       #    OR
       #    * we're configured to never retry
-      if @results.has_key?(name) &&
-         (!@results[name].nil? || !Puppet[:always_retry_plugins])
-        !!@results[name]
-      else
+      unless @results.has_key?(name) &&
+             (!@results[name].nil? || !Puppet[:always_retry_plugins])
         @results[name] = test(name, options, &block)
-        !!@results[name]
       end
+      !!@results[name]
     end
   end
 
@@ -77,7 +77,7 @@ class Puppet::Util::Feature
     feature = method.to_s.sub(/\?$/, '')
     @loader.load(feature, Puppet.lookup(:current_environment))
 
-    respond_to?(method) && self.send(method)
+    respond_to?(method) && send(method)
   end
 
   # Actually test whether the feature is present.  We only want to test when
@@ -87,7 +87,7 @@ class Puppet::Util::Feature
     if block_given?
       begin
         result = yield
-      rescue StandardError,ScriptError => detail
+      rescue StandardError, ScriptError => detail
         warn _("Failed to load feature test for %{name}: %{detail}") % { name: name, detail: detail }
         result = nil
       end
@@ -118,11 +118,11 @@ class Puppet::Util::Feature
     rescue LoadError
       # Expected case. Required library insn't installed.
       debug_once(_("Could not find library '%{lib}' required to enable feature '%{name}'") %
-        {lib: lib, name: name})
+        { lib: lib, name: name })
       false
     rescue StandardError, ScriptError => detail
       debug_once(_("Exception occurred while loading library '%{lib}' required to enable feature '%{name}': %{detail}") %
-        {lib: lib, name: name, detail: detail})
+        { lib: lib, name: name, detail: detail })
       false
     end
   end

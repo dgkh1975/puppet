@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative '../../puppet/parser/files'
 require 'erb'
 require_relative '../../puppet/file_system'
@@ -32,7 +33,7 @@ class Puppet::Parser::TemplateWrapper
   # @api private
   def script_line
     identifier = Regexp.escape(@__file__ || "(erb)")
-    (caller.find { |l| l =~ /#{identifier}:/ }||"")[/:(\d+):/,1]
+    (caller.find { |l| l =~ /#{identifier}:/ } || "")[/:(\d+):/, 1]
   end
   private :script_line
 
@@ -90,7 +91,7 @@ class Puppet::Parser::TemplateWrapper
 
     result = nil
     benchmark(:debug, _("Interpolated template %{template_source} in %%{seconds} seconds") % { template_source: escaped_template_source }) do
-      template = ERB.new(string, 0, "-")
+      template = Puppet::Util.create_erb(string)
       template.filename = @__file__
       result = template.result(binding)
     end
@@ -99,6 +100,6 @@ class Puppet::Parser::TemplateWrapper
   end
 
   def to_s
-    "template[#{(@__file__ ? @__file__ : "inline")}]"
+    "template[#{@__file__ || 'inline'}]"
   end
 end

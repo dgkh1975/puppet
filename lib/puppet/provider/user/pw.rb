@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/nameservice/pw'
 require 'open3'
 
@@ -7,8 +9,8 @@ Puppet::Type.type(:user).provide :pw, :parent => Puppet::Provider::NameService::
   commands :pw => "pw"
   has_features :manages_homedir, :allows_duplicates, :manages_passwords, :manages_expiry, :manages_shell
 
-  defaultfor :operatingsystem => [:freebsd, :dragonfly]
-  confine    :operatingsystem => [:freebsd, :dragonfly]
+  defaultfor 'os.name' => [:freebsd, :dragonfly]
+  confine    'os.name' => [:freebsd, :dragonfly]
 
   options :home, :flag => "-d", :method => :dir
   options :comment, :method => :gecos
@@ -17,7 +19,6 @@ Puppet::Type.type(:user).provide :pw, :parent => Puppet::Provider::NameService::
     value = '0000-00-00' if value == :absent
     value.split("-").reverse.join("-")
   }
-
 
   verify :gid, "GID must be an integer" do |value|
     value.is_a? Integer
@@ -31,9 +32,10 @@ Puppet::Type.type(:user).provide :pw, :parent => Puppet::Provider::NameService::
     cmd = [command(:pw), "useradd", @resource[:name]]
     @resource.class.validproperties.each do |property|
       next if property == :ensure or property == :password
+
       value = @resource.should(property)
       if value and value != ""
-        cmd << flag(property) << munge(property,value)
+        cmd << flag(property) << munge(property, value)
       end
     end
 
@@ -84,7 +86,7 @@ Puppet::Type.type(:user).provide :pw, :parent => Puppet::Provider::NameService::
   end
 
   def has_sensitive_data?(property = nil)
-    #Check for sensitive values?
+    # Check for sensitive values?
     properties = property ? [property] : Puppet::Type.type(:user).validproperties
     properties.any? do |prop|
       p = @resource.parameter(prop)
@@ -94,7 +96,7 @@ Puppet::Type.type(:user).provide :pw, :parent => Puppet::Provider::NameService::
 
   # Get expiry from system and convert to Puppet-style date
   def expiry
-    expiry = self.get(:expiry)
+    expiry = get(:expiry)
     expiry = :absent if expiry == 0
 
     if expiry != :absent
@@ -105,4 +107,3 @@ Puppet::Type.type(:user).provide :pw, :parent => Puppet::Provider::NameService::
     expiry
   end
 end
-

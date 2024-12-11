@@ -1,11 +1,12 @@
+# frozen_string_literal: true
+
 require_relative 'puppet/version'
 require_relative 'puppet/concurrent/synchronized'
 
-if Gem::Version.new(RUBY_VERSION.dup) < Gem::Version.new("2.5.0")
-  raise LoadError, "Puppet #{Puppet.version} requires Ruby 2.5.0 or greater, found Ruby #{RUBY_VERSION.dup}."
+Puppet::OLDEST_RECOMMENDED_RUBY_VERSION = '3.1.0'
+if Gem::Version.new(RUBY_VERSION.dup) < Gem::Version.new(Puppet::OLDEST_RECOMMENDED_RUBY_VERSION)
+  raise LoadError, "Puppet #{Puppet.version} requires Ruby #{Puppet::OLDEST_RECOMMENDED_RUBY_VERSION} or greater, found Ruby #{RUBY_VERSION.dup}."
 end
-
-Puppet::OLDEST_RECOMMENDED_RUBY_VERSION = '2.5.0'
 
 $LOAD_PATH.extend(Puppet::Concurrent::Synchronized)
 
@@ -19,10 +20,6 @@ require_relative 'puppet/settings'
 require_relative 'puppet/util/feature'
 require_relative 'puppet/util/suidmanager'
 require_relative 'puppet/util/run_mode'
-# PSON is deprecated, use JSON instead
-require_relative 'puppet/external/pson/common'
-require_relative 'puppet/external/pson/version'
-require_relative 'puppet/external/pson/pure'
 require_relative 'puppet/gettext/config'
 require_relative 'puppet/defaults'
 
@@ -78,9 +75,9 @@ module Puppet
   # @api public
   def self.[](param)
     if param == :debug
-      return Puppet::Util::Log.level == :debug
+      Puppet::Util::Log.level == :debug
     else
-      return @@settings[param]
+      @@settings[param]
     end
   end
 
@@ -94,7 +91,7 @@ module Puppet
   require_relative 'puppet/feature/base'
 
   # setting access and stuff
-  def self.[]=(param,value)
+  def self.[]=(param, value)
     @@settings[param] = value
   end
 
@@ -104,9 +101,9 @@ module Puppet
 
   def self.debug=(value)
     if value
-      Puppet::Util::Log.level=(:debug)
+      Puppet::Util::Log.level = (:debug)
     else
-      Puppet::Util::Log.level=(:notice)
+      Puppet::Util::Log.level = (:notice)
     end
   end
 
@@ -130,6 +127,7 @@ module Puppet
 
   # Now that settings are loaded we have the code loaded to be able to issue
   # deprecation warnings. Warn if we're on a deprecated ruby version.
+  # Update JRuby version constraints in PUP-11716
   if Gem::Version.new(RUBY_VERSION.dup) < Gem::Version.new(Puppet::OLDEST_RECOMMENDED_RUBY_VERSION)
     Puppet.deprecation_warning(_("Support for ruby version %{version} is deprecated and will be removed in a future release. See https://puppet.com/docs/puppet/latest/system_requirements.html for a list of supported ruby versions.") % { version: RUBY_VERSION })
   end
@@ -153,9 +151,9 @@ module Puppet
     dir = Puppet[:vendormoduledir]
     if dir && File.directory?(dir)
       Dir.entries(dir)
-        .reject { |f| f =~ /^\./ }
-        .map { |f| File.join(dir, f, "lib") }
-        .select { |d| FileTest.directory?(d) }
+         .reject { |f| f =~ /^\./ }
+         .map { |f| File.join(dir, f, "lib") }
+         .select { |d| FileTest.directory?(d) }
     else
       []
     end
@@ -229,29 +227,21 @@ module Puppet
         loaders << Puppet::Environments::StaticPrivate.new(
           Puppet::Node::Environment.create(default_environment,
                                            modulepath,
-                                           Puppet::Node::Environment::NO_MANIFEST))
+                                           Puppet::Node::Environment::NO_MANIFEST)
+        )
       end
     end
 
     {
       :environments => Puppet::Environments::Cached.new(Puppet::Environments::Combined.new(*loaders)),
-      :ssl_context => proc {
-        begin
-          cert = Puppet::X509::CertProvider.new
-          password = cert.load_private_key_password
-          ssl = Puppet::SSL::SSLProvider.new
-          ssl.load_context(certname: Puppet[:certname], password: password)
-        rescue => e
-          # TRANSLATORS: `message` is an already translated string of why SSL failed to initialize
-          Puppet.log_exception(e, _("Failed to initialize SSL: %{message}") % { message: e.message })
-          # TRANSLATORS: `puppet agent -t` is a command and should not be translated
-          Puppet.err(_("Run `puppet agent -t`"))
-          raise e
-        end
-      },
+      :ssl_context => proc { Puppet.runtime[:http].default_ssl_context },
       :http_session => proc { Puppet.runtime[:http].create_session },
       :plugins => proc { Puppet::Plugins::Configuration.load_plugins },
-      :rich_data => false
+      :rich_data => Puppet[:rich_data],
+      # `stringify_rich` controls whether `rich_data` is stringified into a lossy format
+      # instead of a lossless format. Catalogs should not be stringified, though to_yaml
+      # and the resource application have uses for a lossy, user friendly format.
+      :stringify_rich => false
     }
   end
 
@@ -273,7 +263,7 @@ module Puppet
     @context.push(overrides, description)
   end
 
-  # Push something onto the the context and make it global across threads. This
+  # Push something onto the context and make it global across threads. This
   # has the potential to convert threadlocal overrides earlier on the stack into
   # global overrides.
   # @api private

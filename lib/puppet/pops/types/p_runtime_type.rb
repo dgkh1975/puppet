@@ -1,21 +1,21 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
-
 # @api public
 class PRuntimeType < PAnyType
   TYPE_NAME_OR_PATTERN = PVariantType.new([PStringType::NON_EMPTY, PTupleType.new([PRegexpType::DEFAULT, PStringType::NON_EMPTY])])
 
   def self.register_ptype(loader, ir)
     create_ptype(loader, ir, 'AnyType',
-      'runtime' => {
-        KEY_TYPE => POptionalType.new(PStringType::NON_EMPTY),
-        KEY_VALUE => nil
-      },
-      'name_or_pattern' => {
-        KEY_TYPE => POptionalType.new(TYPE_NAME_OR_PATTERN),
-        KEY_VALUE => nil
-      }
-    )
+                 'runtime' => {
+                   KEY_TYPE => POptionalType.new(PStringType::NON_EMPTY),
+                   KEY_VALUE => nil
+                 },
+                 'name_or_pattern' => {
+                   KEY_TYPE => POptionalType.new(TYPE_NAME_OR_PATTERN),
+                   KEY_VALUE => nil
+                 })
   end
 
   attr_reader :runtime, :name_or_pattern
@@ -69,8 +69,10 @@ class PRuntimeType < PAnyType
   def class_or_module
     raise "Only ruby classes or modules can be produced by this runtime, got '#{runtime}" unless runtime == :ruby
     raise 'A pattern based Runtime type cannot produce a class or module' if @name_or_pattern.is_a?(Array)
+
     com = ClassLoader.provide(self)
     raise "The name #{@name_or_pattern} does not represent a ruby class or module" if com.nil?
+
     com
   end
 

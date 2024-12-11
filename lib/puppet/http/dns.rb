@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require 'resolv'
 
 module Puppet::HTTP
   class DNS
-
     class CacheEntry
       attr_reader :records, :ttl, :resolution_time
 
@@ -40,7 +41,7 @@ module Puppet::HTTP
     # @param [Symbol] service_name the key of the service we are querying
     # @yields [String, Integer] server and port of selected record
     def each_srv_record(domain, service_name = :puppet, &block)
-      if (domain.nil? or domain.empty?)
+      if domain.nil? or domain.empty?
         Puppet.debug "Domain not known; skipping SRV lookup"
         return
       end
@@ -48,9 +49,9 @@ module Puppet::HTTP
       Puppet.debug "Searching for SRV records for domain: #{domain}"
 
       case service_name
-        when :puppet then service = '_x-puppet'
-        when :file   then service = '_x-puppet-fileserver'
-        else              service = "_x-puppet-#{service_name}"
+      when :puppet then service = '_x-puppet'
+      when :file   then service = '_x-puppet-fileserver'
+      else              service = "_x-puppet-#{service_name}"
       end
       record_name = "#{service}._tcp.#{domain}"
 
@@ -71,7 +72,7 @@ module Puppet::HTTP
         each_srv_record(domain, :puppet, &block)
       else
         each_priority(records) do |recs|
-          while next_rr = recs.delete(find_weighted_server(recs)) #rubocop:disable Lint/AssignmentInCondition
+          while next_rr = recs.delete(find_weighted_server(recs)) # rubocop:disable Lint/AssignmentInCondition
             Puppet.debug "Yielding next server of #{next_rr.target}:#{next_rr.port}"
             yield next_rr.target.to_s, next_rr.port
           end
@@ -97,7 +98,7 @@ module Puppet::HTTP
       # We generate a random number 5, and iterate through the records, adding
       # the current record's weight to the accumulator until the weight of the
       # current record plus previous records is greater than the random number.
-      total_weight = records.inject(0) { |sum,record|
+      total_weight = records.inject(0) { |sum, record|
         sum + weight(record)
       }
       current_weight = 0
@@ -117,7 +118,7 @@ module Puppet::HTTP
     # @param [String] service_name the service whose TTL we want
     # @return [Integer] the TTL for this service, in seconds
     def ttl(service_name)
-      return @record_cache[service_name].ttl
+      @record_cache[service_name].ttl
     end
 
     # Checks if the cached entry for the given service has expired.
@@ -127,9 +128,9 @@ module Puppet::HTTP
     def expired?(service_name)
       entry = @record_cache[service_name]
       if entry
-        return Time.now > (entry.resolution_time + entry.ttl)
+        Time.now > (entry.resolution_time + entry.ttl)
       else
-        return true
+        true
       end
     end
 
@@ -145,10 +146,9 @@ module Puppet::HTTP
     # @yields [[Resolv::DNS::Resource::IN::SRV]] a group of records of
     #         the same priority
     def each_priority(records)
-      pri_hash = records.inject({}) do |groups, element|
+      pri_hash = records.each_with_object({}) do |element, groups|
         groups[element.priority] ||= []
         groups[element.priority] << element
-        groups
       end
 
       pri_hash.keys.sort.each do |key|

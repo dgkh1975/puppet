@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Manage Red Hat services.  Start/stop uses /sbin/service and enable/disable uses chkconfig
 
 Puppet::Type.type(:service).provide :redhat, :parent => :init, :source => :init do
@@ -8,8 +10,9 @@ Puppet::Type.type(:service).provide :redhat, :parent => :init, :source => :init 
 
   commands :chkconfig => "/sbin/chkconfig", :service => "/sbin/service"
 
-  defaultfor :osfamily => :redhat
-  defaultfor :osfamily => :suse, :operatingsystemmajrelease => ["10", "11"]
+  defaultfor 'os.name' => :amazon, 'os.release.major' => %w[2017 2018]
+  defaultfor 'os.name' => :redhat, 'os.release.major' => (4..6).to_a
+  defaultfor 'os.family' => :suse, 'os.release.major' => %w[10 11]
 
   # Remove the symlinks
   def disable
@@ -20,7 +23,7 @@ Puppet::Type.type(:service).provide :redhat, :parent => :init, :source => :init 
     # and --del removes the service from chkconfig management
     chkconfig("--level", "0123456", @resource[:name], :off)
   rescue Puppet::ExecutionFailure => detail
-    raise Puppet::Error, "Could not disable #{self.name}: #{detail}", detail.backtrace
+    raise Puppet::Error, "Could not disable #{name}: #{detail}", detail.backtrace
   end
 
   def enabled?
@@ -35,7 +38,7 @@ Puppet::Type.type(:service).provide :redhat, :parent => :init, :source => :init 
     # For Suse OS family, chkconfig returns 0 even if the service is disabled or non-existent
     # Therefore, check the output for '<name>  on' (or '<name>  B for boot services)
     # to see if it is enabled
-    return :false unless Puppet.runtime[:facter].value(:osfamily) != 'Suse' || output =~ /^#{name}\s+(on|B)$/
+    return :false unless Puppet.runtime[:facter].value('os.family') != 'Suse' || output =~ /^#{name}\s+(on|B)$/
 
     :true
   end
@@ -43,10 +46,10 @@ Puppet::Type.type(:service).provide :redhat, :parent => :init, :source => :init 
   # Don't support them specifying runlevels; always use the runlevels
   # in the init scripts.
   def enable
-      chkconfig("--add", @resource[:name])
-      chkconfig(@resource[:name], :on)
+    chkconfig("--add", @resource[:name])
+    chkconfig(@resource[:name], :on)
   rescue Puppet::ExecutionFailure => detail
-    raise Puppet::Error, "Could not enable #{self.name}: #{detail}", detail.backtrace
+    raise Puppet::Error, "Could not enable #{name}: #{detail}", detail.backtrace
   end
 
   def initscript

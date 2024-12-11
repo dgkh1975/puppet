@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet
   Type.newtype(:schedule) do
     @doc = <<-'EOT'
@@ -53,7 +55,7 @@ module Puppet
       resource could be checked & applied multiple times in the schedule as
       the information about when the resource was last checked will have
       expired from the cache.
-      EOT
+    EOT
 
     apply_to_all
 
@@ -71,7 +73,7 @@ module Puppet
               schedule => 'everyday',
             }
 
-        EOT
+      EOT
       isnamevar
     end
 
@@ -98,8 +100,8 @@ module Puppet
       validate do |values|
         values = [values] unless values.is_a?(Array)
         values.each { |value|
-          unless  value.is_a?(String) and
-              value =~ /\d+(:\d+){0,2}\s*-\s*\d+(:\d+){0,2}/
+          unless value.is_a?(String) and
+                 value =~ /\d+(:\d+){0,2}\s*-\s*\d+(:\d+){0,2}/
             self.fail _("Invalid range value '%{value}'") % { value: value }
           end
         }
@@ -114,7 +116,7 @@ module Puppet
           # Split each range value into a hour, minute, second triad
           value.split(/\s*-\s*/).each { |val|
             # Add the values as an array.
-            range << val.split(":").collect { |n| n.to_i }
+            range << val.split(":").collect(&:to_i)
           }
 
           self.fail _("Invalid range %{value}") % { value: value } if range.length != 2
@@ -220,7 +222,7 @@ module Puppet
 
         See the `periodmatch` attribute for tuning whether to match
         times by their distance apart or by their specific value.
-        
+
         > **Tip**: You can use `period => never,` to prevent a resource from being applied
         in the given `range`. This is useful if you need to create a blackout window to
         perform sensitive operations without interruption.
@@ -230,9 +232,9 @@ module Puppet
 
       ScheduleScales = {
         :hourly => 3600,
-        :daily => 86400,
-        :weekly => 604800,
-        :monthly => 2592000
+        :daily => 86_400,
+        :weekly => 604_800,
+        :monthly => 2_592_000
       }
       ScheduleMethods = {
         :hourly => :hour,
@@ -253,10 +255,10 @@ module Puppet
         when :number
           method = ScheduleMethods[value]
           if method.is_a?(Proc)
-            return method.call(previous, now)
+            method.call(previous, now)
           else
             # We negate it, because if they're equal we don't run
-            return now.send(method) != previous.send(method)
+            now.send(method) != previous.send(method)
           end
         when :distance
           scale = ScheduleScales[value]
@@ -265,7 +267,7 @@ module Puppet
           # than the unit of time, we match.  We divide the scale
           # by the repeat, so that we'll repeat that often within
           # the scale.
-          return (now.to_i - previous.to_i) >= (scale / @resource[:repeat])
+          (now.to_i - previous.to_i) >= (scale / @resource[:repeat])
         end
       end
     end
@@ -279,7 +281,7 @@ module Puppet
       validate do |value|
         unless value.is_a?(Integer) or value =~ /^\d+$/
           raise Puppet::Error,
-            _("Repeat must be a number")
+                _("Repeat must be a number")
         end
 
         # This implicitly assumes that 'periodmatch' is distance -- that
@@ -288,7 +290,7 @@ module Puppet
 
         if value != 1 and @resource[:periodmatch] != :distance
           raise Puppet::Error,
-            _("Repeat must be 1 unless periodmatch is 'distance', not '%{period}'") % { period: @resource[:periodmatch] }
+                _("Repeat must be 1 unless periodmatch is 'distance', not '%{period}'") % { period: @resource[:periodmatch] }
         end
       end
 
@@ -366,7 +368,7 @@ module Puppet
           when 0..6
             index = value
           else
-            index = weekdays[value[0,3].downcase]
+            index = weekdays[value[0, 3].downcase]
           end
           ret[index] = true
         end
@@ -381,6 +383,7 @@ module Puppet
         return true if @resource[:range]
 
         return true if value.has_key?(now.wday)
+
         false
       end
     end
@@ -398,8 +401,7 @@ module Puppet
 
       Puppet.debug "Creating default schedules"
 
-            result << self.new(
-
+      result << new(
         :name => "puppet",
         :period => :hourly,
 
@@ -408,8 +410,7 @@ module Puppet
 
       # And then one for every period
       @parameters.find { |p| p.name == :period }.value_collection.values.each { |value|
-
-              result << self.new(
+        result << new(
           :name => value.to_s,
           :period => value
         )
@@ -419,7 +420,6 @@ module Puppet
     end
 
     def match?(previous = nil, now = nil)
-
       # If we've got a value, then convert it to a Time instance
       previous &&= Time.at(previous)
 
@@ -428,7 +428,7 @@ module Puppet
       # Pull them in order
       self.class.allattrs.each { |param|
         if @parameters.include?(param) and
-          @parameters[param].respond_to?(:match?)
+           @parameters[param].respond_to?(:match?)
           return false unless @parameters[param].match?(previous, now)
         end
       }

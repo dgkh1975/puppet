@@ -1,15 +1,15 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/concurrent/thread_local_singleton'
 
 module Puppet::Pops
 module Types
-
 # Converts Puppet runtime objects to String under the control of a Format.
 # Use from Puppet Language is via the function `new`.
 #
 # @api private
 #
 class StringConverter
-
   # @api private
   class FormatError < ArgumentError
     def initialize(type_string, actual, expected)
@@ -43,11 +43,11 @@ class StringConverter
     end
 
     def breaks?
-      is_indenting? && level > 0 && ! first?
+      is_indenting? && level > 0 && !first?
     end
 
     def padding
-      return ' ' * 2 * level
+      ' ' * 2 * level
     end
   end
 
@@ -89,7 +89,7 @@ class StringConverter
 
     FMT_PATTERN_STR = '^%([\s\[+#0{<(|-]*)([1-9][0-9]*)?(?:\.([0-9]+))?([a-zA-Z])$'
     FMT_PATTERN = Regexp.compile(FMT_PATTERN_STR)
-    DELIMITERS  = [ '[', '{', '(', '<', '|',]
+    DELIMITERS  = ['[', '{', '(', '<', '|']
     DELIMITER_MAP = {
       '[' => ['[', ']'],
       '{' => ['{', '}'],
@@ -110,23 +110,30 @@ class StringConverter
       unless @format.is_a?(String) && @format.length == 1
         raise ArgumentError, "The format must be a one letter format specifier, got '#{@format}'"
       end
+
       @format = @format.to_sym
       flags  = match[1].split('') || []
       unless flags.uniq.size == flags.size
         raise ArgumentError, "The same flag can only be used once, got '#{fmt}'"
       end
+
       @left  = flags.include?('-')
       @alt   = flags.include?('#')
-      @plus  = (flags.include?(' ') ? :space : (flags.include?('+') ? :plus : :ignore))
+      @plus  = if flags.include?(' ')
+                 :space
+               else
+                 flags.include?('+') ? :plus : :ignore
+               end
       @zero_pad = flags.include?('0')
 
       @delimiters = nil
       DELIMITERS.each do |d|
         next unless flags.include?(d)
-          if !@delimiters.nil?
-            raise ArgumentError, "Only one of the delimiters [ { ( < | can be given in the format flags, got '#{fmt}'"
-          end
-          @delimiters = d
+        unless @delimiters.nil?
+          raise ArgumentError, "Only one of the delimiters [ { ( < | can be given in the format flags, got '#{fmt}'"
+        end
+
+        @delimiters = d
       end
 
       @width = match[2] ? match[2].to_i : nil
@@ -154,6 +161,7 @@ class StringConverter
       unless lower && higher
         return lower || higher
       end
+
       lower.merge(higher)
     end
 
@@ -169,7 +177,7 @@ class StringConverter
 
       # drop all formats in lower than is more generic in higher. Lower must never
       # override higher
-      lower = lower.reject { |lk, _| higher.keys.any? { |hk| hk != lk && hk.assignable?(lk) }}
+      lower = lower.reject { |lk, _| higher.keys.any? { |hk| hk != lk && hk.assignable?(lk) } }
 
       merged = (lower.keys + higher.keys).uniq.map do |k|
         [k, merge(lower[k], higher[k])]
@@ -180,7 +188,7 @@ class StringConverter
     # Sorts format based on generality of types - most specific types before general
     #
     def self.sort_formats(format_map)
-      format_map = format_map.sort do |(a,_),(b,_)|
+      format_map = format_map.sort do |(a, _), (b, _)|
         ab = b.assignable?(a)
         ba = a.assignable?(b)
         if a == b
@@ -200,7 +208,7 @@ class StringConverter
           end
         end
       end
-      Hash[format_map]
+      format_map.to_h
     end
 
     # Ranks type on specificity where it matters
@@ -225,6 +233,7 @@ class StringConverter
         0
       end
     end
+
     # Returns an array with a delimiter pair derived from the format.
     # If format does not contain a delimiter specification the given default is returned
     #
@@ -232,7 +241,7 @@ class StringConverter
     # @returns [Array<String>] a tuple with left, right delimiters
     #
     def delimiter_pair(default = StringConverter::DEFAULT_ARRAY_DELIMITERS)
-      DELIMITER_MAP[ @delimiters || @plus ] || default
+      DELIMITER_MAP[@delimiters || @plus] || default
     end
 
     def to_s
@@ -259,18 +268,18 @@ class StringConverter
   # (basically strings are quoted since they may contain a ','))
   #
   DEFAULT_CONTAINER_FORMATS = {
-    PAnyType::DEFAULT  => Format.new('%p').freeze,   # quoted string (Ruby inspect)
+    PAnyType::DEFAULT => Format.new('%p').freeze, # quoted string (Ruby inspect)
   }.freeze
 
   DEFAULT_ARRAY_FORMAT                          = Format.new('%a')
-  DEFAULT_ARRAY_FORMAT.separator                = ', '.freeze
-  DEFAULT_ARRAY_FORMAT.separator2               = ', '.freeze
+  DEFAULT_ARRAY_FORMAT.separator                = ', '
+  DEFAULT_ARRAY_FORMAT.separator2               = ', '
   DEFAULT_ARRAY_FORMAT.container_string_formats = DEFAULT_CONTAINER_FORMATS
   DEFAULT_ARRAY_FORMAT.freeze
 
   DEFAULT_HASH_FORMAT                           = Format.new('%h')
-  DEFAULT_HASH_FORMAT.separator                 = ', '.freeze
-  DEFAULT_HASH_FORMAT.separator2                = ' => '.freeze
+  DEFAULT_HASH_FORMAT.separator                 = ', '
+  DEFAULT_HASH_FORMAT.separator2                = ' => '
   DEFAULT_HASH_FORMAT.container_string_formats  = DEFAULT_CONTAINER_FORMATS
   DEFAULT_HASH_FORMAT.freeze
 
@@ -278,13 +287,13 @@ class StringConverter
   DEFAULT_ARRAY_DELIMITERS                      = ['[', ']'].freeze
 
   DEFAULT_STRING_FORMATS = {
-    PObjectType::DEFAULT   => Format.new('%p').freeze,    # call with initialization hash
-    PFloatType::DEFAULT    => Format.new('%f').freeze,    # float
-    PNumericType::DEFAULT  => Format.new('%d').freeze,    # decimal number
-    PArrayType::DEFAULT    => DEFAULT_ARRAY_FORMAT.freeze,
-    PHashType::DEFAULT     => DEFAULT_HASH_FORMAT.freeze,
-    PBinaryType::DEFAULT   => Format.new('%B').freeze,    # strict base64 string unquoted
-    PAnyType::DEFAULT      => Format.new('%s').freeze,    # unquoted string
+    PObjectType::DEFAULT => Format.new('%p').freeze, # call with initialization hash
+    PFloatType::DEFAULT => Format.new('%f').freeze, # float
+    PNumericType::DEFAULT => Format.new('%d').freeze, # decimal number
+    PArrayType::DEFAULT => DEFAULT_ARRAY_FORMAT.freeze,
+    PHashType::DEFAULT => DEFAULT_HASH_FORMAT.freeze,
+    PBinaryType::DEFAULT => Format.new('%B').freeze, # strict base64 string unquoted
+    PAnyType::DEFAULT => Format.new('%s').freeze, # unquoted string
   }.freeze
 
   DEFAULT_PARAMETER_FORMAT = {
@@ -484,10 +493,10 @@ class StringConverter
       # For Array and Hash, the format is given as a Hash where 'format' key is the format for the collection itself
       if Puppet::Pops::Types::PArrayType::DEFAULT.assignable?(value_type)
         # add the format given for the exact type
-        string_formats = { Puppet::Pops::Types::PArrayType::DEFAULT => {'format' => string_formats }}
+        string_formats = { Puppet::Pops::Types::PArrayType::DEFAULT => { 'format' => string_formats } }
       elsif Puppet::Pops::Types::PHashType::DEFAULT.assignable?(value_type)
-          # add the format given for the exact type
-          string_formats = { Puppet::Pops::Types::PHashType::DEFAULT => {'format' => string_formats }}
+        # add the format given for the exact type
+        string_formats = { Puppet::Pops::Types::PHashType::DEFAULT => { 'format' => string_formats } }
       else
         # add the format given for the exact type
         string_formats = { value_type => string_formats }
@@ -496,7 +505,7 @@ class StringConverter
 
     case string_formats
     when :default
-     # do nothing, use default formats
+    # do nothing, use default formats
 
     when Hash
       # Convert and validate user input
@@ -510,14 +519,14 @@ class StringConverter
     _convert(value_type, value, options, DEFAULT_INDENTATION)
   end
 
-#  # A method only used for manual debugging as the default output of the formatting rules is
-#  # very hard to read otherwise.
-#  #
-#  # @api private
-#  def dump_string_formats(f, indent = 1)
-#     return f.to_s unless f.is_a?(Hash)
-#     "{#{f.map {|k,v| "#{k.to_s} => #{dump_string_formats(v,indent+1)}"}.join(",\n#{'  '*indent}  ")}}"
-#  end
+  #  # A method only used for manual debugging as the default output of the formatting rules is
+  #  # very hard to read otherwise.
+  #  #
+  #  # @api private
+  #  def dump_string_formats(f, indent = 1)
+  #     return f.to_s unless f.is_a?(Hash)
+  #     "{#{f.map {|k,v| "#{k.to_s} => #{dump_string_formats(v,indent+1)}"}.join(",\n#{'  '*indent}  ")}}"
+  #  end
 
   def _convert(val_type, value, format_map, indentation)
     @string_visitor.visit_this_3(self, val_type, value, format_map, indentation)
@@ -529,27 +538,29 @@ class StringConverter
     unless fmt.is_a?(Hash)
       raise ArgumentError, "expected a hash with type to format mappings, got instance of '#{fmt.class}'"
     end
-    fmt.reduce({}) do | result, entry|
+
+    fmt.each_with_object({}) do |entry, result|
       key, value = entry
       unless key.is_a?(Types::PAnyType)
         raise ArgumentError, "top level keys in the format hash must be data types, got instance of '#{key.class}'"
       end
+
       if value.is_a?(Hash)
         result[key] = validate_container_input(value)
       else
         result[key] = Format.new(value)
       end
-      result
     end
   end
   private :validate_input
 
-  FMT_KEYS = %w{separator separator2 format string_formats}.freeze
+  FMT_KEYS = %w[separator separator2 format string_formats].freeze
 
   def validate_container_input(fmt)
     if (fmt.keys - FMT_KEYS).size > 0
-      raise ArgumentError, "only #{FMT_KEYS.map {|k| "'#{k}'"}.join(', ')} are allowed in a container format, got #{fmt}"
+      raise ArgumentError, "only #{FMT_KEYS.map { |k| "'#{k}'" }.join(', ')} are allowed in a container format, got #{fmt}"
     end
+
     result                          = Format.new(fmt['format'])
     result.separator                = fmt['separator']
     result.separator2               = fmt['separator2']
@@ -583,11 +594,12 @@ class StringConverter
     # Before giving up on this, and use a string representation of the unknown
     # object, a check is made to see if the object can present itself as
     # a hash or an array. If it can, then that representation is used instead.
-    if val.is_a?(Hash)
+    case val
+    when Hash
       hash = val.to_hash
       # Ensure that the returned value isn't derived from Hash
       return string_PHashType(val_type, hash, format_map, indent) if hash.instance_of?(Hash)
-    elsif val.is_a?(Array)
+    when Array
       array = val.to_a
       # Ensure that the returned value isn't derived from Array
       return string_PArrayType(val_type, array, format_map, indent) if array.instance_of?(Array)
@@ -618,36 +630,37 @@ class StringConverter
   def string_PDefaultType(val_type, val, format_map, _)
     f = get_format(val_type, format_map)
     apply_string_flags(f, case f.format
-    when :d, :s, :p
-      f.alt? ? '"default"' : 'default'
-    when :D
-      f.alt? ? '"Default"' : 'Default'
-    else
-      raise FormatError.new('Default', f.format, 'dDsp')
-    end)
+                          when :d, :s, :p
+                            f.alt? ? '"default"' : 'default'
+                          when :D
+                            f.alt? ? '"Default"' : 'Default'
+                          else
+                            raise FormatError.new('Default', f.format, 'dDsp')
+                          end)
   end
 
   # @api private
   def string_PUndefType(val_type, val, format_map, _)
     f = get_format(val_type, format_map)
     apply_string_flags(f, case f.format
-    when :n
-      f.alt? ? 'null' : 'nil'
-    when :u
-      f.alt? ? 'undefined' : 'undef'
-    when :d, :x, :X, :o, :b, :B, :e, :E, :f, :g, :G, :a, :A
-      'NaN'
-    when :v
-      'n/a'
-    when :V
-      'N/A'
-    when :s
-      f.alt? ? '""' : ''
-    when :p
-      f.alt? ? '"undef"' : 'undef'
-    else
-      raise FormatError.new('Undef', f.format, 'nudxXobBeEfgGaAvVsp')
-    end)
+                          when :n
+                            f.alt? ? 'null' : 'nil'
+                          when :u
+                            f.alt? ? 'undefined' : 'undef'
+                          when :d, :x, :X, :o, :b, :B, :e, :E, :f, :g, :G, :a, :A
+                            'NaN'
+                          when :v
+                            'n/a'
+                          when :V
+                            'N/A'
+                          when :s
+                            f.alt? ? '""' : ''
+                          when :p
+                            f.alt? ? '"undef"' : 'undef'
+                          else
+                            raise FormatError.new('Undef', f.format,
+                                                  'nudxXobBeEfgGaAvVsp')
+                          end)
   end
 
   # @api private
@@ -677,13 +690,13 @@ class StringConverter
     when :d, :x, :X, :o, :b, :B
       # Boolean in numeric form, formated by integer rule
       numeric_bool = val ? 1 : 0
-      string_formats = { Puppet::Pops::Types::PIntegerType::DEFAULT => f}
+      string_formats = { Puppet::Pops::Types::PIntegerType::DEFAULT => f }
       _convert(TypeCalculator.infer_set(numeric_bool), numeric_bool, string_formats, indentation)
 
     when :e, :E, :f, :g, :G, :a, :A
       # Boolean in numeric form, formated by float rule
       numeric_bool = val ? 1.0 : 0.0
-      string_formats = { Puppet::Pops::Types::PFloatType::DEFAULT => f}
+      string_formats = { Puppet::Pops::Types::PFloatType::DEFAULT => f }
       _convert(TypeCalculator.infer_set(numeric_bool), numeric_bool, string_formats, indentation)
 
     when :s
@@ -700,7 +713,7 @@ class StringConverter
   # Performs post-processing of literals to apply width and precision flags
   def apply_string_flags(f, literal_str)
     if f.left || f.width || f.prec
-      fmt = '%'
+      fmt = '%'.dup
       fmt << '-' if f.left
       fmt << f.width.to_s if f.width
       fmt << '.' << f.prec.to_s if f.prec
@@ -725,7 +738,7 @@ class StringConverter
     when :c
       char = [val].pack("U")
       char = f.alt? ? "\"#{char}\"" : char
-      Kernel.format(f.orig_fmt.tr('c','s'), char)
+      Kernel.format(f.orig_fmt.tr('c', 's'), char)
 
     when :s
       fmt = f.alt? ? 'p' : 's'
@@ -777,7 +790,7 @@ class StringConverter
       Kernel.format(f.orig_fmt.gsub('s', substitute), val_to_convert)
 
     when :p
-      # width & precision applied to string, not the the name of the type
+      # width & precision applied to string, not the name of the type
       "Binary(\"#{Kernel.format(f.orig_fmt.tr('p', 's'), val.to_s)}\")"
 
     when :b
@@ -814,23 +827,23 @@ class StringConverter
 
     when :c
       c_val = val.capitalize
-      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) :  Kernel.format(f.orig_fmt.tr('c', 's'), c_val)
+      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) : Kernel.format(f.orig_fmt.tr('c', 's'), c_val)
 
     when :C
-      c_val = val.split('::').map {|s| s.capitalize }.join('::')
-      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) :  Kernel.format(f.orig_fmt.tr('C', 's'), c_val)
+      c_val = val.split('::').map(&:capitalize).join('::')
+      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) : Kernel.format(f.orig_fmt.tr('C', 's'), c_val)
 
     when :u
       c_val = val.upcase
-      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) :  Kernel.format(f.orig_fmt.tr('u', 's'), c_val)
+      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) : Kernel.format(f.orig_fmt.tr('u', 's'), c_val)
 
     when :d
       c_val = val.downcase
-      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) :  Kernel.format(f.orig_fmt.tr('d', 's'), c_val)
+      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) : Kernel.format(f.orig_fmt.tr('d', 's'), c_val)
 
-    when :t  # trim
+    when :t # trim
       c_val = val.strip
-      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) :  Kernel.format(f.orig_fmt.tr('t', 's'), c_val)
+      f.alt? ? apply_string_flags(f, puppet_quote(c_val)) : Kernel.format(f.orig_fmt.tr('t', 's'), c_val)
 
     else
       raise FormatError.new('String', f.format, 'cCudspt')
@@ -852,7 +865,7 @@ class StringConverter
     end
 
     # Assume that the string can be single quoted
-    bld = '\''
+    bld = "'".dup
     bld.force_encoding(str.encoding)
     escaped = false
     str.each_codepoint do |codepoint|
@@ -862,28 +875,26 @@ class StringConverter
       if escaped
         bld << 0x5c << codepoint
         escaped = false
+      elsif codepoint == 0x27
+        bld << 0x5c << codepoint
+      elsif codepoint == 0x5c
+        escaped = true
+      elsif codepoint <= 0x7f
+        bld << codepoint
       else
-        if codepoint == 0x27
-          bld << 0x5c << codepoint
-        elsif codepoint == 0x5c
-          escaped = true
-        elsif codepoint <= 0x7f
-          bld << codepoint
-        else
-          bld << [codepoint].pack('U')
-        end
+        bld << [codepoint].pack('U')
       end
     end
 
     # If string ended with a backslash, then that backslash must be escaped
     bld << 0x5c if escaped
 
-    bld << '\''
+    bld << "'"
     bld
   end
 
   def puppet_double_quote(str)
-    bld = '"'
+    bld = '"'.dup
     str.each_codepoint do |codepoint|
       case codepoint
       when 0x09
@@ -939,7 +950,7 @@ class StringConverter
 
     case format.format
     when :a, :s, :p
-      buf = ''
+      buf = ''.dup
       if indentation.breaks?
         buf << "\n"
         buf << indentation.padding
@@ -959,14 +970,13 @@ class StringConverter
       # compute widest run in the array, skip nested arrays and hashes
       # then if size > width, set flag if a break on each element should be performed
       if format.alt? && format.width
-        widest = val.each_with_index.reduce([0]) do | memo, v_i |
+        widest = val.each_with_index.each_with_object([0]) do |v_i, memo|
           # array or hash breaks
           if is_a_or_h?(v_i[0])
             memo << 0
           else
             memo[-1] += mapped[v_i[1]].length
           end
-          memo
         end
         widest = widest.max
         sz_break = widest > (format.width || Float::INFINITY)
@@ -989,7 +999,7 @@ class StringConverter
           # if break on each (and breaking will not occur because next is an array or hash)
           # or, if indenting, and previous was an array or hash, then break and continue on next line
           # indented.
-          if (sz_break && !is_a_or_h?(v)) || (format.alt? && i > 0 && is_a_or_h?(val[i-1]) && !is_a_or_h?(v))
+          if (sz_break && !is_a_or_h?(v)) || (format.alt? && i > 0 && is_a_or_h?(val[i - 1]) && !is_a_or_h?(v))
             buf.rstrip! unless buf[-1] == "\n"
             buf << "\n"
             buf << children_indentation.padding
@@ -1038,7 +1048,7 @@ class StringConverter
     string_formats = format.container_string_formats || DEFAULT_CONTAINER_FORMATS
     delims         = format.delimiter_pair(DEFAULT_HASH_DELIMITERS)
 
-    if format.alt? 
+    if format.alt?
       sep = sep.rstrip unless sep[-1] == "\n"
       sep = "#{sep}\n"
     end
@@ -1054,7 +1064,7 @@ class StringConverter
 
     when :h, :s, :p
       indentation = indentation.indenting(format.alt? || indentation.is_indenting?)
-      buf = ''
+      buf = ''.dup
       if indentation.breaks?
         buf << "\n"
         buf << indentation.padding
@@ -1066,8 +1076,8 @@ class StringConverter
         padding = children_indentation.padding
       end
       buf << delims[0]
-      buf << cond_break  # break after opening delimiter if pretty printing
-      buf << val.map do |k,v|
+      buf << cond_break # break after opening delimiter if pretty printing
+      buf << val.map do |k, v|
         key_type = TypeCalculator.infer_set(k)
         val_type = TypeCalculator.infer_set(v)
         key = _convert(key_type, k, is_container?(key_type) ? format_map : string_formats, children_indentation)
@@ -1123,12 +1133,12 @@ class StringConverter
 
   # Maps the inferred type of o to a formatting rule
   def get_format(val_t, format_options)
-    fmt = format_options.find {|k,_| k.assignable?(val_t) }
+    fmt = format_options.find { |k, _| k.assignable?(val_t) }
     return fmt[1] unless fmt.nil?
-    return Format.new("%s")
+
+    Format.new("%s")
   end
   private :get_format
-
 end
 end
 end

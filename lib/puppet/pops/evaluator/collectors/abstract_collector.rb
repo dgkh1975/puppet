@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Puppet::Pops::Evaluator::Collectors::AbstractCollector
   attr_reader :scope
 
@@ -26,7 +28,7 @@ class Puppet::Pops::Evaluator::Collectors::AbstractCollector
     @collected = {}
     @scope = scope
 
-    if !(overrides.nil? || overrides[:parameters])
+    unless overrides.nil? || overrides[:parameters]
       raise ArgumentError, _("Exported resource try to override without parameters")
     end
 
@@ -48,12 +50,12 @@ class Puppet::Pops::Evaluator::Collectors::AbstractCollector
       overrides[:source].override = true
 
       objects.each do |res|
-        unless @collected.include?(res.ref)
-          t = res.type
-          t = Puppet::Pops::Evaluator::Runtime3ResourceSupport.find_resource_type(scope, t)
-          newres = Puppet::Parser::Resource.new(t, res.title, @overrides)
-          scope.compiler.add_override(newres)
-        end
+        next if @collected.include?(res.ref)
+
+        t = res.type
+        t = Puppet::Pops::Evaluator::Runtime3ResourceSupport.find_resource_type(scope, t)
+        newres = Puppet::Parser::Resource.new(t, res.title, @overrides)
+        scope.compiler.add_override(newres)
       end
     end
 
@@ -61,7 +63,7 @@ class Puppet::Pops::Evaluator::Collectors::AbstractCollector
 
     return false if objects.empty?
 
-    objects.reduce(@collected) { |c,o| c[o.ref]=o; c }
+    objects.each_with_object(@collected) { |o, c| c[o.ref] = o; }
 
     objects
   end

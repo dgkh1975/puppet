@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Returns a new string with the record separator character(s) removed.
 # The record separator is the line ending characters `\r` and `\n`.
 #
@@ -24,7 +26,6 @@
 # Would both result in `['hello', 'hi']`
 #
 Puppet::Functions.create_function(:chomp) do
-
   dispatch :on_numeric do
     param 'Numeric', :arg
   end
@@ -47,7 +48,7 @@ Puppet::Functions.create_function(:chomp) do
   end
 
   def on_iterable(a)
-    a.map {|x| do_chomp(x) }
+    a.map { |x| do_chomp(x) }
   end
 
   def do_chomp(x)

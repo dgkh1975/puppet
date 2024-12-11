@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 # LoaderPaths
 # ===
@@ -9,7 +10,6 @@
 module Puppet::Pops
 module Loader
 module LoaderPaths
-
   # Returns an array of SmartPath, each instantiated with a reference to the given loader (for root path resolution
   # and existence checks). The smart paths in the array appear in precedence order. The returned array may be
   # mutated.
@@ -18,16 +18,16 @@ module LoaderPaths
     result = []
     case type
     when :function
-        # Only include support for the loadable items the loader states it can contain
-        if loader.loadables.include?(:func_4x)
-          result << FunctionPath4x.new(loader)
-        end
-        if loader.loadables.include?(:func_4xpp)
-          result << FunctionPathPP.new(loader)
-        end
-        if loader.loadables.include?(:func_3x)
-          result << FunctionPath3x.new(loader)
-        end
+      # Only include support for the loadable items the loader states it can contain
+      if loader.loadables.include?(:func_4x)
+        result << FunctionPath4x.new(loader)
+      end
+      if loader.loadables.include?(:func_4xpp)
+        result << FunctionPathPP.new(loader)
+      end
+      if loader.loadables.include?(:func_3x)
+        result << FunctionPath3x.new(loader)
+      end
     when :plan
       result << PlanPath.new(loader)
     when :task
@@ -44,24 +44,22 @@ module LoaderPaths
     result
   end
 
-#  # DO NOT REMOVE YET. needed later? when there is the need to decamel a classname
-#  def de_camel(fq_name)
-#    fq_name.to_s.gsub(/::/, '/').
-#    gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
-#    gsub(/([a-z\d])([A-Z])/,'\1_\2').
-#    tr("-", "_").
-#    downcase
-#  end
+  #  # DO NOT REMOVE YET. needed later? when there is the need to decamel a classname
+  #  def de_camel(fq_name)
+  #    fq_name.to_s.gsub(/::/, '/').
+  #    gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
+  #    gsub(/([a-z\d])([A-Z])/,'\1_\2').
+  #    tr("-", "_").
+  #    downcase
+  #  end
 
   class SmartPath
-    # Generic path, in the sense of "if there are any entities of this kind to load, where are they?"
-    attr_reader :generic_path
-
     # Creates SmartPath for the given loader (loader knows how to check for existence etc.)
     def initialize(loader)
       @loader = loader
     end
 
+    # Generic path, in the sense of "if there are any entities of this kind to load, where are they?"
     def generic_path
       return @generic_path unless @generic_path.nil?
 
@@ -89,10 +87,10 @@ module LoaderPaths
 
     def typed_name(type, name_authority, relative_path, module_name)
       # Module name is assumed to be included in the path and therefore not added here
-      n = ''
+      n = ''.dup
       unless extension.empty?
         # Remove extension
-        relative_path = relative_path[0..-(extension.length+1)]
+        relative_path = relative_path[0..-(extension.length + 1)]
       end
       relative_path.split('/').each do |segment|
         n << '::' if n.size > 0
@@ -110,16 +108,16 @@ module LoaderPaths
     end
 
     def relative_path
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     def instantiator
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
   end
 
   class RubySmartPath < SmartPath
-    EXTENSION = '.rb'.freeze
+    EXTENSION = '.rb'
 
     def extension
       EXTENSION
@@ -135,7 +133,7 @@ module LoaderPaths
   # path (which is a reference to its 'lib' directory.
   #
   class PuppetSmartPath < SmartPath
-    EXTENSION = '.pp'.freeze
+    EXTENSION = '.pp'
 
     def extension
       EXTENSION
@@ -148,17 +146,18 @@ module LoaderPaths
       parts = typed_name.name_parts
       if start_index_in_name > 0
         return nil if start_index_in_name >= parts.size
-        parts = parts[start_index_in_name..-1]
+
+        parts = parts[start_index_in_name..]
       end
       "#{File.join(generic_path, parts)}#{extension}"
     end
 
     def typed_name(type, name_authority, relative_path, module_name)
-      n = ''
+      n = ''.dup
       n << module_name unless module_name.nil?
       unless extension.empty?
         # Remove extension
-        relative_path = relative_path[0..-(extension.length+1)]
+        relative_path = relative_path[0..-(extension.length + 1)]
       end
       relative_path.split('/').each do |segment|
         n << '::' if n.size > 0
@@ -195,7 +194,7 @@ module LoaderPaths
   end
 
   class FunctionPathPP < PuppetSmartPath
-    FUNCTION_PATH_PP = 'functions'.freeze
+    FUNCTION_PATH_PP = 'functions'
 
     def relative_path
       FUNCTION_PATH_PP
@@ -220,7 +219,7 @@ module LoaderPaths
   end
 
   class TypePathPP < PuppetSmartPath
-    TYPE_PATH_PP = 'types'.freeze
+    TYPE_PATH_PP = 'types'
 
     def relative_path
       TYPE_PATH_PP
@@ -234,8 +233,8 @@ module LoaderPaths
   # TaskPath is like PuppetSmartPath but it does not use an extension and may
   # match more than one path with one name
   class TaskPath < PuppetSmartPath
-    TASKS_PATH = 'tasks'.freeze
-    FORBIDDEN_EXTENSIONS = %w{.conf .md}.freeze
+    TASKS_PATH = 'tasks'
+    FORBIDDEN_EXTENSIONS = %w[.conf .md].freeze
 
     def extension
       EMPTY_STRING
@@ -250,7 +249,7 @@ module LoaderPaths
     end
 
     def typed_name(type, name_authority, relative_path, module_name)
-      n = ''
+      n = ''.dup
       n << module_name unless module_name.nil?
 
       # Remove the file extension, defined as everything after the *last* dot.
@@ -287,7 +286,7 @@ module LoaderPaths
   end
 
   class ResourceTypeImplPP < PuppetSmartPath
-    RESOURCE_TYPES_PATH_PP = '.resource_types'.freeze
+    RESOURCE_TYPES_PATH_PP = '.resource_types'
 
     def relative_path
       RESOURCE_TYPES_PATH_PP
@@ -314,8 +313,8 @@ module LoaderPaths
 
   class PlanPath < PuppetSmartPath
     PLAN_PATH = File.join('plans')
-    PP_EXT = '.pp'.freeze
-    YAML_EXT = '.yaml'.freeze
+    PP_EXT = '.pp'
+    YAML_EXT = '.yaml'
 
     def initialize(loader)
       super
@@ -336,7 +335,7 @@ module LoaderPaths
       PLAN_PATH
     end
 
-    def instantiator()
+    def instantiator
       Puppet::Pops::Loader::GenericPlanInstantiator
     end
 
@@ -352,10 +351,10 @@ module LoaderPaths
       if @init_filenames.include?(relative_path) && !(module_name.nil? || module_name.empty?)
         TypedName.new(type, module_name, name_authority)
       else
-        n = ''
+        n = ''.dup
         n << module_name unless module_name.nil?
         ext = @extensions.find { |extension| relative_path.end_with?(extension) }
-        relative_path = relative_path[0..-(ext.length+1)]
+        relative_path = relative_path[0..-(ext.length + 1)]
 
         relative_path.split('/').each do |segment|
           n << '::' if n.size > 0
@@ -371,7 +370,8 @@ module LoaderPaths
       parts = typed_name.name_parts
       if start_index_in_name > 0
         return nil if start_index_in_name >= parts.size
-        parts = parts[start_index_in_name..-1]
+
+        parts = parts[start_index_in_name..]
       end
       basename = File.join(generic_path, parts)
       @extensions.map { |ext| "#{basename}#{ext}" }
@@ -411,4 +411,3 @@ module LoaderPaths
 end
 end
 end
-

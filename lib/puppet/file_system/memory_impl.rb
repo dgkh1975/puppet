@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Puppet::FileSystem::MemoryImpl
   def initialize(*files)
     @files = files + all_children_of(files)
@@ -31,8 +33,10 @@ class Puppet::FileSystem::MemoryImpl
     path = path.path
     link = find(path)
     return Puppet::FileSystem::MemoryFile.a_missing_file(path) unless link
+
     source = link.source_path
     return Puppet::FileSystem::MemoryFile.a_missing_file(link) unless source
+
     find(source) || Puppet::FileSystem::MemoryFile.a_missing_file(source)
   end
 
@@ -70,7 +74,7 @@ class Puppet::FileSystem::MemoryImpl
     if block_given?
       yield handle
     else
-      return handle
+      handle
     end
   end
 

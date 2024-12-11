@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Adapts an external http_client_class to the HTTP client API. The former
 # is typically registered by puppetserver and only implements a subset of
 # the Puppet::Network::HTTP::Connection methods. As a result, only the
@@ -6,7 +8,6 @@
 #
 # @api private
 class Puppet::HTTP::ExternalClient < Puppet::HTTP::Client
-
   # Create an external http client.
   #
   # @param [Class] http_client_class The class to create to handle the request
@@ -38,7 +39,8 @@ class Puppet::HTTP::ExternalClient < Puppet::HTTP::Client
   # (see Puppet::HTTP::Client#post)
   # @api private
   def post(url, body, headers: {}, params: {}, options: {}, &block)
-    raise ArgumentError.new("'post' requires a string 'body' argument") unless body.is_a?(String)
+    raise ArgumentError, "'post' requires a string 'body' argument" unless body.is_a?(String)
+
     url = encode_query(url, params)
 
     options[:use_ssl] = url.scheme == 'https'
@@ -84,5 +86,4 @@ class Puppet::HTTP::ExternalClient < Puppet::HTTP::Client
   def delete(url, headers: {}, params: {}, options: {})
     raise NotImplementedError
   end
-
 end

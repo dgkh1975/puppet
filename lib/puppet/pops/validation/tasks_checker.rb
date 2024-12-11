@@ -1,14 +1,16 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Validation
-
 # Validator that limits the set of allowed expressions to not include catalog related operations
 # @api private
 class TasksChecker < Checker4_0
   def in_ApplyExpression?
     top = container(0)
     step = -1
-    until container(step) == top do
+    until container(step) == top
       return true if container(step).is_a? Puppet::Pops::Model::ApplyBlockExpression
+
       step -= 1
     end
   end
@@ -20,7 +22,7 @@ class TasksChecker < Checker4_0
       if o.query.is_a?(Puppet::Pops::Model::VirtualQuery)
         super(o)
       else
-        acceptor.accept(Issues::EXPRESSION_NOT_SUPPORTED_WHEN_COMPILING, o, {:klass => o})
+        acceptor.accept(Issues::EXPRESSION_NOT_SUPPORTED_WHEN_COMPILING, o, { :klass => o })
       end
     else
       illegalTasksExpression(o)
@@ -77,12 +79,12 @@ class TasksChecker < Checker4_0
 
   def check_ApplyExpression(o)
     if in_ApplyExpression?
-      acceptor.accept(Issues::EXPRESSION_NOT_SUPPORTED_WHEN_COMPILING, o, {:klass => o})
+      acceptor.accept(Issues::EXPRESSION_NOT_SUPPORTED_WHEN_COMPILING, o, { :klass => o })
     end
   end
 
   def illegalTasksExpression(o)
-    acceptor.accept(Issues::EXPRESSION_NOT_SUPPORTED_WHEN_SCRIPTING, o, {:klass => o})
+    acceptor.accept(Issues::EXPRESSION_NOT_SUPPORTED_WHEN_SCRIPTING, o, { :klass => o })
   end
 
   def resource_without_title?(o)

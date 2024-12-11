@@ -15,23 +15,22 @@ describe 'Puppet::Type::Service::Provider::Redhat',
     allow(@provider).to receive(:get).with(:hasstatus).and_return(false)
     allow(FileTest).to receive(:file?).with('/sbin/service').and_return(true)
     allow(FileTest).to receive(:executable?).with('/sbin/service').and_return(true)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return('CentOS')
-    allow(Facter).to receive(:value).with(:osfamily).and_return('RedHat')
+    allow(Facter).to receive(:value).with('os.name').and_return('CentOS')
+    allow(Facter).to receive(:value).with('os.family').and_return('RedHat')
   end
 
-  osfamilies = [ 'RedHat' ]
-
-  osfamilies.each do |osfamily|
-    it "should be the default provider on #{osfamily}" do
-      expect(Facter).to receive(:value).with(:osfamily).and_return(osfamily)
+  [4, 5, 6].each do |ver|
+    it "should be the default provider on rhel#{ver}" do
+      allow(Facter).to receive(:value).with('os.name').and_return(:redhat)
+      allow(Facter).to receive(:value).with('os.release.major').and_return(ver)
       expect(provider_class.default?).to be_truthy
     end
   end
 
   it "should be the default provider on sles11" do
-    allow(Facter).to receive(:value).with(:osfamily).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystem).and_return(:suse)
-    allow(Facter).to receive(:value).with(:operatingsystemmajrelease).and_return("11")
+    allow(Facter).to receive(:value).with('os.family').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.name').and_return(:suse)
+    allow(Facter).to receive(:value).with('os.release.major').and_return("11")
     expect(provider_class.default?).to be_truthy
   end
 
@@ -41,8 +40,9 @@ describe 'Puppet::Type::Service::Provider::Redhat',
       @services = ['one', 'two', 'three', 'four', 'kudzu', 'functions', 'halt', 'killall', 'single', 'linuxconf', 'boot', 'reboot']
       @not_services = ['functions', 'halt', 'killall', 'single', 'linuxconf', 'reboot', 'boot']
       allow(Dir).to receive(:entries).and_return(@services)
-      allow(FileTest).to receive(:directory?).and_return(true)
-      allow(FileTest).to receive(:executable?).and_return(true)
+      allow(Puppet::FileSystem).to receive(:directory?).and_call_original
+      allow(Puppet::FileSystem).to receive(:directory?).with('/etc/init.d').and_return(true)
+      allow(Puppet::FileSystem).to receive(:executable?).and_return(true)
     end
 
     it "should return instances for all services" do
@@ -80,7 +80,7 @@ describe 'Puppet::Type::Service::Provider::Redhat',
 
   context "when checking enabled? on Suse" do
     before :each do
-      expect(Facter).to receive(:value).with(:osfamily).and_return('Suse')
+      expect(Facter).to receive(:value).with('os.family').and_return('Suse')
     end
 
     it "should check for on" do

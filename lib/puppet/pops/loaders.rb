@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 # This is the container for all Loader instances. Each Loader instance has a `loader_name` by which it can be uniquely
 # identified within this container.
@@ -11,8 +13,12 @@ module Puppet::Pops
 class Loaders
   class LoaderError < Puppet::Error; end
 
-  attr_reader :static_loader
-  attr_reader :puppet_system_loader
+  # Commented out the :static_loader and :puppet_system_loader
+  # because of rubocop offenses with duplicated definitions of
+  # these generated methods, but keeping them here for visibility
+  # on how the loaders are stacked.
+  # attr_reader :static_loader
+  # attr_reader :puppet_system_loader
   attr_reader :puppet_cache_loader
   attr_reader :public_environment_loader
   attr_reader :private_environment_loader
@@ -22,7 +28,7 @@ class Loaders
     environment.lock.synchronize do
       obj = environment.loaders
       if obj.nil?
-        obj = self.allocate
+        obj = allocate
         obj.send(:initialize, environment, for_agent, load_from_pcore)
       end
       obj
@@ -31,7 +37,8 @@ class Loaders
 
   def initialize(environment, for_agent, load_from_pcore = true)
     # Protect against environment havoc
-    raise ArgumentError.new(_("Attempt to redefine already initialized loaders for environment")) unless environment.loaders.nil?
+    raise ArgumentError, _("Attempt to redefine already initialized loaders for environment") unless environment.loaders.nil?
+
     environment.loaders = self
     @environment = environment
     @loaders_by_name = {}
@@ -175,6 +182,7 @@ class Loaders
   def self.loaders
     loaders = Puppet.lookup(:loaders) { nil }
     raise Puppet::ParseError, _("Internal Error: Puppet Context ':loaders' missing") if loaders.nil?
+
     loaders
   end
 
@@ -211,6 +219,7 @@ class Loaders
       if loader.nil?
         raise Puppet::ParseError, _("Internal Error: did not find public loader for module: '%{module_name}'") % { module_name: module_name }
       end
+
       loader
     end
   end
@@ -257,6 +266,7 @@ class Loaders
     if @loaders_by_name.include?(name)
       raise Puppet::ParseError, _("Internal Error: Attempt to redefine loader named '%{name}'") % { name: name }
     end
+
     @loaders_by_name[name] = loader
   end
 
@@ -276,22 +286,22 @@ class Loaders
     parser = Parser::EvaluatingParser.singleton
     parsed_code = Puppet[:code]
     program = if parsed_code != ""
-      parser.parse_string(parsed_code, 'unknown-source-location')
-    else
-      file = @environment.manifest
+                parser.parse_string(parsed_code, 'unknown-source-location')
+              else
+                file = @environment.manifest
 
-      # if the manifest file is a reference to a directory, parse and combine
-      # all .pp files in that directory
-      if file == Puppet::Node::Environment::NO_MANIFEST
-        nil
-      elsif File.directory?(file)
-        raise Puppet::Error, "manifest of environment '#{@environment.name}' appoints directory '#{file}'. It must be a file"
-      elsif File.exist?(file)
-        parser.parse_file(file)
-      else
-        raise Puppet::Error, "manifest of environment '#{@environment.name}' appoints '#{file}'. It does not exist"
-      end
-    end
+                # if the manifest file is a reference to a directory, parse and
+                # combine all .pp files in that directory
+                if file == Puppet::Node::Environment::NO_MANIFEST
+                  nil
+                elsif File.directory?(file)
+                  raise Puppet::Error, "manifest of environment '#{@environment.name}' appoints directory '#{file}'. It must be a file"
+                elsif File.exist?(file)
+                  parser.parse_file(file)
+                else
+                  raise Puppet::Error, "manifest of environment '#{@environment.name}' appoints '#{file}'. It does not exist"
+                end
+              end
     instantiate_definitions(program, public_environment_loader) unless program.nil?
     program
   rescue Puppet::ParseErrorWithIssue => detail
@@ -355,11 +365,11 @@ class Loaders
     nil
   end
 
-  def create_puppet_system_loader()
+  def create_puppet_system_loader
     Loader::ModuleLoaders.system_loader_from(static_loader, self)
   end
 
-  def create_puppet_cache_loader()
+  def create_puppet_cache_loader
     Loader::ModuleLoaders.cached_loader_from(puppet_system_loader, self)
   end
 
@@ -445,7 +455,6 @@ class Loaders
   #       what is available with a reasonable API.
   #
   class LoaderModuleData
-
     attr_accessor :public_loader
     attr_accessor :private_loader
     attr_accessor :resolutions
@@ -494,7 +503,6 @@ class Loaders
   # Resolves module loaders - resolution of model dependencies is done by Puppet::Module
   #
   class ModuleResolver
-
     def initialize(loaders)
       @loaders = loaders
       @index = {}
@@ -510,7 +518,7 @@ class Loaders
     end
 
     def all_module_loaders
-      @all_module_loaders ||= @index.values.map {|md| md.public_loader }
+      @all_module_loaders ||= @index.values.map(&:public_loader)
     end
 
     def resolve(module_data)

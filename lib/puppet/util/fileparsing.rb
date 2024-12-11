@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A mini-language for parsing files.  This is only used file the ParsedFile
 # provider, but it makes more sense to split it out so it's easy to maintain
 # in one place.
@@ -40,7 +42,8 @@ module Puppet::Util::FileParsing
     def fields=(fields)
       @fields = fields.collect do |field|
         r = field.intern
-        raise ArgumentError.new(_("Cannot have fields named %{name}") % { name: r }) if INVALID_FIELDS.include?(r)
+        raise ArgumentError, _("Cannot have fields named %{name}") % { name: r } if INVALID_FIELDS.include?(r)
+
         r
       end
     end
@@ -102,7 +105,7 @@ module Puppet::Util::FileParsing
     def join(details)
       joinchar = self.joiner
 
-      fields.collect { |field|
+      fields.filter_map { |field|
         # If the field is marked absent, use the appropriate replacement
         if details[field] == :absent or details[field] == [:absent] or details[field].nil?
           if self.optional.include?(field)
@@ -113,14 +116,12 @@ module Puppet::Util::FileParsing
         else
           details[field].to_s
         end
-      }.reject { |c| c.nil?}.join(joinchar)
+      }.join(joinchar)
     end
 
     # Customize this so we can do a bit of validation.
     def optional=(optional)
-      @optional = optional.collect do |field|
-        field.intern
-      end
+      @optional = optional.collect(&:intern)
     end
 
     # Create a hook that modifies the hash resulting from parsing.
@@ -160,7 +161,7 @@ module Puppet::Util::FileParsing
 
   # Try to match a specific text line.
   def handle_text_line(line, record)
-    line =~ record.match ? {:record_type => record.name, :line => line} : nil
+    line =~ record.match ? { :record_type => record.name, :line => line } : nil
   end
 
   # Try to match a record.
@@ -217,7 +218,7 @@ module Puppet::Util::FileParsing
           end
         end
 
-        if record.rollup and ! line_fields.empty?
+        if record.rollup and !line_fields.empty?
           last_field = record.fields[-1]
           val = ([ret[last_field]] + line_fields).join(record.joiner)
           ret[last_field] = val
@@ -227,9 +228,9 @@ module Puppet::Util::FileParsing
 
     if ret
       ret[:record_type] = record.name
-      return ret
+      ret
     else
-      return nil
+      nil
     end
   end
 
@@ -243,7 +244,7 @@ module Puppet::Util::FileParsing
   def lines(text)
     # NOTE: We do not have to remove trailing separators because split will ignore
     # them by default (unless you pass -1 as a second parameter)
-    text.split(self.line_separator)
+    text.split(line_separator)
   end
 
   # Split a bunch of text into lines and then parse them individually.
@@ -308,7 +309,7 @@ module Puppet::Util::FileParsing
 
   # Are there any record types defined?
   def records?
-    defined?(@record_types) and ! @record_types.empty?
+    defined?(@record_types) and !@record_types.empty?
   end
 
   # Define a new type of text record.
@@ -343,7 +344,7 @@ module Puppet::Util::FileParsing
     end
 
     case record.type
-    when :text; return details[:line]
+    when :text; details[:line]
     else
       return record.to_line(details) if record.respond_to?(:to_line)
 
@@ -355,9 +356,9 @@ module Puppet::Util::FileParsing
         if regex == true
           regex = /\s+$/
         end
-        return line.sub(regex,'')
+        line.sub(regex, '')
       else
-        return line
+        line
       end
     end
   end
@@ -365,9 +366,9 @@ module Puppet::Util::FileParsing
   # Whether to add a trailing separator to the file.  Defaults to true
   def trailing_separator
     if defined?(@trailing_separator)
-      return @trailing_separator
+      @trailing_separator
     else
-      return true
+      true
     end
   end
 
@@ -375,13 +376,9 @@ module Puppet::Util::FileParsing
     type = type.intern
     record = record_type(type)
     if record && record.fields.include?(attr.intern)
-      return true
+      true
     else
-      if attr.intern == :ensure
-        return true
-      else
-        false
-      end
+      attr.intern == :ensure
     end
   end
 
@@ -405,4 +402,3 @@ module Puppet::Util::FileParsing
     @record_types[type.intern]
   end
 end
-

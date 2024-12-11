@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/provider'
 require_relative '../../puppet/util/execution'
 
@@ -27,7 +29,7 @@ class Puppet::Provider::Exec < Puppet::Provider
       end
 
       if value.nil? || value.empty?
-        msg = _("Empty environment setting '%{var}'") % {var: var}
+        msg = _("Empty environment setting '%{var}'") % { var: var }
         Puppet.warn_once('undefined_variables', "empty_env_var_#{var}", msg, resource.file, resource.line)
       end
 
@@ -43,14 +45,14 @@ class Puppet::Provider::Exec < Puppet::Provider
 
     checkexe(command)
 
-    debug "Executing#{check ? " check": ""} '#{sensitive ? '[redacted]' : command}'"
+    debug "Executing#{check ? ' check' : ''} '#{sensitive ? '[redacted]' : command}'"
 
     # Ruby 2.1 and later interrupt execution in a way that bypasses error
     # handling by default. Passing Timeout::Error causes an exception to be
     # raised that can be rescued inside of the block by cleanup routines.
     #
     # This is backwards compatible all the way to Ruby 1.8.7.
-    Timeout::timeout(resource[:timeout], Timeout::Error) do
+    Timeout.timeout(resource[:timeout], Timeout::Error) do
       cwd = resource[:cwd]
       # It's ok if cwd is nil. In that case Puppet::Util::Execution.execute() simply will not attempt to
       # change the working directory, which is exactly the right behavior when no cwd parameter is
@@ -80,7 +82,7 @@ class Puppet::Provider::Exec < Puppet::Provider
     # Return output twice as processstatus was returned before, but only exitstatus was ever called.
     # Output has the exitstatus on it so it is returned instead. This is here twice as changing this
     #  would result in a change to the underlying API.
-    return output, output
+    [output, output]
   end
 
   def extractexe(command)

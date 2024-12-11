@@ -1,4 +1,6 @@
 # encoding: UTF-8
+# frozen_string_literal: true
+
 require_relative '../../../puppet/forge'
 require_relative '../../../puppet/module_tool/install_directory'
 require 'pathname'
@@ -128,18 +130,19 @@ Puppet::Face.define(:module, '1.0.0') do
       Puppet::ModuleTool::Applications::Installer.run(name, install_dir, options)
     end
 
-    when_rendering :console do |return_value, name, options|
-      if return_value[:result] == :noop
+    when_rendering :console do |return_value, name, _options|
+      case return_value[:result]
+      when :noop
         Puppet.notice _("Module %{name} %{version} is already installed.") % { name: name, version: return_value[:version] }
         exit 0
-      elsif return_value[:result] == :failure
+      when :failure
         Puppet.err(return_value[:error][:multiline])
         exit 1
       else
         tree = Puppet::ModuleTool.build_tree(return_value[:graph], return_value[:install_dir])
 
         "#{return_value[:install_dir]}\n" +
-        Puppet::ModuleTool.format_tree(tree)
+          Puppet::ModuleTool.format_tree(tree)
       end
     end
   end

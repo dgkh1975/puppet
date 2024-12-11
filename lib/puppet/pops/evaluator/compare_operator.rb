@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Evaluator
 # Compares the puppet DSL way
@@ -47,22 +49,25 @@ class CompareOperator
 
   def cmp_String(a, b)
     return a.casecmp(b) if b.is_a?(String)
-    raise ArgumentError.new(_("A String is not comparable to a non String"))
+
+    raise ArgumentError, _("A String is not comparable to a non String")
   end
 
   # Equality is case independent.
   def equals_String(a, b)
     return false unless b.is_a?(String)
+
     a.casecmp(b) == 0
   end
 
   def cmp_Numeric(a, b)
-    if b.is_a?(Numeric)
+    case b
+    when Numeric
       a <=> b
-    elsif b.is_a?(Time::Timespan) || b.is_a?(Time::Timestamp)
+    when Time::Timespan, Time::Timestamp
       -(b <=> a) # compare other way and invert result
     else
-      raise ArgumentError.new(_("A Numeric is not comparable to non Numeric"))
+      raise ArgumentError, _("A Numeric is not comparable to non Numeric")
     end
   end
 
@@ -76,13 +81,15 @@ class CompareOperator
 
   def equals_Array(a, b)
     return false unless b.is_a?(Array) && a.size == b.size
-    a.each_index {|i| return false unless equals(a.slice(i), b.slice(i)) }
+
+    a.each_index { |i| return false unless equals(a.slice(i), b.slice(i)) }
     true
   end
 
   def equals_Hash(a, b)
     return false unless b.is_a?(Hash) && a.size == b.size
-    a.each {|ak, av| return false unless equals(b[ak], av)}
+
+    a.each { |ak, av| return false unless equals(b[ak], av) }
     true
   end
 
@@ -90,29 +97,31 @@ class CompareOperator
     if b.is_a?(Symbol)
       a <=> b
     else
-      raise ArgumentError.new(_("Symbol not comparable to non Symbol"))
+      raise ArgumentError, _("Symbol not comparable to non Symbol")
     end
   end
 
   def cmp_Timespan(a, b)
-    raise ArgumentError.new(_('Timespans are only comparable to Timespans, Integers, and Floats')) unless b.is_a?(Time::Timespan) ||  b.is_a?(Integer) || b.is_a?(Float)
+    raise ArgumentError, _('Timespans are only comparable to Timespans, Integers, and Floats') unless b.is_a?(Time::Timespan) || b.is_a?(Integer) || b.is_a?(Float)
+
     a <=> b
   end
 
   def cmp_Timestamp(a, b)
-    raise ArgumentError.new(_('Timestamps are only comparable to Timestamps, Integers, and Floats')) unless b.is_a?(Time::Timestamp) ||  b.is_a?(Integer) || b.is_a?(Float)
+    raise ArgumentError, _('Timestamps are only comparable to Timestamps, Integers, and Floats') unless b.is_a?(Time::Timestamp) || b.is_a?(Integer) || b.is_a?(Float)
+
     a <=> b
   end
 
   def cmp_Version(a, b)
-    raise ArgumentError.new(_('Versions not comparable to non Versions')) unless b.is_a?(SemanticPuppet::Version)
+    raise ArgumentError, _('Versions not comparable to non Versions') unless b.is_a?(SemanticPuppet::Version)
+
     a <=> b
   end
 
   def cmp_Object(a, b)
-    raise ArgumentError.new(_('Only Strings, Numbers, Timespans, Timestamps, and Versions are comparable'))
+    raise ArgumentError, _('Only Strings, Numbers, Timespans, Timestamps, and Versions are comparable')
   end
-
 
   def equals_Object(a, b)
     a == b
@@ -168,20 +177,21 @@ class CompareOperator
       matched = nil
       a.each do |element|
         next unless element.is_a? String
+
         matched = element.match(b) # nil, or MatchData
         break if matched
       end
       # Always set match data, a "not found" should not keep old match data visible
       set_match_data(matched, scope) # creates ephemeral
-      return !!matched
+      !!matched
     when String, SemanticPuppet::Version
       a.any? { |element| match(b, element, scope) }
     when Types::PAnyType
-      a.each {|element| return true if b.instance?(element) }
-      return false
+      a.each { |element| return true if b.instance?(element) }
+      false
     else
-      a.each {|element| return true if equals(element, b) }
-      return false
+      a.each { |element| return true if equals(element, b) }
+      false
     end
   end
 
@@ -201,6 +211,7 @@ class CompareOperator
   # Matches only against strings
   def match_Regexp(regexp, left, scope)
     return false unless left.is_a? String
+
     matched = regexp.match(left)
     set_match_data(matched, scope) unless scope.nil? # creates or clears ephemeral
     !!matched # convert to boolean
@@ -208,9 +219,10 @@ class CompareOperator
 
   # Matches against semvers and strings
   def match_Version(version, left, scope)
-    if left.is_a?(SemanticPuppet::Version)
+    case left
+    when SemanticPuppet::Version
       version == left
-    elsif left.is_a? String
+    when String
       begin
         version == SemanticPuppet::Version.parse(left)
       rescue ArgumentError
@@ -237,16 +249,19 @@ class CompareOperator
   def match_Array(array, left, scope)
     return false unless left.is_a?(Array)
     return false unless left.length == array.length
-    array.each_with_index.all? { | pattern, index| match(left[index], pattern, scope) }
+
+    array.each_with_index.all? { |pattern, index| match(left[index], pattern, scope) }
   end
 
   def match_Hash(hash, left, scope)
     return false unless left.is_a?(Hash)
-    hash.all? {|x,y| match(left[x], y, scope) }
+
+    hash.all? { |x, y| match(left[x], y, scope) }
   end
 
   def match_Symbol(symbol, left, scope)
     return true if symbol == :default
+
     equals(left, default)
   end
 end

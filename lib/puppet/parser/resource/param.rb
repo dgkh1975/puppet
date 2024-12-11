@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The parameters we stick in Resources.
 class Puppet::Parser::Resource::Param
   include Puppet::Util
@@ -24,12 +26,12 @@ class Puppet::Parser::Resource::Param
   end
 
   def to_s
-    "#{self.name} => #{self.value}"
+    "#{name} => #{value}"
   end
 
   def self.from_param(param, value)
     new_param = param.dup
     new_param.value = value
-    return new_param
+    new_param
   end
 end

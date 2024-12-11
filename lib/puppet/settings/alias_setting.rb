@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Puppet::Settings::AliasSetting
   attr_reader :name, :alias_name
 
@@ -24,11 +26,9 @@ class Puppet::Settings::AliasSetting
   end
 
   def method_missing(method, *args)
-    begin
-      alias_for.send(method, *args)
-    rescue => e
-      Puppet.log_exception(self.class, e.message)
-    end
+    alias_for.send(method, *args)
+  rescue => e
+    Puppet.log_exception(self.class, e.message)
   end
 
   private

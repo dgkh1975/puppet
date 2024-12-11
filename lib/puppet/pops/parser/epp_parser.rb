@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 # The EppParser is a specialized Puppet Parser that starts parsing in Epp Text mode
 class Puppet::Pops::Parser::EppParser < Puppet::Pops::Parser::Parser
-
   # Initializes the epp parser support by creating a new instance of {Puppet::Pops::Parser::Lexer}
   # configured to start in Epp Lexing mode.
   # @return [void]
@@ -13,7 +14,7 @@ class Puppet::Pops::Parser::EppParser < Puppet::Pops::Parser::Parser
   def parse_file(file)
     unless FileTest.exist?(file)
       unless file =~ /\.epp$/
-        file = file + ".epp"
+        file += ".epp"
       end
     end
     @lexer.file = file
@@ -28,10 +29,10 @@ class Puppet::Pops::Parser::EppParser < Puppet::Pops::Parser::Parser
   #
   # @api private
   #
-  def _parse()
+  def _parse
     begin
       @yydebug = false
-      main = yyparse(@lexer,:scan_epp)
+      main = yyparse(@lexer, :scan_epp)
       # #Commented out now because this hides problems in the racc grammar while developing
       # # TODO include this when test coverage is good enough.
       #      rescue Puppet::ParseError => except
@@ -42,7 +43,7 @@ class Puppet::Pops::Parser::EppParser < Puppet::Pops::Parser::Parser
       #      rescue => except
       #        raise Puppet::ParseError.new(except.message, @lexer.file, @lexer.line, @lexer.pos, except)
     end
-    return main
+    main
   ensure
     @lexer.clear
     @namestack = []

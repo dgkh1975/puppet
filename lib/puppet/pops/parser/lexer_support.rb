@@ -1,18 +1,18 @@
+# frozen_string_literal: true
 
 module Puppet::Pops
 module Parser
-
 require_relative '../../../puppet/util/multi_match'
 
 # This is an integral part of the Lexer. It is broken out into a separate module
 # for maintainability of the code, and making the various parts of the lexer focused.
 #
 module LexerSupport
-
   # Returns "<eof>" if at end of input, else the following 5 characters with \n \r \t escaped
   def followed_by
     return "<eof>" if @scanner.eos?
-    result = @scanner.rest[0,5] + "..."
+
+    result = @scanner.rest[0, 5] + "..."
     result.gsub!("\t", '\t')
     result.gsub!("\n", '\n')
     result.gsub!("\r", '\r')
@@ -34,7 +34,7 @@ module LexerSupport
   end
 
   # Raises a Puppet::ParserErrorWithIssue with the given issue and arguments
-  def lex_error(issue, args = {}, pos=nil)
+  def lex_error(issue, args = {}, pos = nil)
     raise create_lex_error(issue, args, pos)
   end
 
@@ -51,15 +51,15 @@ module LexerSupport
     @locator.pos_on_line(pos || @scanner.pos)
   end
 
-  def lex_warning(issue, args = {}, pos=nil)
+  def lex_warning(issue, args = {}, pos = nil)
     Puppet::Util::Log.create({
-        :level => :warning,
-        :message => issue.format(args),
-        :issue_code => issue.issue_code,
-        :file => filename,
-        :line => line(pos),
-        :pos => position(pos),
-      })
+                               :level => :warning,
+                               :message => issue.format(args),
+                               :issue_code => issue.issue_code,
+                               :file => filename,
+                               :line => line(pos),
+                               :pos => position(pos),
+                             })
   end
 
   # @param issue [Issues::Issue] the issue
@@ -68,30 +68,32 @@ module LexerSupport
   # @return [Puppet::ParseErrorWithIssue] the created error
   def create_lex_error(issue, args = {}, pos = nil)
     Puppet::ParseErrorWithIssue.new(
-        issue.format(args),
-        filename,
-        line(pos),
-        position(pos),
-        nil,
-        issue.issue_code,
-        args)
+      issue.format(args),
+      filename,
+      line(pos),
+      position(pos),
+      nil,
+      issue.issue_code,
+      args
+    )
   end
 
   # Asserts that the given string value is a float, or an integer in decimal, octal or hex form.
   # An error is raised if the given value does not comply.
   #
   def assert_numeric(value, pos)
-    if value =~ /^0[xX]/
-      lex_error(Issues::INVALID_HEX_NUMBER, {:value => value}, pos)     unless value =~ /^0[xX][0-9A-Fa-f]+$/
+    case value
+    when /^0[xX]/
+      lex_error(Issues::INVALID_HEX_NUMBER, { :value => value }, pos)     unless value =~ /^0[xX][0-9A-Fa-f]+$/
 
-    elsif value =~ /^0[^.]/
-      lex_error(Issues::INVALID_OCTAL_NUMBER, {:value => value}, pos)   unless value =~ /^0[0-7]+$/
+    when /^0[^.]/
+      lex_error(Issues::INVALID_OCTAL_NUMBER, { :value => value }, pos)   unless value =~ /^0[0-7]+$/
 
-    elsif value =~ /^\d+[eE.]/
-      lex_error(Issues::INVALID_DECIMAL_NUMBER, {:value => value}, pos) unless value =~ /^\d+(?:\.\d+)?(?:[eE]-?\d+)?$/
+    when /^\d+[eE.]/
+      lex_error(Issues::INVALID_DECIMAL_NUMBER, { :value => value }, pos) unless value =~ /^\d+(?:\.\d+)?(?:[eE]-?\d+)?$/
 
     else
-      lex_error(Issues::ILLEGAL_NUMBER, {:value => value}, pos) unless value =~ /^\d+$/
+      lex_error(Issues::ILLEGAL_NUMBER, { :value => value }, pos) unless value =~ /^\d+$/
     end
   end
 
@@ -146,61 +148,60 @@ module LexerSupport
     #
   end
 
-
   MM = Puppet::Util::MultiMatch
   MM_ANY = MM::NOT_NIL
 
   BOM_UTF_8      = MM.new(0xEF, 0xBB, 0xBF,        MM_ANY)
   BOM_UTF_16_1   = MM.new(0xFE, 0xFF,              MM_ANY, MM_ANY)
   BOM_UTF_16_2   = MM.new(0xFF, 0xFE,              MM_ANY, MM_ANY)
-  BOM_UTF_32_1   = MM.new(0x00, 0x00, 0xFE, 0xFF   )
-  BOM_UTF_32_2   = MM.new(0xFF, 0xFE, 0x00, 0x00   )
+  BOM_UTF_32_1   = MM.new(0x00, 0x00, 0xFE, 0xFF)
+  BOM_UTF_32_2   = MM.new(0xFF, 0xFE, 0x00, 0x00)
 
-  BOM_UTF_1      = MM.new(0xF7, 0x64, 0x4C,        MM_ANY)
-  BOM_UTF_EBCDIC = MM.new(0xDD, 0x73, 0x66, 0x73   )
+  BOM_UTF_1      = MM.new(0xF7, 0x64, 0x4C, MM_ANY)
+  BOM_UTF_EBCDIC = MM.new(0xDD, 0x73, 0x66, 0x73)
   BOM_SCSU       = MM.new(0x0E, 0xFE, 0xFF,        MM_ANY)
   BOM_BOCU       = MM.new(0xFB, 0xEE, 0x28,        MM_ANY)
-  BOM_GB_18030   = MM.new(0x84, 0x31, 0x95, 0x33   )
+  BOM_GB_18030   = MM.new(0x84, 0x31, 0x95, 0x33)
 
   LONGEST_BOM    = 4
 
   def assert_not_bom(content)
     name, size =
-    case bom = get_bom(content)
+      case bom = get_bom(content)
 
-    when BOM_UTF_32_1, BOM_UTF_32_2
-      ['UTF-32', 4]
+      when BOM_UTF_32_1, BOM_UTF_32_2
+        ['UTF-32', 4]
 
-    when BOM_GB_18030
-      ['GB-18030', 4]
+      when BOM_GB_18030
+        ['GB-18030', 4]
 
-    when BOM_UTF_EBCDIC
-      ['UTF-EBCDIC', 4]
+      when BOM_UTF_EBCDIC
+        ['UTF-EBCDIC', 4]
 
-    when BOM_SCSU
-      ['SCSU', 3]
+      when BOM_SCSU
+        ['SCSU', 3]
 
-    when BOM_UTF_8
-      ['UTF-8', 3]
+      when BOM_UTF_8
+        ['UTF-8', 3]
 
-    when BOM_UTF_1
-      ['UTF-1', 3]
+      when BOM_UTF_1
+        ['UTF-1', 3]
 
-    when BOM_BOCU
-      ['BOCU', 3]
+      when BOM_BOCU
+        ['BOCU', 3]
 
-    when BOM_UTF_16_1, BOM_UTF_16_2
-      ['UTF-16', 2]
+      when BOM_UTF_16_1, BOM_UTF_16_2
+        ['UTF-16', 2]
 
-    else
-      return
-    end
+      else
+        return
+      end
 
     lex_error_without_pos(
       Puppet::Pops::Issues::ILLEGAL_BOM,
-      { :format_name   => name,
-        :bytes  => "[#{bom.values[0,size].map {|b| "%X" % b}.join(" ")}]"
-      })
+      { :format_name => name,
+        :bytes => "[#{bom.values[0, size].map { |b| '%X' % b }.join(' ')}]" }
+    )
   end
 
   def get_bom(content)
@@ -213,9 +214,8 @@ module LexerSupport
       (content.getbyte(1) || ' '),
       (content.getbyte(2) || ' '),
       (content.getbyte(3) || ' ')
-      )
+    )
   end
-
 end
 end
 end

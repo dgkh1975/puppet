@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types and all their details" do
   types = {}
   Puppet::Type.loadall
@@ -5,6 +7,7 @@ Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types a
   Puppet::Type.eachtype { |type|
     next if type.name == :component
     next if type.name == :whit
+
     types[type.name] = type
   }
 
@@ -47,10 +50,9 @@ Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types a
   Resource types define features they can use, and providers can be tested to see
   which features they provide.
 
-  }
+  }.dup
 
-  types.sort_by(&:to_s).each { |name,type|
-
+  types.sort_by(&:to_s).each { |name, type|
     str << "
 
 ----------------
@@ -85,11 +87,11 @@ Puppet::Util::Reference.newreference :type, :doc => "All Puppet resource types a
       tmp = doc
       tmp = scrub(tmp)
 
-      docs[sname]  = tmp
+      docs[sname] = tmp
     }
 
     str << markdown_header("Parameters", 4) + "\n"
-    type.parameters.sort_by(&:to_s).each { |type_name, param|
+    type.parameters.sort_by(&:to_s).each { |type_name, _param|
       docs[type_name] = scrub(type.paramdoc(type_name))
     }
 

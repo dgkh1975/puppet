@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:service).provide :base, :parent => :service do
   desc "The simplest form of Unix service support.
 
@@ -15,7 +17,7 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
   # ported from the facter 2.x implementation, since facter 3.x
   # is dropping the fact (for which this was the only use)
   def getps
-    case Puppet.runtime[:facter].value(:operatingsystem)
+    case Puppet.runtime[:facter].value('os.name')
     when 'OpenWrt'
       'ps www'
     when 'FreeBSD', 'NetBSD', 'OpenBSD', 'Darwin', 'DragonFly'
@@ -33,7 +35,7 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
     regex = Regexp.new(@resource[:pattern])
     ps = getps
 
-    self.debug "Executing '#{ps}'"
+    debug "Executing '#{ps}'"
     table = Puppet::Util::Execution.execute(ps)
 
     # The output of the PS command can be a mashup of several different
@@ -49,11 +51,11 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
     table = table.scrub unless table.valid_encoding?
 
     table.each_line { |line|
-      if regex.match(line)
-        self.debug "Process matched: #{line}"
-        ary = line.sub(/^[[:space:]]+/u, '').split(/[[:space:]]+/u)
-        return ary[1]
-      end
+      next unless regex.match(line)
+
+      debug "Process matched: #{line}"
+      ary = line.sub(/^[[:space:]]+/u, '').split(/[[:space:]]+/u)
+      return ary[1]
     }
 
     nil
@@ -72,17 +74,17 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
 
       # Explicitly calling exitstatus to facilitate testing
       if status.exitstatus == 0
-        return :running
+        :running
       else
-        return :stopped
+        :stopped
       end
     else
       pid = getpid
       if pid
-        self.debug "PID is #{pid}"
-        return :running
+        debug "PID is #{pid}"
+        :running
       else
-        return :stopped
+        :stopped
       end
     end
   end
@@ -100,12 +102,7 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
   # The command used to start.  Generated if the 'binary' argument
   # is passed.
   def startcmd
-    if @resource[:binary]
-      return @resource[:binary]
-    else
-      raise Puppet::Error,
-        "Services must specify a start command or a binary"
-    end
+    @resource[:binary] || raise(Puppet::Error, "Services must specify a start command or a binary")
   end
 
   # Stop the service.  If a 'stop' parameter is specified, it
@@ -120,15 +117,15 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
     else
       pid = getpid
       unless pid
-        self.info _("%{name} is not running") % { name: self.name }
+        info _("%{name} is not running") % { name: name }
         return false
       end
       begin
         output = kill pid
-      rescue Puppet::ExecutionFailure
-        @resource.fail Puppet::Error, "Could not kill #{self.name}, PID #{pid}: #{output}", $!
+      rescue Puppet::ExecutionFailure => e
+        @resource.fail Puppet::Error, "Could not kill #{name}, PID #{pid}: #{output}", e
       end
-      return true
+      true
     end
   end
 
@@ -136,4 +133,3 @@ Puppet::Type.type(:service).provide :base, :parent => :service do
   def stopcmd
   end
 end
-

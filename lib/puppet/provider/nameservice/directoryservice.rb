@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet'
 require_relative '../../../puppet/provider/nameservice'
 require_relative '../../../puppet/util/plist' if Puppet.features.cfpropertylist?
@@ -18,9 +20,9 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
   commands :dscl => "/usr/bin/dscl"
   commands :dseditgroup => "/usr/sbin/dseditgroup"
   commands :sw_vers => "/usr/bin/sw_vers"
-  confine :operatingsystem => :darwin
-  confine :feature         => :cfpropertylist
-  defaultfor :operatingsystem => :darwin
+  confine 'os.name' => :darwin
+  confine :feature => :cfpropertylist
+  defaultfor 'os.name' => :darwin
 
   # There is no generalized mechanism for provider cache management, but we can
   # use post_resource_eval, which will be run for each suitable provider at the
@@ -36,6 +38,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
   #     be actively maintained.  There may also be collisions with different
   #     types (Users, Groups, Mounts, Hosts, etc...)
   def ds_to_ns_attribute_map; self.class.ds_to_ns_attribute_map; end
+
   def self.ds_to_ns_attribute_map
     {
       'RecordName' => :name,
@@ -46,14 +49,15 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
       'RealName' => :comment,
       'Password' => :password,
       'GeneratedUID' => :guid,
-      'IPAddress'    => :ip_address,
-      'ENetAddress'  => :en_address,
+      'IPAddress' => :ip_address,
+      'ENetAddress' => :en_address,
       'GroupMembership' => :members,
     }
   end
 
   # JJM The same table as above, inverted.
   def ns_to_ds_attribute_map; self.class.ns_to_ds_attribute_map end
+
   def self.ns_to_ds_attribute_map
     @ns_to_ds_attribute_map ||= ds_to_ns_attribute_map.invert
   end
@@ -75,7 +79,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     # Create a new instance of this Puppet::Type for each object present
     #    on the system.
     list_all_present.collect do |name_string|
-      self.new(single_report(name_string, *type_property_array))
+      new(single_report(name_string, *type_property_array))
     end
   end
 
@@ -85,6 +89,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     #      with a group type, this will be /Groups.
     #   @ds_path is an attribute of the class itself.
     return @ds_path if defined?(@ds_path)
+
     # JJM: "Users" or "Groups" etc ...  (Based on the Puppet::Type)
     #       Remember this is a class method, so self.class is Class
     #       Also, @resource_type seems to be the reference to the
@@ -93,7 +98,9 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
   end
 
   def self.list_all_present
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     @all_present ||= begin
+      # rubocop:enable Naming/MemoizedInstanceVariableName
       # JJM: List all objects of this Puppet::Type already present on the system.
       begin
         dscl_output = execute(get_exec_preamble("-list"))
@@ -112,22 +119,23 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     attribute_hash = {}
     input_hash.each_key do |key|
       ds_attribute = key.sub("dsAttrTypeStandard:", "")
-      next unless (ds_to_ns_attribute_map.keys.include?(ds_attribute) and type_properties.include? ds_to_ns_attribute_map[ds_attribute])
+      next unless ds_to_ns_attribute_map.keys.include?(ds_attribute) and type_properties.include? ds_to_ns_attribute_map[ds_attribute]
+
       ds_value = input_hash[key]
       case ds_to_ns_attribute_map[ds_attribute]
-        when :members
-          ds_value = ds_value # only members uses arrays so far
-        when :gid, :uid
-          # OS X stores objects like uid/gid as strings.
-          # Try casting to an integer for these cases to be
-          # consistent with the other providers and the group type
-          # validation
-          begin
-            ds_value = Integer(ds_value[0])
-          rescue ArgumentError
-            ds_value = ds_value[0]
-          end
-        else ds_value = ds_value[0]
+      when :members
+        # do nothing, only members uses arrays so far
+      when :gid, :uid
+        # OS X stores objects like uid/gid as strings.
+        # Try casting to an integer for these cases to be
+        # consistent with the other providers and the group type
+        # validation
+        begin
+          ds_value = Integer(ds_value[0])
+        rescue ArgumentError
+          ds_value = ds_value[0]
+        end
+      else ds_value = ds_value[0]
       end
       attribute_hash[ds_to_ns_attribute_map[ds_attribute]] = ds_value
     end
@@ -136,7 +144,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     # stored in the user record. It is stored at a path that involves the
     # UUID of the user record for non-Mobile local accounts.
     # Mobile Accounts are out of scope for this provider for now
-    attribute_hash[:password] = self.get_password(attribute_hash[:guid], attribute_hash[:name]) if @resource_type.validproperties.include?(:password) and Puppet.features.root?
+    attribute_hash[:password] = get_password(attribute_hash[:guid], attribute_hash[:name]) if @resource_type.validproperties.include?(:password) and Puppet.features.root?
     attribute_hash
   end
 
@@ -160,9 +168,9 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
       fail(_("Could not get report.  command execution failed."))
     end
 
-    dscl_plist = self.parse_dscl_plist_data(dscl_output)
+    dscl_plist = parse_dscl_plist_data(dscl_output)
 
-    self.generate_attribute_hash(dscl_plist, *type_properties)
+    generate_attribute_hash(dscl_plist, *type_properties)
   end
 
   def self.get_exec_preamble(ds_action, resource_name = nil)
@@ -173,7 +181,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     #     This method spits out proper DSCL commands for us.
     #     We EXPECT name to be @resource[:name] when called from an instance object.
 
-    command_vector = [ command(:dscl), "-plist", "." ]
+    command_vector = [command(:dscl), "-plist", "."]
 
     # JJM: The actual action to perform. See "man dscl".
     #      Common actions: -create, -delete, -merge, -append, -passwd
@@ -196,7 +204,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     # zeroes. If someone attempts to use a password hash that worked with
     # a previous version of OS X, we will fail early and warn them.
     if password_hash.length != 136
-      #TRANSLATORS 'OS X 10.7' is an operating system and should not be translated, 'Salted SHA512' is the name of a hashing algorithm
+      # TRANSLATORS 'OS X 10.7' is an operating system and should not be translated, 'Salted SHA512' is the name of a hashing algorithm
       fail(_("OS X 10.7 requires a Salted SHA512 hash password of 136 characters.") +
            ' ' + _("Please check your password and try again."))
     end
@@ -217,8 +225,8 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
         password_hash_plist = users_plist['ShadowHashData'][0]
         converted_hash_plist = convert_binary_to_hash(password_hash_plist)
       else
-        users_plist['ShadowHashData'] = ''
-        converted_hash_plist = {'SALTED-SHA512' => ''}
+        users_plist['ShadowHashData'] = ''.dup
+        converted_hash_plist = { 'SALTED-SHA512' => ''.dup }
       end
 
       # converted_hash_plist['SALTED-SHA512'] expects a Base64 encoded
@@ -226,7 +234,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
       # hex value. We need to convert the provided hex value to a Base64
       # encoded string to nest it in the converted hash plist.
       converted_hash_plist['SALTED-SHA512'] = \
-        password_hash.unpack('a2'*(password_hash.size/2)).collect { |i| i.hex.chr }.join
+        password_hash.unpack('a2' * (password_hash.size / 2)).collect { |i| i.hex.chr }.join
 
       # Finally, we can convert the nested plist back to binary, embed it
       # into the user's plist, and convert the resultant plist back to
@@ -256,8 +264,8 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
         # string. The password_hash provided as a resource attribute is a
         # hex value. We need to convert the Base64 encoded string to a
         # hex value and provide it back to Puppet.
-        password_hash = converted_hash_plist['SALTED-SHA512'].unpack("H*")[0]
-        password_hash
+        converted_hash_plist['SALTED-SHA512'].unpack1("H*")
+
       end
     end
   end
@@ -278,11 +286,12 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
   # for automatically assigning uids and gids to accounts, so we set up these
   # methods for consumption by functionality like --mkusers
   # By default we restrict to a reasonably sane range for system accounts
-  def self.next_system_id(id_type, min_id=20)
+  def self.next_system_id(id_type, min_id = 20)
     dscl_args = ['.', '-list']
-    if id_type == 'uid'
+    case id_type
+    when 'uid'
       dscl_args << '/Users' << 'uid'
-    elsif id_type == 'gid'
+    when 'gid'
       dscl_args << '/Groups' << 'gid'
     else
       fail(_("Invalid id_type %{id_type}. Only 'uid' and 'gid' supported") % { id_type: id_type })
@@ -290,14 +299,13 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     dscl_out = dscl(dscl_args)
     # We're ok with throwing away negative uids here.
     ids = dscl_out.split.compact.collect { |l| l.to_i if l =~ /^\d+$/ }
-    ids.compact!.sort! { |a,b| a.to_f <=> b.to_f }
+    ids.compact!.sort_by!(&:to_f)
     # We're just looking for an unused id in our sorted array.
     ids.each_index do |i|
       next_id = ids[i] + 1
-      return next_id if ids[i+1] != next_id and next_id >= min_id
+      return next_id if ids[i + 1] != next_id and next_id >= min_id
     end
   end
-
 
   def ensure=(ensure_value)
     super
@@ -307,6 +315,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     if ensure_value == :present
       @resource.class.validproperties.each do |name|
         next if name == :ensure
+
         # LAK: We use property.sync here rather than directly calling
         # the settor method because the properties might do some kind
         # of conversion.  In particular, the user gid property might
@@ -316,7 +325,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
         else
           value = autogen(name)
           if value
-            self.send(name.to_s + "=", value)
+            send(name.to_s + "=", value)
           else
             next
           end
@@ -352,7 +361,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
       # If we are meant to be authoritative for the group membership
       # then remove all existing members who haven't been specified
       # in the manifest.
-      remove_unwanted_members(current_members, value) if @resource[:auth_membership] and not current_members.nil?
+      remove_unwanted_members(current_members, value) if @resource[:auth_membership] and !current_members.nil?
 
       # if they're not a member, make them one.
       add_members(current_members, value)
@@ -386,7 +395,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     # requiring people install a UUID library that doesn't come with the system.
     # This should be revisited if Puppet starts managing UUIDs for other platform
     # user records.
-    guid = %x{/usr/bin/uuidgen}.chomp
+    guid = %x(/usr/bin/uuidgen).chomp
 
     exec_arg_vector = self.class.get_exec_preamble("-create", @resource[:name])
     exec_arg_vector << ns_to_ds_attribute_map[:guid] << guid
@@ -404,6 +413,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     # Now we create all the standard properties
     Puppet::Type.type(@resource.class.name).validproperties.each do |property|
       next if property == :ensure
+
       value = @resource.should(property)
       if property == :gid and value.nil?
         value = self.class.next_system_id('gid')
@@ -411,13 +421,14 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
       if property == :uid and value.nil?
         value = self.class.next_system_id('uid')
       end
-      if value != "" and not value.nil?
+      if value != "" and !value.nil?
         if property == :members
           add_members(nil, value)
         else
           exec_arg_vector = self.class.get_exec_preamble("-create", @resource[:name])
           exec_arg_vector << ns_to_ds_attribute_map[property.intern]
-          next if property == :password  # skip setting the password here
+          next if property == :password # skip setting the password here
+
           exec_arg_vector << value.to_s
           begin
             execute(exec_arg_vector)
@@ -431,19 +442,19 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
 
   def remove_unwanted_members(current_members, new_members)
     current_members.each do |member|
-      if not new_members.flatten.include?(member)
-        cmd = [:dseditgroup, "-o", "edit", "-n", ".", "-d", member, @resource[:name]]
+      next if new_members.flatten.include?(member)
+
+      cmd = [:dseditgroup, "-o", "edit", "-n", ".", "-d", member, @resource[:name]]
+      begin
+        execute(cmd)
+      rescue Puppet::ExecutionFailure
+        # TODO: We're falling back to removing the member using dscl due to rdar://8481241
+        # This bug causes dseditgroup to fail to remove a member if that member doesn't exist
+        cmd = [:dscl, ".", "-delete", "/Groups/#{@resource.name}", "GroupMembership", member]
         begin
           execute(cmd)
-        rescue Puppet::ExecutionFailure
-          # TODO: We're falling back to removing the member using dscl due to rdar://8481241
-          # This bug causes dseditgroup to fail to remove a member if that member doesn't exist
-          cmd = [:dscl, ".", "-delete", "/Groups/#{@resource.name}", "GroupMembership", member]
-          begin
-            execute(cmd)
-          rescue Puppet::ExecutionFailure => detail
-            fail(_("Could not remove %{member} from group: %{resource}, %{detail}") % { member: member, resource: @resource.name, detail: detail })
-          end
+        rescue Puppet::ExecutionFailure => detail
+          fail(_("Could not remove %{member} from group: %{resource}, %{detail}") % { member: member, resource: @resource.name, detail: detail })
         end
       end
     end
@@ -451,13 +462,13 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
 
   def add_members(current_members, new_members)
     new_members.flatten.each do |new_member|
-      if current_members.nil? or not current_members.include?(new_member)
-        cmd = [:dseditgroup, "-o", "edit", "-n", ".", "-a", new_member, @resource[:name]]
-        begin
-          execute(cmd)
-        rescue Puppet::ExecutionFailure => detail
-          fail(_("Could not add %{new_member} to group: %{name}, %{detail}") % { new_member: new_member, name: @resource.name, detail: detail })
-        end
+      next unless current_members.nil? or !current_members.include?(new_member)
+
+      cmd = [:dseditgroup, "-o", "edit", "-n", ".", "-a", new_member, @resource[:name]]
+      begin
+        execute(cmd)
+      rescue Puppet::ExecutionFailure => detail
+        fail(_("Could not add %{new_member} to group: %{name}, %{detail}") % { new_member: new_member, name: @resource.name, detail: detail })
       end
     end
   end
@@ -475,7 +486,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     #      This method returns and sets @infohash
     # I'm not re-factoring the name "getinfo" because this method will be
     # most likely called by nameservice.rb, which I didn't write.
-    if refresh or (! defined?(@property_value_cache_hash) or ! @property_value_cache_hash)
+    if refresh or (!defined?(@property_value_cache_hash) or !@property_value_cache_hash)
       # JJM 2007-07-24: OK, there's a bit of magic that's about to
       # happen... Let's see how strong my grip has become... =)
       #
@@ -500,7 +511,7 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
       # list, then report on the remaining list. Pretty whacky, ehh?
       type_properties = [:name] + self.class.resource_type.validproperties
       type_properties.delete(:ensure) if type_properties.include? :ensure
-      type_properties << :guid  # append GeneratedUID so we just get the report here
+      type_properties << :guid # append GeneratedUID so we just get the report here
       @property_value_cache_hash = self.class.single_report(@resource[:name], *type_properties)
       [:uid, :gid].each do |param|
         @property_value_cache_hash[param] = @property_value_cache_hash[param].to_i if @property_value_cache_hash and @property_value_cache_hash.include?(param)
@@ -509,4 +520,3 @@ class Puppet::Provider::NameService::DirectoryService < Puppet::Provider::NameSe
     @property_value_cache_hash
   end
 end
-

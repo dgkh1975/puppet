@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 require 'net/http'
 require 'uri'
 require 'tempfile'
 
 require_relative '../../../puppet/util/checksums'
-require_relative '../../../puppet/type/file/data_sync.rb'
+require_relative '../../../puppet/type/file/data_sync'
 
 module Puppet
   Puppet::Type.type(:file).newproperty(:content) do
@@ -49,18 +51,18 @@ module Puppet
         # XXX This is potentially dangerous because it means users can't write a file whose
         # entire contents are a plain checksum unless it is a Binary content.
         Puppet.puppet_deprecation_warning([
-            #TRANSLATORS "content" is an attribute and should not be translated
-            _('Using a checksum in a file\'s "content" property is deprecated.'),
-            #TRANSLATORS "filebucket" is a resource type and should not be translated. The quoted occurrence of "content" is an attribute and should not be translated.
-            _('The ability to use a checksum to retrieve content from the filebucket using the "content" property will be removed in a future release.'),
-            #TRANSLATORS "content" is an attribute and should not be translated.
-            _('The literal value of the "content" property will be written to the file.'),
-            #TRANSLATORS "static catalogs" should not be translated.
-            _('The checksum retrieval functionality is being replaced by the use of static catalogs.'),
-            _('See https://puppet.com/docs/puppet/latest/static_catalogs.html for more information.')].join(" "),
-            :file => @resource.file,
-            :line => @resource.line
-        ) if !@actual_content && !resource.parameter(:source)
+          # TRANSLATORS "content" is an attribute and should not be translated
+          _('Using a checksum in a file\'s "content" property is deprecated.'),
+          # TRANSLATORS "filebucket" is a resource type and should not be translated. The quoted occurrence of "content" is an attribute and should not be translated.
+          _('The ability to use a checksum to retrieve content from the filebucket using the "content" property will be removed in a future release.'),
+          # TRANSLATORS "content" is an attribute and should not be translated.
+          _('The literal value of the "content" property will be written to the file.'),
+          # TRANSLATORS "static catalogs" should not be translated.
+          _('The checksum retrieval functionality is being replaced by the use of static catalogs.'),
+          _('See https://puppet.com/docs/puppet/latest/static_catalogs.html for more information.')
+        ].join(" "),
+                                          :file => @resource.file,
+                                          :line => @resource.line) if !@actual_content && !resource.parameter(:source)
         value
       else
         @actual_content = value.is_a?(Puppet::Pops::Types::PBinaryType::Binary) ? value.binary_buffer : value
@@ -71,17 +73,17 @@ module Puppet
     # Checksums need to invert how changes are printed.
     def change_to_s(currentvalue, newvalue)
       # Our "new" checksum value is provided by the source.
-      source = resource.parameter(:source) 
+      source = resource.parameter(:source)
       tmp = source.checksum if source
       if tmp
         newvalue = tmp
       end
       if currentvalue == :absent
-        return "defined content as '#{newvalue}'"
+        "defined content as '#{newvalue}'"
       elsif newvalue == :absent
-        return "undefined content from '#{currentvalue}'"
+        "undefined content from '#{currentvalue}'"
       else
-        return "content changed '#{currentvalue}' to '#{newvalue}'"
+        "content changed '#{currentvalue}' to '#{newvalue}'"
       end
     end
 
@@ -90,7 +92,7 @@ module Puppet
     end
 
     def content
-      self.should
+      should
     end
 
     # Override this method to provide diffs if asked for.
@@ -103,7 +105,7 @@ module Puppet
       end
 
       contents_prop = resource.parameter(:source) || self
-      checksum_insync?(contents_prop, is, !resource[:content].nil?) {|_is| super(_is)}
+      checksum_insync?(contents_prop, is, !resource[:content].nil?) { |inner| super(inner) }
     end
 
     def property_matches?(current, desired)
@@ -116,7 +118,8 @@ module Puppet
 
       # The inherited equality is always accepted, so use it if valid.
       return true if super(current, desired)
-      return date_matches?(checksum_type, current, desired)
+
+      date_matches?(checksum_type, current, desired)
     end
 
     def retrieve
@@ -166,6 +169,7 @@ module Puppet
     def read_file_from_filebucket
       dipper = resource.bucket
       raise "Could not get filebucket from file" unless dipper
+
       sum = should.sub(/\{\w+\}/, '')
 
       dipper.getfile(sum)

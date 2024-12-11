@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/parameter/boolean'
 
 Puppet::Type.newtype(:tidy) do
@@ -6,7 +8,7 @@ Puppet::Type.newtype(:tidy) do
 
   @doc = "Remove unwanted files based on specific criteria.  Multiple
     criteria are OR'd together, so a file that is too large but is not
-    old enough will still get tidied.
+    old enough will still get tidied. Ignores managed resources.
 
     If you don't specify either `age` or `size`, then all files will
     be removed.
@@ -30,7 +32,9 @@ Puppet::Type.newtype(:tidy) do
 
   newparam(:recurse) do
     desc "If target is a directory, recursively descend
-      into the directory looking for files to tidy."
+      into the directory looking for files to tidy. Numeric values
+      specify a limit for the recursion depth, `true` means
+      unrestricted recursion."
 
     newvalues(:true, :false, :inf, /^[0-9]+$/)
 
@@ -98,7 +102,8 @@ Puppet::Type.newtype(:tidy) do
 
     # Make sure we convert to an array.
     munge do |value|
-      fail _("Tidy can't use matches with recurse 0, false, or undef") if "#{@resource[:recurse]}" =~ /^(0|false|)$/
+      fail _("Tidy can't use matches with recurse 0, false, or undef") if (@resource[:recurse]).to_s =~ /^(0|false|)$/
+
       [value].flatten
     end
 
@@ -107,7 +112,7 @@ Puppet::Type.newtype(:tidy) do
     def tidy?(path, stat)
       basename = File.basename(path)
       flags = File::FNM_DOTMATCH | File::FNM_PATHNAME
-      return(value.find {|pattern| File.fnmatch(pattern, basename, flags) } ? true : false)
+      (value.find { |pattern| File.fnmatch(pattern, basename, flags) } ? true : false)
     end
   end
 
@@ -136,7 +141,7 @@ Puppet::Type.newtype(:tidy) do
     def convert(unit, multi)
       num = AgeConvertors[unit]
       if num
-        return num * multi
+        num * multi
       else
         self.fail _("Invalid age unit '%{unit}'") % { unit: unit }
       end
@@ -151,13 +156,13 @@ Puppet::Type.newtype(:tidy) do
       unit = multi = nil
       case age
       when /^([0-9]+)(\w)\w*$/
-        multi = Integer($1)
-        unit = $2.downcase.intern
+        multi = Integer(Regexp.last_match(1))
+        unit = Regexp.last_match(2).downcase.intern
       when /^([0-9]+)$/
-        multi = Integer($1)
+        multi = Integer(Regexp.last_match(1))
         unit = :d
       else
-        #TRANSLATORS tidy is the name of a program and should not be translated
+        # TRANSLATORS tidy is the name of a program and should not be translated
         self.fail _("Invalid tidy age %{age}") % { age: age }
       end
 
@@ -178,7 +183,7 @@ Puppet::Type.newtype(:tidy) do
       if num
         result = multi
         num.times do result *= 1024 end
-        return result
+        result
       else
         self.fail _("Invalid size unit '%{unit}'") % { unit: unit }
       end
@@ -191,13 +196,13 @@ Puppet::Type.newtype(:tidy) do
     munge do |size|
       case size
       when /^([0-9]+)(\w)\w*$/
-        multi = Integer($1)
-        unit = $2.downcase.intern
+        multi = Integer(Regexp.last_match(1))
+        unit = Regexp.last_match(2).downcase.intern
       when /^([0-9]+)$/
-        multi = Integer($1)
+        multi = Integer(Regexp.last_match(1))
         unit = :k
       else
-        #TRANSLATORS tidy is the name of a program and should not be translated
+        # TRANSLATORS tidy is the name of a program and should not be translated
         self.fail _("Invalid tidy size %{age}") % { age: age }
       end
 
@@ -247,18 +252,19 @@ Puppet::Type.newtype(:tidy) do
       :ensure => :absent, :force => true
     }
 
-    parameters[:noop] = self[:noop] unless self[:noop].nil?
+    new_file = Puppet::Type.type(:file).new(parameters)
+    new_file.copy_metaparams(@parameters)
 
-    Puppet::Type.type(:file).new(parameters)
+    new_file
   end
 
   def retrieve
     # Our ensure property knows how to retrieve everything for us.
     obj = @parameters[:ensure]
     if obj
-      return obj.retrieve
+      obj.retrieve
     else
-      return {}
+      {}
     end
   end
 
@@ -288,9 +294,9 @@ Puppet::Type.newtype(:tidy) do
       files = [self[:path]]
     end
     found_files = files.find_all { |path| tidy?(path) }.collect { |path| mkfile(path) }
-    result = found_files.each { |file| debug "Tidying #{file.ref}" }.sort { |a,b| b[:path] <=> a[:path] }
+    result = found_files.each { |file| debug "Tidying #{file.ref}" }.sort { |a, b| b[:path] <=> a[:path] }
     if found_files.size > 0
-      #TRANSLATORS "Tidy" is a program name and should not be translated
+      # TRANSLATORS "Tidy" is a program name and should not be translated
       notice _("Tidying %{count} files") % { count: found_files.size }
     end
 
@@ -300,12 +306,13 @@ Puppet::Type.newtype(:tidy) do
 
     # Now make sure that all directories require the files they contain, if all are available,
     # so that a directory is emptied before we try to remove it.
-    files_by_name = result.inject({}) { |hash, file| hash[file[:path]] = file; hash }
+    files_by_name = result.each_with_object({}) { |file, hash| hash[file[:path]] = file; }
 
-    files_by_name.keys.sort { |a,b| b <=> a }.each do |path|
+    files_by_name.keys.sort { |a, b| b <=> a }.each do |path|
       dir = ::File.dirname(path)
       resource = files_by_name[dir]
       next unless resource
+
       if resource[:require]
         resource[:require] << Puppet::Resource.new(:file, path)
       else
@@ -323,11 +330,11 @@ Puppet::Type.newtype(:tidy) do
 
     basename = File.basename(path)
     flags = File::FNM_DOTMATCH | File::FNM_PATHNAME
-    if self[:matches].find {|pattern| File.fnmatch(pattern, basename, flags) }
-      return true
+    if self[:matches].find { |pattern| File.fnmatch(pattern, basename, flags) }
+      true
     else
       debug "No specified patterns match #{path}, not tidying"
-      return false
+      false
     end
   end
 
@@ -340,36 +347,36 @@ Puppet::Type.newtype(:tidy) do
     stat = self.stat(path)
     return false unless stat
 
-    return false if stat.ftype == "directory" and ! rmdirs?
+    return false if stat.ftype == "directory" and !rmdirs?
 
     # The 'matches' parameter isn't OR'ed with the other tests --
     # it's just used to reduce the list of files we can match.
     param = parameter(:matches)
-    return false if param && ! param.tidy?(path, stat)
+    return false if param && !param.tidy?(path, stat)
 
     tested = false
     [:age, :size].each do |name|
       param = parameter(name)
       next unless param
+
       tested = true
       return true if param.tidy?(path, stat)
     end
 
     # If they don't specify either, then the file should always be removed.
     return true unless tested
+
     false
   end
 
   def stat(path)
-    begin
-      Puppet::FileSystem.lstat(path)
-    rescue Errno::ENOENT
-      debug _("File does not exist")
-      return nil
-    rescue Errno::EACCES
-      #TRANSLATORS "stat" is a program name and should not be translated
-      warning _("Could not stat; permission denied")
-      return nil
-    end
+    Puppet::FileSystem.lstat(path)
+  rescue Errno::ENOENT
+    debug _("File does not exist")
+    nil
+  rescue Errno::EACCES
+    # TRANSLATORS "stat" is a program name and should not be translated
+    warning _("Could not stat; permission denied")
+    nil
   end
 end

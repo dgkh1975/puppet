@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Strips trailing spaces from a String
 #
 # This function is compatible with the stdlib function with the same name.
@@ -25,7 +27,6 @@
 # Would both result in `['hello', 'hi']`
 #
 Puppet::Functions.create_function(:rstrip) do
-
   dispatch :on_numeric do
     param 'Numeric', :arg
   end
@@ -48,7 +49,7 @@ Puppet::Functions.create_function(:rstrip) do
   end
 
   def on_iterable(a)
-    a.map {|x| do_rstrip(x) }
+    a.map { |x| do_rstrip(x) }
   end
 
   def do_rstrip(x)

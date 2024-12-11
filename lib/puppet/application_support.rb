@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'yaml'
 
 require_relative '../puppet'
@@ -7,7 +9,6 @@ require_relative '../puppet/indirector'
 
 module Puppet
   module ApplicationSupport
-
     # Pushes a Puppet Context configured with a remote environment for an agent
     # (one that exists at the master end), and a regular environment for other
     # modes. The configuration is overridden with options from the command line
@@ -36,7 +37,7 @@ module Puppet
       configured_environment = configured_environment.override_from_commandline(Puppet.settings)
 
       # Setup a new context using the app's configuration
-      Puppet.push_context({:current_environment => configured_environment},
+      Puppet.push_context({ :current_environment => configured_environment },
                           "Update current environment from application's configuration")
     end
 

@@ -344,7 +344,7 @@ module Serialization
 
       it 'nested Expression' do
         expr = parse(<<-CODE)
-          $rootgroup = $osfamily ? {
+          $rootgroup = $os['family'] ? {
               'Solaris'          => 'wheel',
               /(Darwin|FreeBSD)/ => 'wheel',
               default            => 'root',
@@ -493,6 +493,10 @@ module Serialization
   end
 
   context 'with rich_data set to false' do
+    before :each do
+      # strict mode off so behavior is not stubbed
+      Puppet[:strict] = :warning
+    end
     let(:to_converter) { ToDataConverter.new(:message_prefix => 'Test Hash', :rich_data => false) }
     let(:logs) { [] }
     let(:warnings) { logs.select { |log| log.level == :warning }.map { |log| log.message } }
@@ -521,6 +525,14 @@ module Serialization
       expect(warnings).to eql([
         "Test Hash contains a hash with a SemanticPuppet::Version key. It will be converted to the String '1.0.0'",
         "Test Hash contains a hash with a SemanticPuppet::Version key. It will be converted to the String '2.0.0'"])
+      end
+
+    it 'A Hash with rich data is not converted and raises error by default' do
+      Puppet[:strict] = :error
+      expect do
+        val = { SemanticPuppet::Version.parse('1.0.0') => 'one', SemanticPuppet::Version.parse('2.0.0') => 'two' }
+        write(val)
+      end.to raise_error(/Evaluation Error: Test Hash contains a hash with a SemanticPuppet::Version key. It will be converted to the String '1.0.0'/)
     end
 
     context 'and symbol_as_string is set to true' do
@@ -557,29 +569,6 @@ module Serialization
           expect(val2).to eql({ 'key' => 'default' })
         end
         expect(warnings).to eql(["['key'] contains the special value default. It will be converted to the String 'default'"])
-      end
-    end
-    context 'and force_symbol set to true' do
-      let(:to_converter) { ToDataConverter.new(:rich_data => false, :force_symbol => true) }
-
-      it 'A Hash with Symbol values is converted to hash with Symbol values' do
-        val = { 'one' => :one, 'two' => :two }
-        Puppet::Util::Log.with_destination(Puppet::Test::LogCollector.new(logs)) do
-
-          # write and read methods does not work here as we cannot force Symbols in Json.
-          # and a hash with symbol values cannot be an instance of Types::TypeFactory.data.
-          # Using YAML for this instead
-          io.reopen
-          value = to_converter.convert(val)
-          io << [value].to_yaml
-          io.rewind
-
-          val2 = from_converter.convert(YAML::load(io.read)[0])
-
-          expect(val2).to be_a(Hash)
-          expect(val2).to eql({ 'one' => :one, 'two' => :two })
-        end
-        expect(warnings).to be_empty
       end
     end
   end
@@ -653,41 +642,6 @@ module Serialization
       expect do
         from_converter.convert({ '__ptype' => { '__ptype' => 'Pcore::TimestampType', '__pvalue' => 12345 }})
       end.to raise_error(/Cannot create a Pcore::TimestampType from a Integer/)
-    end
-  end
-
-  context 'when data is unknown' do
-    let(:to_converter) { ToDataConverter.new(:message_prefix => 'Test Hash') }
-    let(:logs) { [] }
-    let(:warnings) { logs.select { |log| log.level == :warning }.map { |log| log.message } }
-    let(:val) { Class.new }
-
-    context 'and :silence_warnings undefined or set to false' do
-      it 'convert the unknown data to string with warnings' do
-        Puppet::Util::Log.with_destination(Puppet::Test::LogCollector.new(logs)) do
-          write(val)
-          val2 = read
-          expect(val2).to be_a(String)
-          expect(val2).to match(/Class/)
-        end
-        expect(warnings).to eql([
-          "Test Hash contains a #{val.class} value. It will be converted to the String '#{val.to_s}'"])
-      end
-    end
-
-    context 'and :silence_warnings undefined or set to true' do
-      let(:to_converter) { ToDataConverter.new(:message_prefix => 'Test Hash', :silence_warnings => true) }
-
-      it 'convert the unknown data to string without warnings if silence_warnings set to true' do
-        val = Class.new
-        Puppet::Util::Log.with_destination(Puppet::Test::LogCollector.new(logs)) do
-          write(val)
-          val2 = read
-          expect(val2).to be_a(String)
-          expect(val2).to match(/Class/)
-        end
-        expect(warnings).to be_empty
-      end
     end
   end
 end

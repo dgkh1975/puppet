@@ -2,14 +2,24 @@ require 'spec_helper'
 require 'puppet/configurer'
 
 describe Puppet::Configurer do
+  include PuppetSpec::Files
+
   before do
     Puppet[:server] = "puppetmaster"
     Puppet[:report] = true
 
     catalog.add_resource(resource)
-    allow_any_instance_of(described_class).to(
-      receive(:valid_server_environment?).and_return(true)
-    )
+
+    Puppet[:lastrunfile] = file_containing('last_run_summary.yaml', <<~SUMMARY)
+    ---
+    version:
+      config: 1624882680
+      puppet: #{Puppet.version}
+    application:
+      initial_environment: #{Puppet[:environment]}
+      converged_environment: #{Puppet[:environment]}
+      run_mode: agent
+    SUMMARY
   end
 
   let(:node_name) { Puppet[:node_name_value] }
@@ -65,10 +75,44 @@ describe Puppet::Configurer do
     end
   end
 
+  describe "when executing a catalog run without stubbing valid_server_environment?" do
+    before do
+      Puppet::Resource::Catalog.indirection.terminus_class = :rest
+      allow(Puppet::Resource::Catalog.indirection).to receive(:find).and_return(catalog)
+    end
+
+    it 'skips initial plugin sync if environment is not found and no strict_environment_mode' do
+      body = "{\"message\":\"Not Found: Could not find environment 'fasdfad'\",\"issue_kind\":\"RUNTIME_ERROR\"}"
+      stub_request(:get, %r{/puppet/v3/file_metadatas/plugins?}).to_return(
+        status: 404, body: body, headers: {'Content-Type' => 'application/json'}
+      )
+
+      configurer.run(:pluginsync => true)
+
+      expect(@logs).to include(an_object_having_attributes(level: :notice, message: %r{Environment 'production' not found on server, skipping initial pluginsync.}))
+      expect(@logs).to include(an_object_having_attributes(level: :notice, message: /Applied catalog in .* seconds/))
+    end
+
+    it 'if strict_environment_mode is set and environment is not found, aborts the puppet run' do
+      Puppet[:strict_environment_mode] = true
+      body = "{\"message\":\"Not Found: Could not find environment 'fasdfad'\",\"issue_kind\":\"RUNTIME_ERROR\"}"
+      stub_request(:get, %r{/puppet/v3/file_metadatas/plugins?}).to_return(
+        status: 404, body: body, headers: {'Content-Type' => 'application/json'}
+      )
+
+      configurer.run(:pluginsync => true)
+
+      expect(@logs).to include(an_object_having_attributes(level: :err, message: %r{Failed to apply catalog: Environment 'production' not found on server, aborting run.}))
+    end
+  end
+
   describe "when executing a catalog run" do
     before do
       Puppet::Resource::Catalog.indirection.terminus_class = :rest
       allow(Puppet::Resource::Catalog.indirection).to receive(:find).and_return(catalog)
+      allow_any_instance_of(described_class).to(
+        receive(:valid_server_environment?).and_return(true)
+      )
     end
 
     it "downloads plugins when told" do
@@ -159,17 +203,11 @@ describe Puppet::Configurer do
       Puppet[:payload_soft_limit] = 0
 
       facts.values = { 'processors' => {
-        'cores' => 1,
-        'count' => 2,
-        'isa' => "i386",
-        'models' => [
-          "CPU1 @ 2.80GHz"
-        ],
-        'physicalcount' => 4 }
+        'isa' => "i386" }
       }
       Puppet::Node::Facts.indirection.save(facts)
 
-      expect(Puppet).to receive(:warning).with(/Fact value '.+' with the value length: '[1-9]*' exceeds the value length limit: [1-9]*/).twice
+      expect(Puppet).to receive(:warning).with(/Fact processors.isa with value i386 with the value length: 4 exceeds the value length limit: 1/)
       configurer.run
     end
 
@@ -191,7 +229,7 @@ describe Puppet::Configurer do
       }
       Puppet::Node::Facts.indirection.save(facts)
 
-      expect(Puppet).to receive(:warning).with(/Payload with the current size of: '\d*' exceeds the payload size limit: \d*/)
+      expect(Puppet).to receive(:warning).with(/Payload with the current size of: \d* exceeds the payload size limit: \d*/)
       configurer.run
     end
 
@@ -224,7 +262,7 @@ describe Puppet::Configurer do
       }
       Puppet::Node::Facts.indirection.save(facts)
 
-      expect(Puppet).to receive(:warning).with(/The current total number of facts: [1-9]* exceeds the number of facts limit: [1-9]*/)
+      expect(Puppet).to receive(:warning).with(/The current total number of fact values: [1-9]* exceeds the fact values limit: [1-9]*/)
       configurer.run
     end
 
@@ -250,10 +288,12 @@ describe Puppet::Configurer do
       Puppet[:number_of_facts_soft_limit] = 0
       Puppet[:payload_soft_limit] = 0
 
-      facts.values = {'my_new_fact_name' => 'my_new_fact_value'}
+      facts.values = { 'processors' => {
+        'isa' => "i386" }
+      }
       Puppet::Node::Facts.indirection.save(facts)
 
-      expect(Puppet).to receive(:warning).with(/Fact .+ with length: '[1-9]*' exceeds the length limit: [1-9]*/)
+      expect(Puppet).to receive(:warning).with(/Fact processors.isa with length: 25 exceeds the fact name length limit: 1/)
       configurer.run
     end
 
@@ -866,7 +906,7 @@ describe Puppet::Configurer do
           expect(configurer.run).to be_nil
         end
 
-        it "should proceed with the cached catalog if its environment matchs the local environment" do
+        it "should proceed with the cached catalog if its environment matches the local environment" do
           expects_cached_catalog_only(catalog)
 
           expect(configurer.run).to eq(0)
@@ -1222,7 +1262,6 @@ describe Puppet::Configurer do
   end
 
   describe "when selecting an environment" do
-    include PuppetSpec::Files
     include PuppetSpec::Settings
 
     describe "when the last used environment is available" do
@@ -1241,118 +1280,199 @@ describe Puppet::Configurer do
         SUMMARY
       end
 
-      it "prefers the environment set via cli" do
-        Puppet.settings.handlearg('--environment', 'usethis')
-        configurer.run
+      describe "when the use_last_environment is set to true" do
+        before do
+          expect(Puppet::Node.indirection).not_to receive(:find)
+          .with(anything, hash_including(:ignore_cache => true, :fail_on_404 => true))
+        end
 
-        expect(configurer.environment).to eq('usethis')
-      end
+        it "prefers the environment set via cli" do
+          Puppet.settings.handlearg('--environment', 'usethis')
+          configurer.run
 
-      it "prefers the environment set via config" do
-        FileUtils.mkdir_p(Puppet[:confdir])
-        set_puppet_conf(Puppet[:confdir], <<~CONF)
-        [main]
-        environment = usethis
-        CONF
+          expect(configurer.environment).to eq('usethis')
+        end
 
-        Puppet.initialize_settings
-        configurer.run
+        it "prefers the environment set via lastrunfile over config" do
+          FileUtils.mkdir_p(Puppet[:confdir])
+          set_puppet_conf(Puppet[:confdir], <<~CONF)
+          [main]
+          environment = usethis
+          lastrunfile = #{Puppet[:lastrunfile]}
+          CONF
 
-        expect(configurer.environment).to eq('usethis')
-      end
-
-      it "uses environment from Puppet[:environment] if given a catalog" do
-        configurer.run(catalog: catalog)
-
-        expect(configurer.environment).to eq(Puppet[:environment])
-      end
-
-      it "uses environment from Puppet[:environment] if use_cached_catalog = true" do
-        Puppet[:use_cached_catalog] = true
-        expects_cached_catalog_only(catalog)
-        configurer.run
-
-        expect(configurer.environment).to eq(Puppet[:environment])
-      end
-
-      describe "when the environment is not set via CLI" do
-        it "uses the environment found in lastrunfile if the key exists" do
+          Puppet.initialize_settings
           configurer.run
 
           expect(configurer.environment).to eq(last_server_specified_environment)
         end
 
-        it "pushes the converged environment found in lastrunfile over the existing context" do
-          initial_env = Puppet::Node::Environment.remote('production')
-          Puppet.push_context(
-            current_environment: initial_env,
-            loaders: Puppet::Pops::Loaders.new(initial_env, true))
+        it "uses the environment from Puppet[:environment] if given a catalog" do
+          configurer.run(catalog: catalog)
 
-          expect(Puppet).to receive(:push_context).with(
-            hash_including(:current_environment, :loaders),
-            "Local node environment #{last_server_specified_environment} for configurer transaction"
-          ).once.and_call_original
-
-          configurer.run
+          expect(configurer.environment).to eq(Puppet[:environment])
         end
 
-        it "uses environment from Puppet[:environment] if strict_environment_mode is set" do
-          Puppet[:strict_environment_mode] = true
+        it "uses the environment from Puppet[:environment] if use_cached_catalog = true" do
+          Puppet[:use_cached_catalog] = true
+          expects_cached_catalog_only(catalog)
           configurer.run
 
           expect(configurer.environment).to eq(Puppet[:environment])
         end
 
-        it "uses environment from Puppet[:environment] if initial_environment is the same as converged_environment" do
+        describe "when the environment is not set via CLI" do
+          it "uses the environment found in lastrunfile if the key exists" do
+            configurer.run
+
+            expect(configurer.environment).to eq(last_server_specified_environment)
+          end
+
+          it "pushes the converged environment found in lastrunfile over the existing context" do
+            initial_env = Puppet::Node::Environment.remote('production')
+            Puppet.push_context(
+              current_environment: initial_env,
+              loaders: Puppet::Pops::Loaders.new(initial_env, true))
+
+            expect(Puppet).to receive(:push_context).with(
+              hash_including(:current_environment, :loaders),
+              "Local node environment #{last_server_specified_environment} for configurer transaction"
+            ).once.and_call_original
+
+            configurer.run
+          end
+
+          it "uses the environment from Puppet[:environment] if strict_environment_mode is set" do
+            Puppet[:strict_environment_mode] = true
+            configurer.run
+
+            expect(configurer.environment).to eq(Puppet[:environment])
+          end
+
+          it "uses the environment from Puppet[:environment] if initial_environment is the same as converged_environment" do
+            Puppet[:lastrunfile] = file_containing('last_run_summary.yaml', <<~SUMMARY)
+            ---
+            version:
+              config: 1624882680
+              puppet: 6.24.0
+            application:
+              initial_environment: development
+              converged_environment: development
+              run_mode: agent
+            SUMMARY
+            configurer.run
+
+            expect(configurer.environment).to eq(Puppet[:environment])
+          end
+        end
+      end
+
+      describe "when the use_last_environment setting is set to false" do
+        let(:node_environment) { Puppet::Node::Environment.remote(:salam) }
+        let(:node) { Puppet::Node.new(Puppet[:node_name_value]) }
+
+        before do
+          Puppet[:use_last_environment] = false
+          node.environment = node_environment
+
+          allow(Puppet::Node.indirection).to receive(:find)
+          allow(Puppet::Node.indirection).to receive(:find)
+            .with(anything, hash_including(:ignore_cache => true, :fail_on_404 => true))
+            .and_return(node)
+        end
+
+        it "does a node request" do
+          expect(Puppet::Node.indirection).to receive(:find)
+          .with(anything, hash_including(:ignore_cache => true, :fail_on_404 => true))
+
+          configurer.run
+        end
+
+        it "uses the node environment from the node request" do
+          configurer.run
+
+          expect(configurer.environment).to eq(node_environment.name.to_s)
+        end
+      end
+    end
+
+    describe "when the last used environment is not available" do
+      describe "when the node request succeeds" do
+        let(:node_environment) { Puppet::Node::Environment.remote(:salam) }
+        let(:node) { Puppet::Node.new(Puppet[:node_name_value]) }
+        let(:last_server_specified_environment) { 'development' }
+
+        before do
+          node.environment = node_environment
+
+          allow(Puppet::Node.indirection).to receive(:find)
+          allow(Puppet::Node.indirection).to receive(:find)
+            .with(anything, hash_including(:ignore_cache => true, :fail_on_404 => true))
+            .and_return(node)
+        end
+
+        it "uses the environment from the node request if the run mode doesn't match" do
           Puppet[:lastrunfile] = file_containing('last_run_summary.yaml', <<~SUMMARY)
-          ---
-          version:
-            config: 1624882680
-            puppet: 6.24.0
-          application:
-            initial_environment: development
-            converged_environment: development
-            run_mode: agent
+            ---
+            version:
+              config: 1624882680
+              puppet: 6.24.0
+            application:
+              initial_environment: #{Puppet[:environment]}
+              converged_environment: #{last_server_specified_environment}
+              run_mode: user
           SUMMARY
           configurer.run
 
-          expect(configurer.environment).to eq(Puppet[:environment])
+          expect(configurer.environment).to eq(node_environment.name.to_s)
         end
 
-        it "uses environment from Puppet[:environment] if the run mode doesn't match" do
+        it "uses the environment from the node request if lastrunfile does not contain the expected keys" do
           Puppet[:lastrunfile] = file_containing('last_run_summary.yaml', <<~SUMMARY)
-          ---
-          version:
-            config: 1624882680
-            puppet: 6.24.0
-          application:
-            initial_environment: #{Puppet[:environment]}
-            converged_environment: #{last_server_specified_environment}
-            run_mode: user
+            ---
+            version:
+              config: 1624882680
+              puppet: 6.24.0
           SUMMARY
           configurer.run
 
-          expect(configurer.environment).to eq(Puppet[:environment])
+          expect(configurer.environment).to eq(node_environment.name.to_s)
         end
 
-        it "uses environment from Puppet[:environment] if lastrunfile is invalid YAML" do
+        it "uses the environment from the node request if lastrunfile is invalid YAML" do
           Puppet[:lastrunfile] = file_containing('last_run_summary.yaml', <<~SUMMARY)
-          Key: 'this is my very very very ' +
-               'long string'
+            Key: 'this is my very very very ' +
+                 'long string'
           SUMMARY
           configurer.run
 
-          expect(configurer.environment).to eq(Puppet[:environment])
+          expect(configurer.environment).to eq(node_environment.name.to_s)
         end
 
-        it "uses environment from Puppet[:environment] if lastrunfile exists but is empty" do
+        it "uses the environment from the node request if lastrunfile exists but is empty" do
           Puppet[:lastrunfile] = file_containing('last_run_summary.yaml', '')
           configurer.run
 
-          expect(configurer.environment).to eq(Puppet[:environment])
+          expect(configurer.environment).to eq(node_environment.name.to_s)
         end
 
-        it "uses environment from Puppet[:environment] if the last used one cannot be found" do
+        it "uses the environment from the node request if the last used one cannot be found" do
+          Puppet[:lastrunfile] = tmpfile('last_run_summary.yaml')
+          configurer.run
+
+          expect(configurer.environment).to eq(node_environment.name.to_s)
+        end
+      end
+
+      describe "when the node request fails" do
+        before do
+          allow(Puppet::Node.indirection).to receive(:find).and_call_original
+          allow(Puppet::Node.indirection).to receive(:find)
+            .with(anything, hash_including(:ignore_cache => true, :fail_on_404 => true))
+            .and_raise(Puppet::Error)
+        end
+
+        it "uses the environment from Puppet[:environment] if the last used one cannot be found" do
           Puppet[:lastrunfile] = tmpfile('last_run_summary.yaml')
           configurer.run
 

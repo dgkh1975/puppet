@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/parser/ast'
 
 # The receiver of `import(file)` calls; once per imported file, or nil if imports are ignored
@@ -10,10 +12,11 @@ class Puppet::Pops::Model::AstTransformer
   Model = Puppet::Pops::Model
 
   attr_reader :importer
-  def initialize(source_file = "unknown-file", importer=nil)
-    @@transform_visitor ||= Puppet::Pops::Visitor.new(nil,"transform",0,0)
-    @@query_transform_visitor ||= Puppet::Pops::Visitor.new(nil,"query",0,0)
-    @@hostname_transform_visitor ||= Puppet::Pops::Visitor.new(nil,"hostname",0,0)
+
+  def initialize(source_file = "unknown-file", importer = nil)
+    @@transform_visitor ||= Puppet::Pops::Visitor.new(nil, "transform", 0, 0)
+    @@query_transform_visitor ||= Puppet::Pops::Visitor.new(nil, "query", 0, 0)
+    @@hostname_transform_visitor ||= Puppet::Pops::Visitor.new(nil, "hostname", 0, 0)
     @importer = importer
     @source_file = source_file
   end
@@ -28,7 +31,7 @@ class Puppet::Pops::Model::AstTransformer
   # @param klass [Class<Puppet::Parser::AST>] the ast class to create an instance of
   # @param hash [Hash] hash with options for the class to create
   #
-  def ast(o, klass, hash={})
+  def ast(o, klass, hash = {})
     # create and pass hash with file and line information
     # PUP-3274 - still needed since hostname transformation requires AST::HostName, and AST::Regexp
     klass.new(**merge_location(hash, o))
@@ -58,14 +61,12 @@ class Puppet::Pops::Model::AstTransformer
 
   # Transforms pops expressions into AST 3.1 statements/expressions
   def transform(o)
-    begin
-    @@transform_visitor.visit_this_0(self,o)
-    rescue StandardError => e
-      loc_data = {}
-      merge_location(loc_data, o)
-      raise Puppet::ParseError.new(_("Error while transforming to Puppet 3 AST: %{message}") % { message: e.message },
-        loc_data[:file], loc_data[:line], loc_data[:pos], e)
-    end
+    @@transform_visitor.visit_this_0(self, o)
+  rescue StandardError => e
+    loc_data = {}
+    merge_location(loc_data, o)
+    raise Puppet::ParseError.new(_("Error while transforming to Puppet 3 AST: %{message}") % { message: e.message },
+                                 loc_data[:file], loc_data[:line], loc_data[:pos], e)
   end
 
   # Transforms pops expressions into AST 3.1 query expressions
@@ -78,7 +79,6 @@ class Puppet::Pops::Model::AstTransformer
     @@hostname_transform_visitor.visit_this_0(self, o)
   end
 
-
   # Ensures transformation fails if a 3.1 non supported object is encountered in a query expression
   #
   def query_Object(o)
@@ -87,15 +87,15 @@ class Puppet::Pops::Model::AstTransformer
 
   # Transforms Array of host matching expressions into a (Ruby) array of AST::HostName
   def hostname_Array(o)
-    o.collect {|x| ast x, AST::HostName, :value => hostname(x) }
+    o.collect { |x| ast x, AST::HostName, :value => hostname(x) }
   end
 
   def hostname_LiteralValue(o)
-    return o.value
+    o.value
   end
 
   def hostname_QualifiedName(o)
-    return o.value
+    o.value
   end
 
   def hostname_LiteralNumber(o)
@@ -103,7 +103,7 @@ class Puppet::Pops::Model::AstTransformer
   end
 
   def hostname_LiteralDefault(o)
-    return 'default'
+    'default'
   end
 
   def hostname_LiteralRegularExpression(o)

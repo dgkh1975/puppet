@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Packaging using Peter Bonivart's pkgutil program.
 Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun do
   desc "Package management using Peter Bonivart's ``pkgutil`` command on Solaris."
@@ -7,25 +9,25 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
     pkgutil_bin = "/opt/csw/bin/pkgutil"
   end
 
-  confine :osfamily => :solaris
+  confine 'os.family' => :solaris
 
   has_command(:pkguti, pkgutil_bin) do
-    environment :HOME => ENV['HOME']
+    environment :HOME => ENV.fetch('HOME', nil)
   end
 
-  def self.healthcheck()
+  def self.healthcheck
     unless Puppet::FileSystem.exist?("/var/opt/csw/pkgutil/admin")
       Puppet.notice _("It is highly recommended you create '/var/opt/csw/pkgutil/admin'.")
       Puppet.notice _("See /var/opt/csw/pkgutil")
     end
 
     correct_wgetopts = false
-    [ "/opt/csw/etc/pkgutil.conf", "/etc/opt/csw/pkgutil.conf" ].each do |confpath|
+    ["/opt/csw/etc/pkgutil.conf", "/etc/opt/csw/pkgutil.conf"].each do |confpath|
       File.open(confpath) do |conf|
-        conf.each_line {|line| correct_wgetopts = true if line =~ /^\s*wgetopts\s*=.*(-nv|-q|--no-verbose|--quiet)/ }
+        conf.each_line { |line| correct_wgetopts = true if line =~ /^\s*wgetopts\s*=.*(-nv|-q|--no-verbose|--quiet)/ }
       end
     end
-    if ! correct_wgetopts
+    unless correct_wgetopts
       Puppet.notice _("It is highly recommended that you set 'wgetopts=-nv' in your pkgutil.conf.")
     end
   end
@@ -48,11 +50,11 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
 
       # Create a second instance with the alias if it's different
       pkgalias = aliases[pkg[:name]]
-      if pkgalias and pkg[:name] != pkgalias
-        apkg = pkg.dup
-        apkg[:name] = pkgalias
-        pkginsts << new(apkg)
-      end
+      next unless pkgalias and pkg[:name] != pkgalias
+
+      apkg = pkg.dup
+      apkg[:name] = pkgalias
+      pkginsts << new(apkg)
     end
 
     pkginsts
@@ -63,16 +65,16 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
   def self.availlist
     output = pkguti ["-a"]
 
-    output.split("\n").collect do |line|
-      next if line =~ /^common\s+package/  # header of package list
+    output.split("\n").filter_map do |line|
+      next if line =~ /^common\s+package/ # header of package list
       next if noise?(line)
 
       if line =~ /\s*(\S+)\s+(\S+)\s+(.*)/
-        { :alias => $1, :name => $2, :avail => $3 }
+        { :alias => Regexp.last_match(1), :name => Regexp.last_match(2), :avail => Regexp.last_match(3) }
       else
         Puppet.warning _("Cannot match %{line}") % { line: line }
       end
-    end.reject { |h| h.nil? }
+    end
   end
 
   # Turn our pkgutil -c listing into a hash for a single package.
@@ -92,32 +94,33 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
       return nil
     end
 
-    list = output.collect do |line|
-      next if line =~ /installed\s+catalog/  # header of package list
+    list = output.filter_map do |line|
+      next if line =~ /installed\s+catalog/ # header of package list
       next if noise?(line)
 
       pkgsplit(line)
-    end.reject { |h| h.nil? }
+    end
 
     if hash[:justme]
       # Single queries may have been for an alias so return the name requested
       if list.any?
         list[-1][:name] = hash[:justme]
-        return list[-1]
+        list[-1]
       end
     else
       list.reject! { |h| h[:ensure] == :absent }
-      return list
+      list
     end
   end
 
   # Identify common types of pkgutil noise as it downloads catalogs etc
   def self.noise?(line)
-    true if line =~ /^#/
-    true if line =~ /^Checking integrity / # use_gpg
-    true if line =~ /^gpg: /               # gpg verification
-    true if line =~ /^=+> /                # catalog fetch
-    true if line =~ /\d+:\d+:\d+ URL:/     # wget without -q
+    return true if line =~ /^#/
+    return true if line =~ /^Checking integrity / # use_gpg
+    return true if line =~ /^gpg: /               # gpg verification
+    return true if line =~ /^=+> /                # catalog fetch
+    return true if line =~ /\d+:\d+:\d+ URL:/     # wget without -q
+
     false
   end
 
@@ -125,25 +128,25 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
   def self.pkgsplit(line)
     if line =~ /\s*(\S+)\s+(\S+)\s+(.*)/
       hash = {}
-      hash[:name] = $1
-      hash[:ensure] = if $2 == "notinst"
-        :absent
-      else
-        $2
-      end
-      hash[:avail] = $3
+      hash[:name] = Regexp.last_match(1)
+      hash[:ensure] = if Regexp.last_match(2) == "notinst"
+                        :absent
+                      else
+                        Regexp.last_match(2)
+                      end
+      hash[:avail] = Regexp.last_match(3)
 
       if hash[:avail] =~ /^SAME\s*$/
         hash[:avail] = hash[:ensure]
       end
 
       # Use the name method, so it works with subclasses.
-      hash[:provider] = self.name
+      hash[:provider] = name
 
-      return hash
+      hash
     else
       Puppet.warning _("Cannot match %{line}") % { line: line }
-      return nil
+      nil
     end
   end
 
@@ -152,7 +155,7 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
     # get passed to pkgutil via one or more -t options
     if resource[:source]
       sources = [resource[:source]].flatten
-      pkguti(*[sources.map{|src| [ "-t", src ]}, *args].flatten)
+      pkguti(*[sources.map { |src| ["-t", src] }, *args].flatten)
     else
       pkguti(*args.flatten)
     end
@@ -170,11 +173,7 @@ Puppet::Type.type(:package).provide :pkgutil, :parent => :sun, :source => :sun d
 
   def query
     hash = pkgsingle(@resource)
-    if hash
-      hash
-    else
-      {:ensure => :absent}
-    end
+    hash || { :ensure => :absent }
   end
 
   def update

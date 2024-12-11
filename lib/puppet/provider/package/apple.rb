@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 
 # OS X Packaging sucks.  We can install packages, but that's about it.
@@ -8,15 +10,15 @@ Puppet::Type.type(:package).provide :apple, :parent => Puppet::Provider::Package
     automatically add the `.pkg` extension, so leave that off when specifying
     the package name."
 
-  confine :operatingsystem => :darwin
+  confine 'os.name' => :darwin
   commands :installer => "/usr/sbin/installer"
 
   def self.instances
     instance_by_name.collect do |name|
-      self.new(
-        :name     => name,
+      new(
+        :name => name,
         :provider => :apple,
-        :ensure   => :installed
+        :ensure => :installed
       )
     end
   end
@@ -33,7 +35,7 @@ Puppet::Type.type(:package).provide :apple, :parent => Puppet::Provider::Package
   end
 
   def query
-    Puppet::FileSystem.exist?("/Library/Receipts/#{@resource[:name]}.pkg") ? {:name => @resource[:name], :ensure => :present} : nil
+    Puppet::FileSystem.exist?("/Library/Receipts/#{@resource[:name]}.pkg") ? { :name => @resource[:name], :ensure => :present } : nil
   end
 
   def install

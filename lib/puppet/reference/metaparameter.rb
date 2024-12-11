@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Util::Reference.newreference :metaparameter, :doc => "All Puppet metaparameters and all their details" do
   str = %{
 
@@ -12,7 +14,7 @@ etc.), prevent Puppet from making changes (`noop`), and change logging verbosity
 
 ## Available Metaparameters
 
-}
+  }.dup
   begin
     params = []
     Puppet::Type.eachmetaparam { |param|

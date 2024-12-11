@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Runs a [lambda](https://puppet.com/docs/puppet/latest/lang_lambdas.html)
 # recursively and repeatedly using values from a data structure, then returns the unchanged data structure, or if
 # a lambda is not given, returns an `Iterator` for the tree.
@@ -112,7 +114,6 @@
 # * `reverse_each` - get "leaves before root"
 # * `filter` - prune the tree
 # * `map` - transform each element
-# * `reduce` - produce something else
 #
 # Note than when chaining, the value passed on is a `Tuple` with `[path, value]`.
 #
@@ -141,7 +142,6 @@
 # @since 5.0.0
 #
 Puppet::Functions.create_function(:tree_each) do
-
   local_types do
     type "OptionsType  = Struct[{\
       container_type => Optional[Type],\
@@ -171,12 +171,12 @@ Puppet::Functions.create_function(:tree_each) do
   end
 
   def tree_Enumerable1(enum, options = {}, &block)
-    iterator(enum, options).each {|_, v| yield(v) }
+    iterator(enum, options).each { |_, v| yield(v) }
     enum
   end
 
   def tree_Enumerable2(enum, options = {}, &block)
-    iterator(enum, options).each {|path, v| yield(path, v) }
+    iterator(enum, options).each { |path, v| yield(path, v) }
     enum
   end
 

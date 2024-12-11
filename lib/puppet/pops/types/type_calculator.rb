@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/concurrent/thread_local_singleton'
 
 module Puppet::Pops
@@ -105,7 +107,7 @@ class TypeCalculator
 
   # @api public
   def self.assignable?(t1, t2)
-    singleton.assignable?(t1,t2)
+    singleton.assignable?(t1, t2)
   end
 
   # Answers, does the given callable accept the arguments given in args (an array or a tuple)
@@ -130,17 +132,18 @@ class TypeCalculator
   # @api private
   def self.infer_callable_methods_t(o)
     # If being a value that cannot have Pcore based methods callable from Puppet Language
-    if (o.is_a?(String) ||
-      o.is_a?(Numeric) ||
-      o.is_a?(TrueClass) ||
-      o.is_a?(FalseClass) ||
-      o.is_a?(Regexp) ||
-      o.instance_of?(Array) ||
-      o.instance_of?(Hash) ||
-      Types::PUndefType::DEFAULT.instance?(o)
-      )
+    if o.is_a?(String) ||
+       o.is_a?(Numeric) ||
+       o.is_a?(TrueClass) ||
+       o.is_a?(FalseClass) ||
+       o.is_a?(Regexp) ||
+       o.instance_of?(Array) ||
+       o.instance_of?(Hash) ||
+       Types::PUndefType::DEFAULT.instance?(o)
+
       return nil
     end
+
     # For other objects (e.g. PObjectType instances, and runtime types) full inference needed, since that will
     # cover looking into the runtime type registry.
     #
@@ -165,8 +168,8 @@ class TypeCalculator
   # @api public
   #
   def initialize
-    @infer_visitor = Visitor.new(nil, 'infer',0,0)
-    @extract_visitor = Visitor.new(nil, 'extract',0,0)
+    @infer_visitor = Visitor.new(nil, 'infer', 0, 0)
+    @extract_visitor = Visitor.new(nil, 'extract', 0, 0)
   end
 
   # Answers 'can an instance of type t2 be assigned to a variable of type t'.
@@ -196,6 +199,7 @@ class TypeCalculator
   # Answers if the two given types describe the same type
   def equals(left, right)
     return false unless left.is_a?(PAnyType) && right.is_a?(PAnyType)
+
     # Types compare per class only - an extra test must be made if the are mutually assignable
     # to find all types that represent the same type of instance
     #
@@ -210,30 +214,29 @@ class TypeCalculator
     raise ArgumentError, 'Argument must be a Module' unless c.is_a? Module
 
     # Can't use a visitor here since we don't have an instance of the class
-    case
-    when c <= Integer
+    if c <= Integer
       type = PIntegerType::DEFAULT
-    when c == Float
+    elsif c == Float
       type = PFloatType::DEFAULT
-    when c == Numeric
+    elsif c == Numeric
       type = PNumericType::DEFAULT
-    when c == String
+    elsif c == String
       type = PStringType::DEFAULT
-    when c == Regexp
+    elsif c == Regexp
       type = PRegexpType::DEFAULT
-    when c == NilClass
+    elsif c == NilClass
       type = PUndefType::DEFAULT
-    when c == FalseClass, c == TrueClass
+    elsif c == FalseClass || c == TrueClass
       type = PBooleanType::DEFAULT
-    when c == Class
+    elsif c == Class
       type = PTypeType::DEFAULT
-    when c == Array
+    elsif c == Array
       # Assume array of any
       type = PArrayType::DEFAULT
-    when c == Hash
+    elsif c == Hash
       # Assume hash of any
       type = PHashType::DEFAULT
-   else
+    else
       type = PRuntimeType.new(:ruby, c.name)
     end
     type
@@ -252,15 +255,16 @@ class TypeCalculator
   def infer(o)
     # Optimize the most common cases into direct calls.
     # Explicit if/elsif/else is faster than case
-    if o.is_a?(String)
+    case o
+    when String
       infer_String(o)
-    elsif o.is_a?(Integer) # need subclasses for Ruby < 2.4
+    when Integer # need subclasses for Ruby < 2.4
       infer_Integer(o)
-    elsif o.is_a?(Array)
+    when Array
       infer_Array(o)
-    elsif o.is_a?(Hash)
+    when Hash
       infer_Hash(o)
-    elsif o.is_a?(Evaluator::PuppetProc)
+    when Evaluator::PuppetProc
       infer_PuppetProc(o)
     else
       @infer_visitor.visit_this_0(self, o)
@@ -290,7 +294,7 @@ class TypeCalculator
   # @api public
   #
   def self.instance?(t, o)
-    singleton.instance?(t,o)
+    singleton.instance?(t, o)
   end
 
   # Answers 'is o an instance of type t'
@@ -368,7 +372,7 @@ class TypeCalculator
     # when both are resources, reduce to Resource[T] or Resource[] (since one was not assignable to the other)
     if t1.is_a?(PResourceType) && t2.is_a?(PResourceType)
       # only Resource[] unless the type name is the same
-      return t1.type_name == t2.type_name ?  PResourceType.new(t1.type_name, nil) : PResourceType::DEFAULT
+      return t1.type_name == t2.type_name ? PResourceType.new(t1.type_name, nil) : PResourceType::DEFAULT
     end
 
     # Integers have range, expand the range to the common range
@@ -382,7 +386,7 @@ class TypeCalculator
     end
 
     if t1.is_a?(PStringType) && (t2.is_a?(PStringType) || t2.is_a?(PEnumType))
-      if(t2.is_a?(PEnumType))
+      if t2.is_a?(PEnumType)
         return t1.value.nil? ? PEnumType::DEFAULT : PEnumType.new(t2.values | [t1.value])
       end
 
@@ -436,7 +440,7 @@ class TypeCalculator
       return PScalarType::DEFAULT
     end
 
-    if common_data?(t1,t2)
+    if common_data?(t1, t2)
       return TypeFactory.data
     end
 
@@ -445,7 +449,7 @@ class TypeCalculator
       return PTypeType.new(common_type(t1.type, t2.type))
     end
 
-    if common_rich_data?(t1,t2)
+    if common_rich_data?(t1, t2)
       return TypeFactory.rich_data
     end
 
@@ -454,13 +458,14 @@ class TypeCalculator
       if t1.runtime == t2.runtime && t1.runtime_type_name == t2.runtime_type_name
         return t1
       end
+
       # finding the common super class requires that names are resolved to class
       # NOTE: This only supports runtime type of :ruby
       c1 = ClassLoader.provide_from_type(t1)
       c2 = ClassLoader.provide_from_type(t2)
       if c1 && c2
         c2_superclasses = superclasses(c2)
-        superclasses(c1).each do|c1_super|
+        superclasses(c1).each do |c1_super|
           c2_superclasses.each do |c2_super|
             if c1_super == c2_super
               return PRuntimeType.new(:ruby, c1_super.name)
@@ -477,7 +482,7 @@ class TypeCalculator
   # Produces the superclasses of the given class, including the class
   def superclasses(c)
     result = [c]
-    while s = c.superclass #rubocop:disable Lint/AssignmentInCondition
+    while s = c.superclass # rubocop:disable Lint/AssignmentInCondition
       result << s
       c = s
     end
@@ -488,21 +493,21 @@ class TypeCalculator
   # @api public
   #
   def reduce_type(enumerable)
-    enumerable.reduce(nil) {|memo, t| common_type(memo, t) }
+    enumerable.reduce(nil) { |memo, t| common_type(memo, t) }
   end
 
   # Reduce an enumerable of objects to a single common type
   # @api public
   #
   def infer_and_reduce_type(enumerable)
-    reduce_type(enumerable.map {|o| infer(o) })
+    reduce_type(enumerable.map { |o| infer(o) })
   end
 
   # The type of all modules is PTypeType
   # @api private
   #
   def infer_Module(o)
-    PTypeType::new(PRuntimeType.new(:ruby, o.name))
+    PTypeType.new(PRuntimeType.new(:ruby, o.name))
   end
 
   # @api private
@@ -527,9 +532,11 @@ class TypeCalculator
     else
       name = o.class.name
       return PRuntimeType.new(:ruby, nil) if name.nil? # anonymous class that doesn't implement PuppetObject is impossible to infer
+
       ir = Loaders.implementation_registry
       type = ir.nil? ? nil : ir.type_for_module(name)
       return PRuntimeType.new(:ruby, name) if type.nil?
+
       if type.is_a?(PObjectType) && type.parameterized?
         type = PObjectTypeExtension.create_from_instance(type, o)
       end
@@ -713,18 +720,18 @@ class TypeCalculator
     if o.empty?
       PArrayType::EMPTY
     else
-      PTupleType.new(o.map {|x| infer_set(x) })
+      PTupleType.new(o.map { |x| infer_set(x) })
     end
   end
 
   def infer_set_Hash(o)
     if o.empty?
       PHashType::EMPTY
-    elsif o.keys.all? {|k| PStringType::NON_EMPTY.instance?(k) }
-      PStructType.new(o.each_pair.map { |k,v| PStructElement.new(PStringType.new(k), infer_set(v)) })
+    elsif o.keys.all? { |k| PStringType::NON_EMPTY.instance?(k) }
+      PStructType.new(o.each_pair.map { |k, v| PStructElement.new(PStringType.new(k), infer_set(v)) })
     else
-      ktype = PVariantType.maybe_create(o.keys.map {|k| infer_set(k) })
-      etype = PVariantType.maybe_create(o.values.map {|e| infer_set(e) })
+      ktype = PVariantType.maybe_create(o.keys.map { |k| infer_set(k) })
+      etype = PVariantType.maybe_create(o.values.map { |e| infer_set(e) })
       PHashType.new(unwrap_single_variant(ktype), unwrap_single_variant(etype), size_as_type(o))
     end
   end
@@ -748,7 +755,8 @@ class TypeCalculator
   # if range.to == nil max size == Infinity
   #
   def size_range(range)
-    return [1,1] if range.nil?
+    return [1, 1] if range.nil?
+
     from = range.from
     to = range.to
     x = from.nil? ? 1 : from
@@ -761,11 +769,11 @@ class TypeCalculator
     t.is_a?(PAnyType) && t.kind_of_callable?(optional)
   end
 
-  def max(a,b)
-    a >=b ? a : b
+  def max(a, b)
+    a >= b ? a : b
   end
 
-  def min(a,b)
+  def min(a, b)
     a <= b ? a : b
   end
 
@@ -816,7 +824,6 @@ class TypeCalculator
   def common_numeric?(t1, t2)
     PNumericType::DEFAULT.assignable?(t1) && PNumericType::DEFAULT.assignable?(t2)
   end
-
 end
 end
 end

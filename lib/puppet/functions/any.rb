@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Runs a [lambda](https://puppet.com/docs/puppet/latest/lang_lambdas.html)
 # repeatedly using each value in a data structure until the lambda returns a "truthy" value which
 # makes the function return `true`, or if the end of the iteration is reached, false is returned.
@@ -90,7 +92,7 @@ Puppet::Functions.create_function(:any) do
   end
 
   def any_Hash_2(hash)
-    hash.each_pair.any? { |x,y| yield(x, y) }
+    hash.each_pair.any? { |x, y| yield(x, y) }
   end
 
   def any_Enumerable_1(enumerable)

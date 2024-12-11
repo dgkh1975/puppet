@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet
   Type.newtype(:exec) do
     include Puppet::Util::Execution
@@ -17,18 +19,18 @@ module Puppet
         during a noop Puppet run.
       * The exec has `refreshonly => true`, which allows Puppet to run the
         command only when some other resource is changed. (See the notes on refreshing
-        below.) 
-        
+        below.)
+
       The state managed by an `exec` resource represents whether the specified command
       _needs to be_ executed during the catalog run. The target state is always that
       the command does not need to be executed. If the initial state is that the
       command _does_ need to be executed, then successfully executing the command
       transitions it to the target state.
-      
+
       The `unless`, `onlyif`, and `creates` properties check the initial state of the
       resource. If one or more of these properties is specified, the exec might not
       need to run. If the exec does not need to run, then the system is already in
-      the target state. In such cases, the exec is considered successful without 
+      the target state. In such cases, the exec is considered successful without
       actually executing its command.
 
       A caution: There's a widespread tendency to use collections of execs to
@@ -81,11 +83,9 @@ module Puppet
       @checks.keys
     end
 
-    newproperty(:returns, :array_matching => :all, :event => :executed_command) do |property|
+    newproperty(:returns, :array_matching => :all, :event => :executed_command) do |_property|
       include Puppet::Util::Execution
-      munge do |value|
-        value.to_s
-      end
+      munge(&:to_s)
 
       def event_name
         :executed_command
@@ -94,6 +94,7 @@ module Puppet
       defaultto "0"
 
       attr_reader :output
+
       desc "The expected exit code(s).  An error will be returned if the
         executed command has some other exit code. Can be specified as an array
         of acceptable exit codes or a single value.
@@ -128,31 +129,32 @@ module Puppet
         # value, which causes us to be treated as in_sync?, which means we
         # don't actually execute anything.  I think. --daniel 2011-03-10
         if @resource.check_all_attributes
-          return :notrun
+          :notrun
         else
-          return self.should
+          should
         end
       end
 
       # Actually execute the command.
       def sync
         event = :executed_command
-        tries = self.resource[:tries]
-        try_sleep = self.resource[:try_sleep]
+        tries = resource[:tries]
+        try_sleep = resource[:try_sleep]
 
         begin
           tries.times do |try|
             # Only add debug messages for tries > 1 to reduce log spam.
-            debug("Exec try #{try+1}/#{tries}") if tries > 1
-            @output, @status = provider.run(self.resource[:command])
-            break if self.should.include?(@status.exitstatus.to_s)
+            debug("Exec try #{try + 1}/#{tries}") if tries > 1
+            @output, @status = provider.run(resource[:command])
+            break if should.include?(@status.exitstatus.to_s)
+
             if try_sleep > 0 and tries > 1
               debug("Sleeping for #{try_sleep} seconds between tries")
               sleep try_sleep
             end
           end
-        rescue Timeout::Error
-          self.fail Puppet::Error, _("Command exceeded timeout"), $!
+        rescue Timeout::Error => e
+          self.fail Puppet::Error, _("Command exceeded timeout"), e
         end
 
         log = @resource[:logoutput]
@@ -161,29 +163,29 @@ module Puppet
           when :true
             log = @resource[:loglevel]
           when :on_failure
-            unless self.should.include?(@status.exitstatus.to_s)
-              log = @resource[:loglevel]
-            else
+            if should.include?(@status.exitstatus.to_s)
               log = :false
+            else
+              log = @resource[:loglevel]
             end
           end
           unless log == :false
             if @resource.parameter(:command).sensitive
-              self.send(log, "[output redacted]")
+              send(log, "[output redacted]")
             else
               @output.split(/\n/).each { |line|
-                self.send(log, line)
+                send(log, line)
               }
             end
           end
         end
 
-        unless self.should.include?(@status.exitstatus.to_s)
+        unless should.include?(@status.exitstatus.to_s)
           if @resource.parameter(:command).sensitive
             # Don't print sensitive commands in the clear
-            self.fail(_("[command redacted] returned %{status} instead of one of [%{expected}]") % { status: @status.exitstatus, expected: self.should.join(",") })
+            self.fail(_("[command redacted] returned %{status} instead of one of [%{expected}]") % { status: @status.exitstatus, expected: should.join(",") })
           else
-            self.fail(_("'%{cmd}' returned %{status} instead of one of [%{expected}]") % { cmd: self.resource[:command], status: @status.exitstatus, expected: self.should.join(",") })
+            self.fail(_("'%{cmd}' returned %{status} instead of one of [%{expected}]") % { cmd: resource[:command], status: @status.exitstatus, expected: should.join(",") })
           end
         end
 
@@ -332,8 +334,8 @@ module Puppet
         value = value.shift if value.is_a?(Array)
         begin
           value = Float(value)
-        rescue ArgumentError
-          raise ArgumentError, _("The timeout must be a number."), $!.backtrace
+        rescue ArgumentError => e
+          raise ArgumentError, _("The timeout must be a number."), e.backtrace
         end
         [value, 0.0].max
       end
@@ -349,12 +351,14 @@ module Puppet
 
       munge do |value|
         if value.is_a?(String)
-          unless value =~ /^[\d]+$/
+          unless value =~ /^\d+$/
             raise ArgumentError, _("Tries must be an integer")
           end
+
           value = Integer(value)
         end
         raise ArgumentError, _("Tries must be an integer >= 1") if value < 1
+
         value
       end
 
@@ -369,15 +373,16 @@ module Puppet
           unless value =~ /^[-\d.]+$/
             raise ArgumentError, _("try_sleep must be a number")
           end
+
           value = Float(value)
         end
         raise ArgumentError, _("try_sleep cannot be a negative number") if value < 0
+
         value
       end
 
       defaultto 0
     end
-
 
     newcheck(:refreshonly) do
       desc <<-'EOT'
@@ -408,11 +413,7 @@ module Puppet
       # on refresh.
       def check(value)
         # We have to invert the values.
-        if value == :true
-          false
-        else
-          true
-        end
+        value != :true
       end
     end
 
@@ -435,6 +436,13 @@ module Puppet
         back by re-extracting the tarball. If `important.tar` does **not**
         actually contain `myfile`, the exec will keep running every time
         Puppet runs.
+
+        This parameter can also take an array of files, and the command will
+        not run if **any** of these files exist. Consider this example:
+
+            creates => ['/tmp/file1', '/tmp/file2'],
+
+        The command is only run if both files don't exist.
       EOT
 
       accept_arrays
@@ -442,9 +450,9 @@ module Puppet
       # If the file exists, return false (i.e., don't run the command),
       # else return true
       def check(value)
-        #TRANSLATORS 'creates' is a parameter name and should not be translated
+        # TRANSLATORS 'creates' is a parameter name and should not be translated
         debug(_("Checking that 'creates' path '%{creates_path}' exists") % { creates_path: value })
-        ! Puppet::FileSystem.exist?(value)
+        !Puppet::FileSystem.exist?(value)
       end
     end
 
@@ -457,7 +465,7 @@ module Puppet
 
             exec { '/bin/echo root >> /usr/lib/cron/cron.allow':
               path   => '/usr/bin:/usr/sbin:/bin',
-              unless => 'grep root /usr/lib/cron/cron.allow 2>/dev/null',
+              unless => 'grep ^root$ /usr/lib/cron/cron.allow 2>/dev/null',
             }
 
         This would add `root` to the cron.allow file (on Solaris) unless
@@ -500,10 +508,10 @@ module Puppet
         end
 
         if sensitive
-          self.debug("[output redacted]")
+          debug("[output redacted]")
         else
           output.split(/\n/).each { |line|
-            self.debug(line)
+            debug(line)
           }
         end
 
@@ -563,10 +571,10 @@ module Puppet
         end
 
         if sensitive
-          self.debug("[output redacted]")
+          debug("[output redacted]")
         else
           output.split(/\n/).each { |line|
-            self.debug(line)
+            debug(line)
           }
         end
 
@@ -592,13 +600,17 @@ module Puppet
       cmd = self[:command]
       cmd = cmd[0] if cmd.is_a? Array
 
-      cmd.scan(file_regex) { |str|
-        reqs << str
-      }
+      if cmd.is_a?(Puppet::Pops::Evaluator::DeferredValue)
+        debug("The 'command' parameter is deferred and cannot be autorequired")
+      else
+        cmd.scan(file_regex) { |str|
+          reqs << str
+        }
 
-      cmd.scan(/^"([^"]+)"/) { |str|
-        reqs << str
-      }
+        cmd.scan(/^"([^"]+)"/) { |str|
+          reqs << str
+        }
+      end
 
       [:onlyif, :unless].each { |param|
         tmp = self[param]
@@ -613,7 +625,11 @@ module Puppet
           # unqualified files, but, well, that's a bit more annoying
           # to do.
           line = line[0] if line.is_a? Array
-          reqs += line.scan(file_regex)
+          if line.is_a?(Puppet::Pops::Evaluator::DeferredValue)
+            debug("The '#{param}' parameter is deferred and cannot be autorequired")
+          else
+            reqs += line.scan(file_regex)
+          end
         end
       }
 
@@ -641,20 +657,21 @@ module Puppet
     def check_all_attributes(refreshing = false)
       self.class.checks.each { |check|
         next if refreshing and check == :refreshonly
-        if @parameters.include?(check)
-          val = @parameters[check].value
-          val = [val] unless val.is_a? Array
-          val.each do |value|
-            if !@parameters[check].check(value)
-              # Give a debug message so users can figure out what command would have been
-              # but don't print sensitive commands or parameters in the clear
-              cmdstring = @parameters[:command].sensitive ? "[command redacted]" : @parameters[:command].value
 
-              debug(_("'%{cmd}' won't be executed because of failed check '%{check}'") % { cmd: cmdstring, check: check })
+        next unless @parameters.include?(check)
 
-              return false
-            end
-          end
+        val = @parameters[check].value
+        val = [val] unless val.is_a? Array
+        val.each do |value|
+          next if @parameters[check].check(value)
+
+          # Give a debug message so users can figure out what command would have been
+          # but don't print sensitive commands or parameters in the clear
+          cmdstring = @parameters[:command].sensitive ? "[command redacted]" : @parameters[:command].value
+
+          debug(_("'%{cmd}' won't be executed because of failed check '%{check}'") % { cmd: cmdstring, check: check })
+
+          return false
         end
       }
 
@@ -662,21 +679,21 @@ module Puppet
     end
 
     def output
-      if self.property(:returns).nil?
-        return nil
+      if property(:returns).nil?
+        nil
       else
-        return self.property(:returns).output
+        property(:returns).output
       end
     end
 
     # Run the command, or optionally run a separately-specified command.
     def refresh
-      if self.check_all_attributes(true)
+      if check_all_attributes(true)
         cmd = self[:refresh]
         if cmd
           provider.run(cmd)
         else
-          self.property(:returns).sync
+          property(:returns).sync
         end
       end
     end
@@ -686,6 +703,7 @@ module Puppet
     end
 
     private
+
     def set_sensitive_parameters(sensitive_parameters)
       # If any are sensitive, mark all as sensitive
       sensitive = false

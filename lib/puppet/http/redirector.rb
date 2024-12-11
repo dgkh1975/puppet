@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Handle HTTP redirects
 #
 # @api private
@@ -41,7 +43,7 @@ class Puppet::HTTP::Redirector
   #
   # @api private
   def redirect_to(request, response, redirects)
-    raise Puppet::HTTP::TooManyRedirects.new(request.uri) if redirects >= @redirect_limit
+    raise Puppet::HTTP::TooManyRedirects, request.uri if redirects >= @redirect_limit
 
     location = parse_location(response)
     url = request.uri.merge(location)
@@ -49,6 +51,15 @@ class Puppet::HTTP::Redirector
     new_request = request.class.new(url)
     new_request.body = request.body
     request.each do |header, value|
+      unless Puppet[:location_trusted]
+        # skip adding potentially sensitive header to other hosts
+        next if header.casecmp('Authorization').zero? && request.uri.host.casecmp(location.host) != 0
+        next if header.casecmp('Cookie').zero? && request.uri.host.casecmp(location.host) != 0
+      end
+      # Allow Net::HTTP to set its own Accept-Encoding header to avoid errors with HTTP compression.
+      # See https://github.com/puppetlabs/puppet/issues/9143
+      next if header.casecmp('Accept-Encoding').zero?
+
       new_request[header] = value
     end
 
@@ -67,10 +78,10 @@ class Puppet::HTTP::Redirector
 
   def parse_location(response)
     location = response['location']
-    raise Puppet::HTTP::ProtocolError.new(_("Location response header is missing")) unless location
+    raise Puppet::HTTP::ProtocolError, _("Location response header is missing") unless location
 
     URI.parse(location)
   rescue URI::InvalidURIError => e
-    raise Puppet::HTTP::ProtocolError.new(_("Location URI is invalid: %{detail}") % { detail: e.message}, e)
+    raise Puppet::HTTP::ProtocolError.new(_("Location URI is invalid: %{detail}") % { detail: e.message }, e)
   end
 end

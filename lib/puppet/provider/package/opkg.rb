@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 
 Puppet::Type.type(:package).provide :opkg, :source => :opkg, :parent => Puppet::Provider::Package do
@@ -5,21 +7,21 @@ Puppet::Type.type(:package).provide :opkg, :source => :opkg, :parent => Puppet::
 
   commands :opkg => "opkg"
 
-  confine     :operatingsystem => :openwrt
-  defaultfor  :operatingsystem => :openwrt
+  confine     'os.name' => :openwrt
+  defaultfor  'os.name' => :openwrt
 
   def self.instances
     packages = []
     execpipe("#{command(:opkg)} list-installed") do |process|
-      regex = %r{^(\S+) - (\S+)}
+      regex = /^(\S+) - (\S+)/
       fields = [:name, :ensure]
       hash = {}
 
       process.each_line { |line|
         match = regex.match(line)
         if match
-          fields.zip(match.captures) { |field,value| hash[field] = value }
-          hash[:provider] = self.name
+          fields.zip(match.captures) { |field, value| hash[field] = value }
+          hash[:provider] = name
           packages << new(hash)
           hash = {}
         else
@@ -29,11 +31,11 @@ Puppet::Type.type(:package).provide :opkg, :source => :opkg, :parent => Puppet::
     end
     packages
   rescue Puppet::ExecutionFailure
-    return nil
+    nil
   end
 
   def latest
-    output = opkg( "list", @resource[:name])
+    output = opkg("list", @resource[:name])
     matches = /^(\S+) - (\S+)/.match(output).captures
     matches[1]
   end
@@ -44,29 +46,30 @@ Puppet::Type.type(:package).provide :opkg, :source => :opkg, :parent => Puppet::
     opkg('update') if package_lists.size <= 2
 
     if @resource[:source]
-      opkg( '--force-overwrite', 'install', @resource[:source] )
+      opkg('--force-overwrite', 'install', @resource[:source])
     else
-      opkg( '--force-overwrite', 'install', @resource[:name] )
+      opkg('--force-overwrite', 'install', @resource[:name])
     end
   end
 
   def uninstall
-    opkg( 'remove', @resource[:name] )
+    opkg('remove', @resource[:name])
   end
 
   def update
-    self.install
+    install
   end
 
   def query
     # list out our specific package
-    output = opkg( 'list-installed', @resource[:name] )
+    output = opkg('list-installed', @resource[:name])
     if output =~ /^(\S+) - (\S+)/
-      return { :ensure => $2 }
+      return { :ensure => Regexp.last_match(2) }
     end
+
     nil
   rescue Puppet::ExecutionFailure
-    return {
+    {
       :ensure => :purged,
       :status => 'missing',
       :name => @resource[:name],

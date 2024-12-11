@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/package'
 require_relative '../../../puppet/util/package'
 
@@ -24,10 +26,10 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
   # AIX supports versionable packages with and without a NIM server
   has_feature :versionable
 
-  confine  :operatingsystem => [ :aix ]
-  defaultfor :operatingsystem => :aix
+  confine 'os.name' => [:aix]
+  defaultfor 'os.name' => :aix
 
-  attr_accessor   :latest_info
+  attr_accessor :latest_info
 
   STATE_CODE = {
     'A' => :applied,
@@ -39,33 +41,33 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
   }.freeze
 
   def self.srclistcmd(source)
-    [ command(:installp), "-L", "-d", source ]
+    [command(:installp), "-L", "-d", source]
   end
 
   def self.prefetch(packages)
     raise Puppet::Error, _("The aix provider can only be used by root") if Process.euid != 0
 
-    return unless packages.detect { |name, package| package.should(:ensure) == :latest }
+    return unless packages.detect { |_name, package| package.should(:ensure) == :latest }
 
-    sources = packages.collect { |name, package| package[:source] }.uniq.compact
+    sources = packages.collect { |_name, package| package[:source] }.uniq.compact
 
     updates = {}
     sources.each do |source|
-      execute(self.srclistcmd(source)).each_line do |line|
-        if line =~ /^[^#][^:]*:([^:]*):([^:]*)/
-          current = {}
-          current[:name]    = $1
-          current[:version] = $2
-          current[:source]  = source
+      execute(srclistcmd(source)).each_line do |line|
+        next unless line =~ /^[^#][^:]*:([^:]*):([^:]*)/
 
-          if updates.key?(current[:name])
-            previous = updates[current[:name]]
+        current = {}
+        current[:name]    = Regexp.last_match(1)
+        current[:version] = Regexp.last_match(2)
+        current[:source]  = source
 
-            updates[current[:name]] = current unless Puppet::Util::Package.versioncmp(previous[:version], current[:version]) == 1
+        if updates.key?(current[:name])
+          previous = updates[current[:name]]
 
-          else
-            updates[current[:name]] = current
-          end
+          updates[current[:name]] = current unless Puppet::Util::Package.versioncmp(previous[:version], current[:version]) == 1
+
+        else
+          updates[current[:name]] = current
         end
       end
     end
@@ -97,7 +99,7 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
 
     pkg = @resource[:name]
 
-    pkg += " #{@resource.should(:ensure)}" if (! @resource.should(:ensure).is_a? Symbol) and useversion
+    pkg += " #{@resource.should(:ensure)}" if (!@resource.should(:ensure).is_a? Symbol) and useversion
 
     output = installp "-acgwXY", "-d", source, pkg
 
@@ -122,7 +124,7 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
     end
 
     begin
-      list = execute(cmd).scan(/^[^#][^:]*:([^:]*):([^:]*):[^:]*:[^:]*:([^:])/).collect { |n,e,s|
+      list = execute(cmd).scan(/^[^#][^:]*:([^:]*):([^:]*):[^:]*:[^:]*:([^:])/).collect { |n, e, s|
         e = :absent if [:broken, :inconsistent].include?(STATE_CODE[s])
         { :name => n, :ensure => e, :status => STATE_CODE[s], :provider => self.name }
       }
@@ -135,9 +137,9 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
     end
 
     if hash[:pkgname]
-      return list.shift
+      list.shift
     else
-      return list
+      list
     end
   end
 
@@ -150,12 +152,12 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
   def latest
     upd = latest_info
 
-    unless upd.nil?
-      return "#{upd[:version]}"
-    else
+    if upd.nil?
       raise Puppet::DevError, _("Tried to get latest on a missing package") if properties[:ensure] == :absent
 
-      return properties[:ensure]
+      properties[:ensure]
+    else
+      (upd[:version]).to_s
     end
   end
 
@@ -164,6 +166,6 @@ Puppet::Type.type(:package).provide :aix, :parent => Puppet::Provider::Package d
   end
 
   def update
-    self.install(false)
+    install(false)
   end
 end

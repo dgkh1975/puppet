@@ -35,12 +35,19 @@ test_name 'should create a user with password and modify the password' do
     end
 
     step 'verify the password was set correctly' do
-      on(agent, puppet('resource', 'user', name), acceptable_exit_codes: 0) do
-        assert_match(/password\s*=>\s*'#{initial_password}'/, stdout, 'Password was not set correctly')
+      on(agent, puppet('resource', 'user', name), acceptable_exit_codes: 0) do |result|
+        assert_match(/password\s*=>\s*'#{initial_password}'/, result.stdout, 'Password was not set correctly')
       end
     end
 
     step 'modify the user with a different password' do
+      # There is a known issue with SSSD and Red Hat 8, this is a temporary workaround until a permanent fix is
+      # implemented in our images. See ITHELP-100250
+      # https://access.redhat.com/solutions/7031304
+      if agent['platform'] == 'el-8-ppc64le'
+        on(agent, 'systemctl stop sssd; rm -f /var/lib/sss/db/*; systemctl start sssd', acceptable_exit_codes: 0)
+      end
+
       apply_manifest_on(agent, <<-MANIFEST, catch_failures: true)
 	    user { '#{name}':
 	      ensure => present,
@@ -50,8 +57,8 @@ test_name 'should create a user with password and modify the password' do
     end
 
     step 'verify the password was set correctly' do
-      on(agent, "puppet resource user #{name}", acceptable_exit_codes: 0) do
-        assert_match(/password\s*=>\s*'#{modified_password}'/, stdout, 'Password was not changed correctly')
+      on(agent, "puppet resource user #{name}", acceptable_exit_codes: 0) do |result|
+        assert_match(/password\s*=>\s*'#{modified_password}'/, result.stdout, 'Password was not changed correctly')
       end
     end
 

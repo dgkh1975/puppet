@@ -191,8 +191,8 @@ describe Puppet::Transaction::EventManager do
 
       allow(@resource).to receive(:callback1)
 
-      expect(@resource).to receive(:event).with(:message => "Triggered 'callback1' from 1 event", :status => 'success', :name => 'callback1')
-      expect(@resource).to receive(:event).with(:name => :restarted, :status => "success").and_return("myevent")
+      expect(@resource).to receive(:event).with({:message => "Triggered 'callback1' from 1 event", :status => 'success', :name => 'callback1'})
+      expect(@resource).to receive(:event).with({:name => :restarted, :status => "success"}).and_return("myevent")
       expect(@manager).to receive(:queue_events).with(@resource, ["myevent"])
 
       @manager.process_events(@resource)
@@ -247,7 +247,7 @@ describe Puppet::Transaction::EventManager do
 
       it "should queue a new noop event generated from the resource" do
         event = Puppet::Transaction::Event.new
-        expect(@resource).to receive(:event).with(:status => "noop", :name => :noop_restart).and_return(event)
+        expect(@resource).to receive(:event).with({:status => "noop", :name => :noop_restart}).and_return(event)
         expect(@manager).to receive(:queue_events).with(@resource, [event])
 
         @manager.process_events(@resource)
@@ -277,7 +277,7 @@ describe Puppet::Transaction::EventManager do
 
       it "should queue a new noop event generated from the resource" do
         event = Puppet::Transaction::Event.new
-        expect(@resource).to receive(:event).with(:status => "noop", :name => :noop_restart).and_return(event)
+        expect(@resource).to receive(:event).with({:status => "noop", :name => :noop_restart}).and_return(event)
         expect(@manager).to receive(:queue_events).with(@resource, [event])
 
         @manager.process_events(@resource)

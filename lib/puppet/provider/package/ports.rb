@@ -1,19 +1,21 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:package).provide :ports, :parent => :freebsd, :source => :freebsd do
   desc "Support for FreeBSD's ports.  Note that this, too, mixes packages and ports."
 
   commands :portupgrade => "/usr/local/sbin/portupgrade",
-    :portversion => "/usr/local/sbin/portversion",
-    :portuninstall => "/usr/local/sbin/pkg_deinstall",
-    :portinfo => "/usr/sbin/pkg_info"
+           :portversion => "/usr/local/sbin/portversion",
+           :portuninstall => "/usr/local/sbin/pkg_deinstall",
+           :portinfo => "/usr/sbin/pkg_info"
 
-  %w{INTERACTIVE UNAME}.each do |var|
+  %w[INTERACTIVE UNAME].each do |var|
     ENV.delete(var) if ENV.include?(var)
   end
 
   def install
     # -N: install if the package is missing, otherwise upgrade
     # -M: yes, we're a batch, so don't ask any questions
-    cmd = %w{-N -M BATCH=yes} << @resource[:name]
+    cmd = %w[-N -M BATCH=yes] << @resource[:name]
 
     output = portupgrade(*cmd)
     if output =~ /\*\* No such /
@@ -27,8 +29,8 @@ Puppet::Type.type(:package).provide :ports, :parent => :freebsd, :source => :fre
 
     begin
       output = portversion(*cmd)
-    rescue Puppet::ExecutionFailure
-      raise Puppet::Error.new(output, $!)
+    rescue Puppet::ExecutionFailure => e
+      raise Puppet::Error.new(output, e)
     end
     line = output.split("\n").pop
 
@@ -37,16 +39,16 @@ Puppet::Type.type(:package).provide :ports, :parent => :freebsd, :source => :fre
       return :latest
     end
 
-    pkgstuff = $1
-    match = $2
-    info = $3
+    pkgstuff = Regexp.last_match(1)
+    match = Regexp.last_match(2)
+    info = Regexp.last_match(3)
 
     unless pkgstuff =~ /^\S+-([^-\s]+)$/
       raise Puppet::Error,
-        _("Could not match package info '%{pkgstuff}'") % { pkgstuff: pkgstuff }
+            _("Could not match package info '%{pkgstuff}'") % { pkgstuff: pkgstuff }
     end
 
-    version = $1
+    version = Regexp.last_match(1)
 
     if match == "=" or match == ">"
       # we're up to date or more recent
@@ -57,10 +59,11 @@ Puppet::Type.type(:package).provide :ports, :parent => :freebsd, :source => :fre
 
     unless info =~ /\((\w+) has (.+)\)/
       raise Puppet::Error,
-        _("Could not match version info '%{info}'") % { info: info }
+            _("Could not match version info '%{info}'") % { info: info }
     end
 
-    source, newversion = $1, $2
+    source = Regexp.last_match(1)
+    newversion = Regexp.last_match(2)
 
     debug "Newer version in #{source}"
     newversion
@@ -69,8 +72,8 @@ Puppet::Type.type(:package).provide :ports, :parent => :freebsd, :source => :fre
   def query
     # support portorigin_glob such as "mail/postfix"
     name = self.name
-    if name =~ /\//
-      name = self.name.split(/\//).slice(1)
+    if name =~ %r{/}
+      name = self.name.split(%r{/}).slice(1)
     end
     self.class.instances.each do |instance|
       if instance.name == name

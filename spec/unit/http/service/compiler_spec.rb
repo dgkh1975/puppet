@@ -68,7 +68,7 @@ describe Puppet::HTTP::Service::Compiler do
       subject.post_catalog(certname, environment: environment, facts: facts)
     end
 
-    it 'submits facts as pson if set as the preferred format' do
+    it 'submits facts as pson if set as the preferred format', if: Puppet.features.pson? do
       Puppet[:preferred_serialization_format] = "pson"
 
       stub_request(:post, uri)
@@ -141,20 +141,22 @@ describe Puppet::HTTP::Service::Compiler do
 
     it 'does not accept msgpack by default' do
       stub_request(:post, uri)
-        .with(headers: {'Accept' => 'application/vnd.puppet.rich+json, application/json, text/pson'})
+        .with(headers: {'Accept' => 'application/vnd.puppet.rich+json, application/json'})
         .to_return(**catalog_response)
 
       allow(Puppet.features).to receive(:msgpack?).and_return(false)
+      allow(Puppet.features).to receive(:pson?).and_return(false)
 
       subject.post_catalog(certname, environment: environment, facts: facts)
     end
 
     it 'accepts msgpack & rich_json_msgpack if the gem is present' do
       stub_request(:post, uri)
-        .with(headers: {'Accept' => 'application/vnd.puppet.rich+json, application/json, application/vnd.puppet.rich+msgpack, application/x-msgpack, text/pson'})
+        .with(headers: {'Accept' => 'application/vnd.puppet.rich+json, application/json, application/vnd.puppet.rich+msgpack, application/x-msgpack'})
         .to_return(**catalog_response)
 
       allow(Puppet.features).to receive(:msgpack?).and_return(true)
+      allow(Puppet.features).to receive(:pson?).and_return(false)
 
       subject.post_catalog(certname, environment: environment, facts: facts)
     end
@@ -592,7 +594,7 @@ describe Puppet::HTTP::Service::Compiler do
       invalid_facts = Puppet::Node::Facts.new(certname, {'invalid_utf8_sequence' => "\xE2\x82".force_encoding('binary')})
       expect {
         subject.put_facts(certname, environment: 'production', facts: invalid_facts)
-      }.to raise_error(Puppet::HTTP::SerializationError, /Failed to serialize Puppet::Node::Facts to json: "\\xE2" from ASCII-8BIT to UTF-8/)
+      }.to raise_error(Puppet::HTTP::SerializationError, /Failed to serialize Puppet::Node::Facts to json: ("\\xE2" from ASCII-8BIT to UTF-8|partial character in source, but hit end)/)
     end
   end
 

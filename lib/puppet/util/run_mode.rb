@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'etc'
 
 module Puppet
@@ -7,7 +9,7 @@ module Puppet
         @name = name.to_sym
       end
 
-      attr :name
+      attr_reader :name
 
       def self.[](name)
         @run_modes ||= {}
@@ -52,7 +54,7 @@ module Puppet
       #
       # @todo this code duplicates {Puppet::Settings#which\_configuration\_file}
       #   as described in {https://projects.puppetlabs.com/issues/16637 #16637}
-      def which_dir( system, user )
+      def which_dir(system, user)
         if Puppet.features.root?
           File.expand_path(system)
         else
@@ -85,6 +87,22 @@ module Puppet
       def log_dir
         which_dir("/var/log/puppetlabs/puppet", "~/.puppetlabs/var/log")
       end
+
+      def pkg_config_path
+        '/opt/puppetlabs/puppet/lib/pkgconfig'
+      end
+
+      def gem_cmd
+        '/opt/puppetlabs/puppet/bin/gem'
+      end
+
+      def common_module_dir
+        '/opt/puppetlabs/puppet/modules'
+      end
+
+      def vendor_module_dir
+        '/opt/puppetlabs/puppet/vendor_modules'
+      end
     end
 
     class WindowsRunMode < RunMode
@@ -112,10 +130,34 @@ module Puppet
         which_dir(File.join(windows_common_base("puppet/var/log")), "~/.puppetlabs/var/log")
       end
 
-    private
+      def pkg_config_path
+        nil
+      end
+
+      def gem_cmd
+        if (puppet_dir = ENV.fetch('PUPPET_DIR', nil))
+          File.join(puppet_dir.to_s, 'bin', 'gem.bat')
+        else
+          File.join(Gem.default_bindir, 'gem.bat')
+        end
+      end
+
+      def common_module_dir
+        "#{installdir}/puppet/modules" if installdir
+      end
+
+      def vendor_module_dir
+        "#{installdir}\\puppet\\vendor_modules" if installdir
+      end
+
+      private
+
+      def installdir
+        ENV.fetch('FACTER_env_windows_installdir', nil)
+      end
 
       def windows_common_base(*extra)
-        [ENV['ALLUSERSPROFILE'], "PuppetLabs"] + extra
+        [ENV.fetch('ALLUSERSPROFILE', nil), "PuppetLabs"] + extra
       end
     end
   end

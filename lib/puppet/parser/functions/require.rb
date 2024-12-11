@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 # Requires the specified classes
 
-  Puppet::Parser::Functions::newfunction(
-    :require,
-    :arity => -2,
-    :doc =>"Evaluate one or more classes,  adding the required class as a dependency.
+Puppet::Parser::Functions.newfunction(
+  :require,
+  :arity => -2,
+  :doc => "Evaluate one or more classes,  adding the required class as a dependency.
 
 The relationship metaparameters work well for specifying relationships
 between individual resources, but they can be clumsy for specifying
@@ -34,7 +36,8 @@ resource and relationship expressions.
 
 - Since 4.0.0 Class and Resource types, absolute names
 - Since 4.7.0 Returns an Array[Type[Class]] with references to the required classes
-") do |classes|
+"
+) do |classes|
   call_function('require', classes)
   Puppet.warn_once('deprecations', '3xfunction#require', _("Calling function_require via the Scope class is deprecated. Use Scope#call_function instead"))
 end

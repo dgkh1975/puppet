@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require 'cfpropertylist' if Puppet.features.cfpropertylist?
 require_relative '../../puppet/util/execution'
 
 module Puppet::Util::Plist
-
   class FormatError < RuntimeError; end
 
   # So I don't have to prepend every method name with 'self.' Most of the
@@ -42,7 +43,7 @@ module Puppet::Util::Plist
         Puppet.debug "Plist #{file_path} ill-formatted, converting with plutil"
         begin
           plist = Puppet::Util::Execution.execute(['/usr/bin/plutil', '-convert', 'xml1', '-o', '-', file_path],
-                                                  {:failonfail => true, :combine => true})
+                                                  { :failonfail => true, :combine => true })
           return parse_plist(plist)
         rescue Puppet::ExecutionFailure => detail
           message = _("Cannot read file %{file_path}; Puppet is skipping it.") % { file_path: file_path }
@@ -50,12 +51,12 @@ module Puppet::Util::Plist
           Puppet.warning(message)
         end
       end
-      return nil
+      nil
     end
 
     # Read plist text using the CFPropertyList gem.
     def parse_plist(plist_data, file_path = '')
-      bad_xml_doctype = /^.*<!DOCTYPE plist PUBLIC -\/\/Apple Computer.*$/
+      bad_xml_doctype = %r{^.*<!DOCTYPE plist PUBLIC -//Apple Computer.*$}
       # Depending on where parse_plist is called from, plist_data can be either XML or binary.
       # If we get XML, make sure ruby knows it's UTF-8 so we avoid invalid byte sequence errors.
       if plist_data.include?('encoding="UTF-8"') && plist_data.encoding != Encoding::UTF_8
@@ -64,7 +65,7 @@ module Puppet::Util::Plist
 
       begin
         if plist_data =~ bad_xml_doctype
-          plist_data.gsub!( bad_xml_doctype, plist_xml_doctype )
+          plist_data.gsub!(bad_xml_doctype, plist_xml_doctype)
           Puppet.debug("Had to fix plist with incorrect DOCTYPE declaration: #{file_path}")
         end
       rescue ArgumentError => e
@@ -129,27 +130,26 @@ module Puppet::Util::Plist
     end
 
     def to_format(format)
-      if format.to_sym == :xml
+      case format.to_sym
+      when :xml
         CFPropertyList::List::FORMAT_XML
-      elsif format.to_sym == :binary
+      when :binary
         CFPropertyList::List::FORMAT_BINARY
-      elsif format.to_sym == :plain
+      when :plain
         CFPropertyList::List::FORMAT_PLAIN
       else
-        raise FormatError.new "Unknown plist format #{format}"
+        raise FormatError, "Unknown plist format #{format}"
       end
     end
 
     # This method will write a plist file using a specified format (or XML
     # by default)
     def write_plist_file(plist, file_path, format = :xml)
-      begin
-        plist_to_save       = CFPropertyList::List.new
-        plist_to_save.value = CFPropertyList.guess(plist)
-        plist_to_save.save(file_path, to_format(format), :formatted => true)
-      rescue IOError => e
-        Puppet.err(_("Unable to write the file %{file_path}. %{error}") % { file_path: file_path, error: e.inspect })
-      end
+      plist_to_save       = CFPropertyList::List.new
+      plist_to_save.value = CFPropertyList.guess(plist)
+      plist_to_save.save(file_path, to_format(format), :formatted => true)
+    rescue IOError => e
+      Puppet.err(_("Unable to write the file %{file_path}. %{error}") % { file_path: file_path, error: e.inspect })
     end
 
     def dump_plist(plist_data, format = :xml)

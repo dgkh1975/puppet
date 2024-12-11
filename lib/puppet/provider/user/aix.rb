@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # User Puppet provider for AIX. It uses standard commands to manage users:
 #  mkuser, rmuser, lsuser, chuser
 #
@@ -17,8 +19,8 @@ require 'date'
 Puppet::Type.type(:user).provide :aix, :parent => Puppet::Provider::AixObject do
   desc "User management for AIX."
 
-  defaultfor :operatingsystem => :aix
-  confine :operatingsystem => :aix
+  defaultfor 'os.name' => :aix
+  confine 'os.name' => :aix
 
   # Commands that manage the element
   commands :list      => "/usr/sbin/lsuser"
@@ -56,22 +58,24 @@ Puppet::Type.type(:user).provide :aix, :parent => Puppet::Provider::AixObject do
 
     def expiry_to_expires(expiry)
       return '0' if expiry == "0000-00-00" || expiry.to_sym == :absent
-      
+
       DateTime.parse(expiry, "%Y-%m-%d %H:%M")
-        .strftime("%m%d%H%M%y")
+              .strftime("%m%d%H%M%y")
     end
 
     def expires_to_expiry(provider, expires)
       return :absent if expires == '0'
 
       unless (match_obj = /\A(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)\z/.match(expires))
-        #TRANSLATORS 'AIX' is the name of an operating system and should not be translated
+        # TRANSLATORS 'AIX' is the name of an operating system and should not be translated
         Puppet.warning(_("Could not convert AIX expires date '%{expires}' on %{class_name}[%{resource_name}]") % { expires: expires, class_name: provider.resource.class.name, resource_name: provider.resource.name })
         return :absent
       end
 
-      month, day, year = match_obj[1], match_obj[2], match_obj[-1]
-      return "20#{year}-#{month}-#{day}"
+      month = match_obj[1]
+      day = match_obj[2]
+      year = match_obj[-1]
+      "20#{year}-#{month}-#{day}"
     end
 
     # We do some validation before-hand to ensure the value's an Array,
@@ -110,7 +114,7 @@ Puppet::Type.type(:user).provide :aix, :parent => Puppet::Provider::AixObject do
           property_to_attribute: method(:gid_to_pgrp),
           attribute_to_property: method(:pgrp_to_gid)
 
-  mapping puppet_property: :groups, 
+  mapping puppet_property: :groups,
           property_to_attribute: method(:groups_property_to_attribute),
           attribute_to_property: method(:groups_attribute_to_property)
 
@@ -185,7 +189,7 @@ Puppet::Type.type(:user).provide :aix, :parent => Puppet::Provider::AixObject do
     match_obj[1]
   end
 
-  #- **password**
+  # - **password**
   #    The user's password, in whatever encrypted format the local machine
   #    requires. Be sure to enclose any value that includes a dollar sign ($)
   #    in single quotes (').  Requires features manages_passwords.
@@ -229,7 +233,7 @@ Puppet::Type.type(:user).provide :aix, :parent => Puppet::Provider::AixObject do
       if output != ""
         raise Puppet::ExecutionFailure, "chpasswd said #{output}"
       end
-    rescue Puppet::ExecutionFailure  => detail
+    rescue Puppet::ExecutionFailure => detail
       raise Puppet::Error, "Could not set password on #{@resource.class.name}[#{@resource.name}]: #{detail}", detail.backtrace
     ensure
       if tempfile
@@ -310,49 +314,49 @@ Puppet::Type.type(:user).provide :aix, :parent => Puppet::Provider::AixObject do
   end
 
   # UNSUPPORTED
-  #- **profile_membership**
+  # - **profile_membership**
   #    Whether specified roles should be treated as the only roles
   #    of which the user is a member or whether they should merely
   #    be treated as the minimum membership list.  Valid values are
   #    `inclusive`, `minimum`.
   # UNSUPPORTED
-  #- **profiles**
+  # - **profiles**
   #    The profiles the user has.  Multiple profiles should be
   #    specified as an array.  Requires features manages_solaris_rbac.
   # UNSUPPORTED
-  #- **project**
+  # - **project**
   #    The name of the project associated with a user  Requires features
   #    manages_solaris_rbac.
   # UNSUPPORTED
-  #- **role_membership**
+  # - **role_membership**
   #    Whether specified roles should be treated as the only roles
   #    of which the user is a member or whether they should merely
   #    be treated as the minimum membership list.  Valid values are
   #    `inclusive`, `minimum`.
   # UNSUPPORTED
-  #- **roles**
+  # - **roles**
   #    The roles the user has.  Multiple roles should be
   #    specified as an array.  Requires features manages_roles.
   # UNSUPPORTED
-  #- **key_membership**
+  # - **key_membership**
   #    Whether specified key value pairs should be treated as the only
   #    attributes
   #    of the user or whether they should merely
   #    be treated as the minimum list.  Valid values are `inclusive`,
   #    `minimum`.
   # UNSUPPORTED
-  #- **keys**
+  # - **keys**
   #    Specify user attributes in an array of keyvalue pairs  Requires features
   #    manages_solaris_rbac.
   # UNSUPPORTED
-  #- **allowdupe**
+  # - **allowdupe**
   #  Whether to allow duplicate UIDs.  Valid values are `true`, `false`.
   # UNSUPPORTED
-  #- **auths**
+  # - **auths**
   #    The auths the user has.  Multiple auths should be
   #    specified as an array.  Requires features manages_solaris_rbac.
   # UNSUPPORTED
-  #- **auth_membership**
+  # - **auth_membership**
   #    Whether specified auths should be treated as the only auths
   #    of which the user is a member or whether they should merely
   #    be treated as the minimum membership list.  Valid values are

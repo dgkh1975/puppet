@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'hiera/scope'
 require_relative 'sub_lookup'
 module Puppet::Pops
@@ -46,8 +48,8 @@ module Interpolation
   def interpolate_string(subject, context, allow_methods)
     lookup_invocation = context.is_a?(Invocation) ? context : context.invocation
     lookup_invocation.with(:interpolate, subject) do
-      subject.gsub(/%\{([^\}]*)\}/) do |match|
-        expr = $1
+      subject.gsub(/%\{([^}]*)\}/) do |match|
+        expr = ::Regexp.last_match(1)
         # Leading and trailing spaces inside an interpolation expression are insignificant
         expr.strip!
         value = nil
@@ -57,6 +59,7 @@ module Interpolation
 
           # Alias is only permitted if the entire string is equal to the interpolate expression
           fail(Issues::HIERA_INTERPOLATION_ALIAS_NOT_ENTIRE_STRING) if is_alias && subject != match
+
           value = interpolate_method(method_key).call(key, lookup_invocation, subject)
 
           # break gsub and return value immediately if this was an alias substitution. The value might be something other than a String
@@ -78,7 +81,7 @@ module Interpolation
           scope = scope.real
         end
         lookup_invocation.with_scope(scope) do |sub_invocation|
-          sub_invocation.lookup(key) {  Lookup.lookup(key, nil, '', true, nil, sub_invocation) }
+          sub_invocation.lookup(key) { Lookup.lookup(key, nil, '', true, nil, sub_invocation) }
         end
       end
       scope_lookup = lambda do |key, lookup_invocation, subject|
@@ -90,11 +93,16 @@ module Interpolation
             lookup_invocation.report_found_in_overrides(root_key, ovr[root_key])
           else
             scope = lookup_invocation.scope
-            val = scope[root_key]
+            val = nil
+            if (default_key_exists = lookup_invocation.default_values.include?(root_key))
+              catch(:undefined_variable) { val = scope[root_key] }
+            else
+              val = scope[root_key]
+            end
             if val.nil? && !nil_in_scope?(scope, root_key)
-              defaults = lookup_invocation.default_values
-              if defaults.include?(root_key)
-                lookup_invocation.report_found_in_defaults(root_key, defaults[root_key])
+              if default_key_exists
+                lookup_invocation.report_found_in_defaults(root_key,
+                                                           lookup_invocation.default_values[root_key])
               else
                 nil
               end
@@ -117,11 +125,12 @@ module Interpolation
         :hiera => global_lookup, # this is just an alias for 'lookup'
         :alias => global_lookup, # same as 'lookup' but expression must be entire string and result is not subject to string substitution
         :scope => scope_lookup,
-        :literal => lambda { |key, _, _| key }
+        :literal => ->(key, _, _) { key }
       }.freeze
     end
     interpolate_method = @@interpolate_methods[method_key]
     fail(Issues::HIERA_INTERPOLATION_UNKNOWN_INTERPOLATION_METHOD, :name => method_key) unless interpolate_method
+
     interpolate_method
   end
 
@@ -135,9 +144,10 @@ module Interpolation
   end
 
   def get_method_and_data(data, allow_methods)
-    match = data.match(/^(\w+)\((?:["]([^"]+)["]|[']([^']+)['])\)$/)
+    match = data.match(/^(\w+)\((?:"([^"]+)"|'([^']+)')\)$/)
     if match
       fail(Issues::HIERA_INTERPOLATION_METHOD_SYNTAX_NOT_ALLOWED) unless allow_methods
+
       key = match[1].to_sym
       data = match[2] || match[3] # double or single qouted
     else
@@ -148,7 +158,8 @@ module Interpolation
 
   def fail(issue, args = EMPTY_HASH)
     raise Puppet::DataBinding::LookupError.new(
-      issue.format(args), nil, nil, nil, nil, issue.issue_code)
+      issue.format(args), nil, nil, nil, nil, issue.issue_code
+    )
   end
 end
 end

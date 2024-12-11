@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/resource'
 
 # The primary difference between this class and its
@@ -13,13 +15,13 @@ class Puppet::Parser::Resource < Puppet::Resource
 
   attr_accessor :source, :scope, :collector_id
   attr_accessor :virtual, :override, :translated, :catalog, :evaluated
-  attr_accessor :file, :line
+  attr_accessor :file, :line, :kind
 
   attr_reader :exported, :parameters
 
   # Determine whether the provided parameter name is a relationship parameter.
   def self.relationship_parameter?(name)
-    @relationship_names ||= Puppet::Type.relationship_params.collect { |p| p.name }
+    @relationship_names ||= Puppet::Type.relationship_params.collect(&:name)
     @relationship_names.include?(name)
   end
 
@@ -31,8 +33,9 @@ class Puppet::Parser::Resource < Puppet::Resource
   def [](param)
     param = param.intern
     if param == :title
-      return self.title
+      return title
     end
+
     if @parameters.has_key?(param)
       @parameters[param].value
     else
@@ -41,7 +44,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   end
 
   def eachparam
-    @parameters.each do |name, param|
+    @parameters.each do |_name, param|
       yield param
     end
   end
@@ -54,7 +57,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   # is drawn from  the class to the stage.   The stage for containment
   # defaults to main, if none is specified.
   def add_edge_to_stage
-    return unless self.class?
+    return unless class?
 
     stage = catalog.resource(:stage, self[:stage] || (scope && scope.resource && scope.resource[:stage]) || :main)
     unless stage
@@ -68,6 +71,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   # Retrieve the associated definition and evaluate it.
   def evaluate
     return if evaluated?
+
     Puppet::Util::Profiler.profile(_("Evaluated resource %{res}") % { res: self }, [:compiler, :evaluate_resource, self]) do
       @evaluated = true
       if builtin_type?
@@ -86,10 +90,9 @@ class Puppet::Parser::Resource < Puppet::Resource
   def exported=(value)
     if value
       @virtual = true
-      @exported = value
     else
-      @exported = value
     end
+    @exported = value
   end
 
   # Finish the evaluation by assigning defaults and scope tags
@@ -97,6 +100,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   #
   def finish_evaluation
     return if @evaluation_finished
+
     add_scope_tags
     @evaluation_finished = true
   end
@@ -110,6 +114,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   # @api private
   def finish(do_validate = true)
     return if finished?
+
     @finished = true
     finish_evaluation
     replace_sensitive_data
@@ -124,19 +129,20 @@ class Puppet::Parser::Resource < Puppet::Resource
   def initialize(type, title, attributes, with_defaults = true)
     raise ArgumentError, _('Resources require a hash as last argument') unless attributes.is_a? Hash
     raise ArgumentError, _('Resources require a scope') unless attributes[:scope]
+
     super(type, title, attributes)
 
     @source ||= scope.source
 
     if with_defaults
       scope.lookupdefaults(self.type).each_pair do |name, param|
-        unless @parameters.include?(name)
-          self.debug "Adding default for #{name}"
+        next if @parameters.include?(name)
 
-          param = param.dup
-          @parameters[name] = param
-          tag(*param.value) if param.name == :tag
-        end
+        debug "Adding default for #{name}"
+
+        param = param.dup
+        @parameters[name] = param
+        tag(*param.value) if param.name == :tag
       end
     end
   end
@@ -144,9 +150,9 @@ class Puppet::Parser::Resource < Puppet::Resource
   # Is this resource modeling an isomorphic resource type?
   def isomorphic?
     if builtin_type?
-      return resource_type.isomorphic?
+      resource_type.isomorphic?
     else
-      return true
+      true
     end
   end
 
@@ -155,7 +161,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   def merge(resource)
     # Test the resource scope, to make sure the resource is even allowed
     # to override.
-    unless self.source.object_id == resource.source.object_id || resource.source.child_of?(self.source)
+    unless source.equal?(resource.source) || resource.source.child_of?(source)
       raise Puppet::ParseError.new(_("Only subclasses can override parameters"), resource.file, resource.line)
     end
 
@@ -178,13 +184,13 @@ class Puppet::Parser::Resource < Puppet::Resource
     end
 
     # Some of these might fail, but they'll fail in the way we want.
-    resource.parameters.each do |name, param|
+    resource.parameters.each do |_name, param|
       override_parameter(param)
     end
   end
 
   def name
-    self[:name] || self.title
+    self[:name] || title
   end
 
   # A temporary occasion, until I get paths in the scopes figured out.
@@ -194,10 +200,10 @@ class Puppet::Parser::Resource < Puppet::Resource
   # if we ever receive a parameter named 'tag', set
   # the resource tags with its value.
   def set_parameter(param, value = nil)
-    if ! param.is_a?(Puppet::Parser::Resource::Param)
+    unless param.is_a?(Puppet::Parser::Resource::Param)
       param = param.name if param.is_a?(Puppet::Pops::Resource::Param)
       param = Puppet::Parser::Resource::Param.new(
-        :name => param, :value => value, :source => self.source
+        :name => param, :value => value, :source => source
       )
     end
 
@@ -209,22 +215,20 @@ class Puppet::Parser::Resource < Puppet::Resource
   alias []= set_parameter
 
   def to_hash
-    parse_title.merge(@parameters.reduce({}) do |result, (_, param)|
+    parse_title.merge(@parameters.each_with_object({}) do |(_, param), result|
       value = param.value
       value = (:undef == value) ? nil : value
 
-      unless value.nil?
-        case param.name
-        when :before, :subscribe, :notify, :require
-          if value.is_a?(Array)
-            value = value.flatten.reject {|v| v.nil? || :undef == v }
-          end
-          result[param.name] = value
-        else
-          result[param.name] = value
+      next if value.nil?
+
+      case param.name
+      when :before, :subscribe, :notify, :require
+        if value.is_a?(Array)
+          value = value.flatten.reject { |v| v.nil? || :undef == v }
         end
+      else
       end
-      result
+      result[param.name] = value
     end)
   end
 
@@ -294,19 +298,17 @@ class Puppet::Parser::Resource < Puppet::Resource
       msg = if current.source.to_s == ''
               if error_location_str.empty?
                 _("Parameter '%{name}' is already set on %{resource}; cannot redefine") %
-                    { name: param.name, resource: ref }
+                  { name: param.name, resource: ref }
               else
                 _("Parameter '%{name}' is already set on %{resource} at %{error_location}; cannot redefine") %
-                    { name: param.name, resource: ref, error_location: error_location_str }
+                  { name: param.name, resource: ref, error_location: error_location_str }
               end
+            elsif error_location_str.empty?
+              _("Parameter '%{name}' is already set on %{resource} by %{source}; cannot redefine") %
+                { name: param.name, resource: ref, source: current.source.to_s }
             else
-              if error_location_str.empty?
-                _("Parameter '%{name}' is already set on %{resource} by %{source}; cannot redefine") %
-                    { name: param.name, resource: ref, source: current.source.to_s }
-              else
-                _("Parameter '%{name}' is already set on %{resource} by %{source} at %{error_location}; cannot redefine") %
-                    { name: param.name, resource: ref, source: current.source.to_s, error_location: error_location_str }
-              end
+              _("Parameter '%{name}' is already set on %{resource} by %{source} at %{error_location}; cannot redefine") %
+                { name: param.name, resource: ref, source: current.source.to_s, error_location: error_location_str }
             end
       raise Puppet::ParseError.new(msg, param.file, param.line)
     end
@@ -331,7 +333,7 @@ class Puppet::Parser::Resource < Puppet::Resource
   def validate
     if builtin_type?
       begin
-        @parameters.each { |name, value| validate_parameter(name) }
+        @parameters.each { |name, _value| validate_parameter(name) }
       rescue => detail
         self.fail Puppet::ParseError, detail.to_s + " on #{self}", detail
       end

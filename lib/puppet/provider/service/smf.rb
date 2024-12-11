@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'timeout'
 
 # Solaris 10 SMF-style services.
@@ -18,9 +20,9 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
     be imported if it does not exist.
   EOT
 
-  defaultfor :osfamily => :solaris
+  defaultfor 'os.family' => :solaris
 
-  confine :osfamily => :solaris
+  confine 'os.family' => :solaris
 
   commands :adm => "/usr/sbin/svcadm",
            :svcs => "/usr/bin/svcs",
@@ -29,7 +31,7 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   has_feature :refreshable
 
   def self.instances
-    service_instances = svcs("-H", "-o", "state,fmri" ).split("\n")
+    service_instances = svcs("-H", "-o", "state,fmri").split("\n")
 
     # Puppet does not manage services in the legacy_run state, so filter those out.
     service_instances.reject! { |line| line =~ /^legacy_run/ }
@@ -43,7 +45,7 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
                 when /degraded/; :degraded
                 else :stopped
                 end
-      new({:name => fmri, :ensure => status})
+      new({ :name => fmri, :ensure => status })
     end
 
     service_instances
@@ -61,7 +63,7 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   end
 
   def service_exists?
-    self.service_fmri
+    service_fmri
     true
   rescue Puppet::ExecutionFailure
     false
@@ -69,12 +71,12 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
 
   def setup_service
     return unless @resource[:manifest]
-    return if self.service_exists?
+    return if service_exists?
 
     Puppet.notice("Importing #{@resource[:manifest]} for #{@resource[:name]}")
     svccfg(:import, @resource[:manifest])
   rescue Puppet::ExecutionFailure => detail
-    raise Puppet::Error.new( "Cannot config #{@resource[:name]} to enable it: #{detail}", detail )
+    raise Puppet::Error.new("Cannot config #{@resource[:name]} to enable it: #{detail}", detail)
   end
 
   # Returns the service's FMRI. We fail if multiple FMRIs correspond to
@@ -101,14 +103,14 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
 
   # Returns true if the provider supports incomplete services.
   def supports_incomplete_services?
-    Puppet::Util::Package.versioncmp(Puppet.runtime[:facter].value(:operatingsystemrelease), '11.1') >= 0
+    Puppet::Util::Package.versioncmp(Puppet.runtime[:facter].value('os.release.full'), '11.1') >= 0
   end
 
   # Returns true if the service is complete. A complete service is a service that
   # has the general/complete property defined.
   def complete_service?
     unless supports_incomplete_services?
-      raise Puppet::Error, _("Cannot query if the %{service} service is complete: The concept of complete/incomplete services was introduced in Solaris 11.1. You are on a Solaris %{release} machine.") % { service: @resource[:name], release: Puppet.runtime[:facter].value(:operatingsystemrelease) }
+      raise Puppet::Error, _("Cannot query if the %{service} service is complete: The concept of complete/incomplete services was introduced in Solaris 11.1. You are on a Solaris %{release} machine.") % { service: @resource[:name], release: Puppet.runtime[:facter].value('os.release.full') }
     end
 
     return @complete_service if @complete_service
@@ -120,7 +122,7 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
     # Check if the general/complete property is defined. If it is undefined,
     # then svccfg will not print anything to the console.
     property_defn = svccfg("-s", fmri, "listprop", "general/complete").chomp
-    @complete_service = ! property_defn.empty?
+    @complete_service = !property_defn.empty?
   end
 
   def enable
@@ -129,7 +131,8 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
 
   def enabled?
     return :false unless service_exists?
-    _property, _type, value = svccfg("-s", self.service_fmri, "listprop", "general/enabled").split(' ')
+
+    _property, _type, value = svccfg("-s", service_fmri, "listprop", "general/enabled").split(' ')
     value == 'true' ? :true : :false
   end
 
@@ -138,11 +141,11 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   end
 
   def restartcmd
-    if Puppet::Util::Package.versioncmp(Puppet.runtime[:facter].value(:operatingsystemrelease), '11.2') >= 0
-      [command(:adm), :restart, "-s", self.service_fmri]
+    if Puppet::Util::Package.versioncmp(Puppet.runtime[:facter].value('os.release.full'), '11.2') >= 0
+      [command(:adm), :restart, "-s", service_fmri]
     else
       # Synchronous restart only supported in Solaris 11.2 and above
-      [command(:adm), :restart, self.service_fmri]
+      [command(:adm), :restart, service_fmri]
     end
   end
 
@@ -150,7 +153,7 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
     # Gets the current and next state of the service. We have a next state because SMF
     # manages services asynchronously. If there is no 'next' state, svcs will put a '-'
     # to indicate as such.
-    current_state, next_state = svcs("-H", "-o", "state,nstate", self.service_fmri).chomp.split(' ')
+    current_state, next_state = svcs("-H", "-o", "state,nstate", service_fmri).chomp.split(' ')
 
     {
       :current => current_state,
@@ -165,13 +168,14 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   def wait(*desired_states)
     Timeout.timeout(60) do
       loop do
-        states = self.service_states
+        states = service_states
         break if desired_states.include?(states[:current]) && states[:next].nil?
+
         Kernel.sleep(1)
       end
     end
   rescue Timeout::Error
-    raise Puppet::Error.new("Timed out waiting for #{@resource[:name]} to transition states")
+    raise Puppet::Error, "Timed out waiting for #{@resource[:name]} to transition states"
   end
 
   def start
@@ -185,7 +189,7 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   def restart
     # Wait for the service to actually start before returning.
     super
-    self.wait('online')
+    wait('online')
   end
 
   def status
@@ -202,29 +206,29 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
 
       # Get the current state and the next state. If there is a next state,
       # use that for the state comparison.
-      states = self.service_states
+      states = service_states
       state = states[:next] || states[:current]
-    rescue Puppet::ExecutionFailure
+    rescue Puppet::ExecutionFailure => e
       # TODO (PUP-8957): Should this be set back to INFO ?
-      debug "Could not get status on service #{self.name} #{$!}"
+      debug "Could not get status on service #{name} #{e}"
       return :stopped
     end
 
     case state
     when "online"
-      return :running
+      :running
     when "offline", "disabled", "uninitialized"
-      return :stopped
+      :stopped
     when "maintenance"
-      return :maintenance
+      :maintenance
     when "degraded"
-      return :degraded
+      :degraded
     when "legacy_run"
       raise Puppet::Error,
-        "Cannot manage legacy services through SMF"
+            "Cannot manage legacy services through SMF"
     else
       raise Puppet::Error,
-        "Unmanageable state '#{state}' on service #{self.name}"
+            "Unmanageable state '#{state}' on service #{name}"
     end
   end
 
@@ -234,8 +238,8 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   def maybe_clear_service_then_svcadm(cur_state, subcmd, flags)
     # If the cur_state is maint or degraded, then we need to clear the service
     # before we enable or disable it.
-    adm('clear', self.service_fmri) if [:maintenance, :degraded].include?(cur_state)
-    adm(subcmd, flags, self.service_fmri)
+    adm('clear', service_fmri) if [:maintenance, :degraded].include?(cur_state)
+    adm(subcmd, flags, service_fmri)
   end
 
   # The flush method is necessary for the SMF provider because syncing the enable and ensure
@@ -244,7 +248,8 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
   def flush
     # We append the "_" because ensure is a Ruby keyword, and it is good to keep property
     # variable names consistent with each other.
-    enable_, ensure_ = @properties_to_sync[:enable], @properties_to_sync[:ensure]
+    enable_ = @properties_to_sync[:enable]
+    ensure_ = @properties_to_sync[:ensure]
 
     # All of the relevant properties are in sync., so we do not need to do
     # anything here.
@@ -254,13 +259,13 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
     # simplifies the code. For a nonexistent service, one of enable or ensure will be true
     # here (since we're syncing them), so we can fail early if setup_service fails.
     setup_service
-    fmri = self.service_fmri
+    fmri = service_fmri
 
     # Useful constants for operations involving multiple states
-    stopped = ['offline', 'disabled', 'uninitialized']
+    stopped = %w[offline disabled uninitialized]
 
     # Get the current state of the service.
-    cur_state = self.status
+    cur_state = status
 
     if enable_.nil?
       # Only ensure needs to be syncd. The -t flag tells svcadm to temporarily
@@ -268,10 +273,10 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
       # reboot. This is exactly what we want, because we do not want to touch
       # the enable property.
       if ensure_ == :stopped
-        self.maybe_clear_service_then_svcadm(cur_state, 'disable', '-st')
+        maybe_clear_service_then_svcadm(cur_state, 'disable', '-st')
         wait(*stopped)
       else # ensure == :running
-        self.maybe_clear_service_then_svcadm(cur_state, 'enable', '-rst')
+        maybe_clear_service_then_svcadm(cur_state, 'enable', '-rst')
         wait('online')
       end
 
@@ -295,9 +300,9 @@ Puppet::Type.type(:service).provide :smf, :parent => :base do
     final_state = :running if final_state == :degraded
 
     if enable_
-      self.maybe_clear_service_then_svcadm(cur_state, 'enable', '-rs')
+      maybe_clear_service_then_svcadm(cur_state, 'enable', '-rs')
     else
-      self.maybe_clear_service_then_svcadm(cur_state, 'disable', '-s')
+      maybe_clear_service_then_svcadm(cur_state, 'disable', '-s')
     end
 
     # We're safe with 'whens' here since self.status already errors on any

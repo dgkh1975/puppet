@@ -1,13 +1,14 @@
+# frozen_string_literal: true
+
 require_relative 'param'
 
 module Puppet::Pops
 module Resource
-
 def self.register_ptypes(loader, ir)
   types = [Param, ResourceTypeImpl].map do |c|
     c.register_ptype(loader, ir)
   end
-  types.each {|t| t.resolve(loader) }
+  types.each { |t| t.resolve(loader) }
 end
 
 class ResourceTypeImpl
@@ -27,34 +28,34 @@ class ResourceTypeImpl
 
   def self.register_ptype(loader, ir)
     param_ref = Types::PTypeReferenceType.new('Puppet::Resource::Param')
-    @ptype = Pcore::create_object_type(loader, ir, self, 'Puppet::Resource::ResourceType3', nil,
-      {
-        Types::KEY_NAME => Types::PStringType::NON_EMPTY,
-        'properties' => {
-          Types::KEY_TYPE => Types::PArrayType.new(param_ref),
-          Types::KEY_VALUE => EMPTY_ARRAY
-        },
-        'parameters' => {
-          Types::KEY_TYPE => Types::PArrayType.new(param_ref),
-          Types::KEY_VALUE => EMPTY_ARRAY
-        },
-        'title_patterns_hash' => {
-          Types::KEY_TYPE => Types::POptionalType.new(
-            Types::PHashType.new(Types::PRegexpType::DEFAULT, Types::PArrayType.new(Types::PStringType::NON_EMPTY))),
-          Types::KEY_VALUE => nil
-        },
-        'isomorphic' => {
-          Types::KEY_TYPE => Types::PBooleanType::DEFAULT,
-          Types::KEY_VALUE => true
-        },
-        'capability' => {
-          Types::KEY_TYPE => Types::PBooleanType::DEFAULT,
-          Types::KEY_VALUE => false
-        },
-      },
-      EMPTY_HASH,
-      [Types::KEY_NAME]
-    )
+    @ptype = Pcore.create_object_type(loader, ir, self, 'Puppet::Resource::ResourceType3', nil,
+                                      {
+                                        Types::KEY_NAME => Types::PStringType::NON_EMPTY,
+                                        'properties' => {
+                                          Types::KEY_TYPE => Types::PArrayType.new(param_ref),
+                                          Types::KEY_VALUE => EMPTY_ARRAY
+                                        },
+                                        'parameters' => {
+                                          Types::KEY_TYPE => Types::PArrayType.new(param_ref),
+                                          Types::KEY_VALUE => EMPTY_ARRAY
+                                        },
+                                        'title_patterns_hash' => {
+                                          Types::KEY_TYPE => Types::POptionalType.new(
+                                            Types::PHashType.new(Types::PRegexpType::DEFAULT, Types::PArrayType.new(Types::PStringType::NON_EMPTY))
+                                          ),
+                                          Types::KEY_VALUE => nil
+                                        },
+                                        'isomorphic' => {
+                                          Types::KEY_TYPE => Types::PBooleanType::DEFAULT,
+                                          Types::KEY_VALUE => true
+                                        },
+                                        'capability' => {
+                                          Types::KEY_TYPE => Types::PBooleanType::DEFAULT,
+                                          Types::KEY_VALUE => false
+                                        },
+                                      },
+                                      EMPTY_HASH,
+                                      [Types::KEY_NAME])
   end
 
   def eql?(other)
@@ -72,8 +73,9 @@ class ResourceTypeImpl
     # Order is only maintained against other types, not arbitrary objects.
     # The natural order is based on the reference name used when comparing
     return nil unless other.is_a?(Puppet::CompilableResourceType)
+
     # against other type instances.
-    self.ref <=> other.ref
+    ref <=> other.ref
   end
 
   METAPARAMS = [
@@ -88,7 +90,7 @@ class ResourceTypeImpl
     :before,
     :notify,
     :stage
-    ].freeze
+  ].freeze
 
   # Speed up lookup
   METAPARAMSET = Set.new(METAPARAMS).freeze
@@ -116,7 +118,7 @@ class ResourceTypeImpl
     @attr_types = {}
 
     # Add all meta params
-    METAPARAMS.each {|p| @attr_types[p] = :meta }
+    METAPARAMS.each { |p| @attr_types[p] = :meta }
 
     @property_set = Set.new(properties.map do |p|
       symname = p.name.to_sym
@@ -148,12 +150,12 @@ class ResourceTypeImpl
         nil
       when 1
         if @title_patterns_hash.nil?
-          [ [ /(.*)/m, [ [@key_attributes.first] ] ] ]
+          [[/(.*)/m, [[@key_attributes.first]]]]
         else
           # TechDebt: The case of having one namevar and an empty title patterns is unspecified behavior in puppet.
           # Here, it may lead to an empty map which may or may not trigger the wanted/expected behavior.
           #
-          @title_patterns_hash.map { |k,v| [ k, v.map { |n| [ n.to_sym ] } ] }
+          @title_patterns_hash.map { |k, v| [k, v.map { |n| [n.to_sym] }] }
         end
       else
         if @title_patterns_hash.nil? || @title_patterns_hash.empty?
@@ -164,7 +166,8 @@ class ResourceTypeImpl
           #
           raise Puppet::DevError, _("you must specify title patterns when there are two or more key attributes")
         end
-        @title_patterns_hash.nil? ? [] : @title_patterns_hash.map { |k,v| [ k, v.map { |n| [ n.to_sym] } ] }
+
+        @title_patterns_hash.nil? ? [] : @title_patterns_hash.map { |k, v| [k, v.map { |n| [n.to_sym] }] }
       end
   end
 
@@ -187,7 +190,7 @@ class ResourceTypeImpl
   #
   # This implementation does nothing - it is assumed that the catalog is already validated
   # via the relationship validator (done late in the game).
-  def finish()
+  def finish
     # Do nothing.
   end
 
@@ -201,16 +204,16 @@ class ResourceTypeImpl
     # This is what the Puppet::Type implementation does
     # None of this should be needed
 
-      #    # Make sure our parent class has been evaluated, if we have one.
-      #    if parent && !scope.catalog.resource(resource.type, parent)
-      #      parent_type(scope).ensure_in_catalog(scope)
-      #    end
+    #    # Make sure our parent class has been evaluated, if we have one.
+    #    if parent && !scope.catalog.resource(resource.type, parent)
+    #      parent_type(scope).ensure_in_catalog(scope)
+    #    end
 
     # This will never happen
 
-      #    if ['Class', 'Node'].include? resource.type
-      #      scope.catalog.tag(*resource.tags)
-      #    end
+    #    if ['Class', 'Node'].include? resource.type
+    #      scope.catalog.tag(*resource.tags)
+    #    end
   end
 
   # Being isomorphic in puppet means that the resource is managing a state
@@ -288,7 +291,6 @@ class ResourceTypeImpl
   def can_apply_to_target(target)
     raise NotImplementedError, "can_apply_to_target() - probably used when selecting a provider (device/host support)"
   end
-
 end
 end
 end

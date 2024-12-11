@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Targetable package providers implement a `command` attribute.
 #
 # The `packages` hash passed to `Puppet::Provider::Package::prefetch` is deduplicated,
@@ -25,14 +27,14 @@ require_relative '../../puppet/provider/package'
 class Puppet::Provider::Package::Targetable < Puppet::Provider::Package
   # Prefetch our package list, yo.
   def self.prefetch(packages)
-    catalog_packages = packages.values.first.catalog.resources.select{ |p| p.provider.class == self }
-    package_commands = catalog_packages.map { |catalog_package| catalog_package::original_parameters[:command] }.uniq
+    catalog_packages = packages.values.first.catalog.resources.select { |p| p.provider.instance_of?(self) }
+    package_commands = catalog_packages.map { |catalog_package| catalog_package.original_parameters[:command] }.uniq
     package_commands.each do |command|
       instances(command).each do |instance|
         catalog_packages.each do |catalog_package|
           if catalog_package[:name] == instance.name && catalog_package.original_parameters[:command] == command
             catalog_package.provider = instance
-            self.debug "Prefetched instance: %{name} via command: %{cmd}" % { name: instance.name, cmd: (command || :default) }
+            debug "Prefetched instance: %{name} via command: %{cmd}" % { name: instance.name, cmd: command || :default }
           end
         end
       end

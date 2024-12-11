@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Complies with Proc API by mapping a Puppet::Pops::Evaluator::Closure to a ruby Proc.
 # Creating and passing an instance of this class instead of just a plain block makes
 # it possible to inherit the parameter info and arity from the closure. Advanced users
@@ -47,11 +49,11 @@ class Puppet::Pops::Evaluator::PuppetProc < Proc
     @closure.parameters.map do |param|
       sym = param.name.to_sym
       if param.captures_rest
-        [ :rest, sym ]
+        [:rest, sym]
       elsif param.value
-        [ :opt, sym ]
+        [:opt, sym]
       else
-        [ :req, sym ]
+        [:req, sym]
       end
     end
   end
@@ -63,6 +65,7 @@ class Puppet::Pops::Evaluator::PuppetProc < Proc
     parameters.reduce(0) do |memo, param|
       count = memo + 1
       break -count unless param[0] == :req
+
       count
     end
   end

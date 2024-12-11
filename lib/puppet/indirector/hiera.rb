@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/terminus'
 require 'hiera/scope'
 
@@ -7,10 +9,11 @@ require 'hiera/scope'
 # Use `Puppet::DataBinding.indirection.terminus(:hiera)` instead.
 class Puppet::Indirector::Hiera < Puppet::Indirector::Terminus
   def initialize(*args)
-    if ! Puppet.features.hiera?
-      #TRANSLATORS "Hiera" is the name of a code library and should not be translated
+    unless Puppet.features.hiera?
+      # TRANSLATORS "Hiera" is the name of a code library and should not be translated
       raise _("Hiera terminus not supported without hiera library")
     end
+
     super
   end
 
@@ -41,8 +44,7 @@ class Puppet::Indirector::Hiera < Puppet::Indirector::Terminus
   # @return [Symbol,Hash,nil] The Hiera 'resolution_type'
   def convert_merge(merge)
     case merge
-    when nil
-    when 'first'
+    when nil, 'first'
       # Nil is OK. Defaults to Hiera :priority
       nil
     when Puppet::Pops::MergeStrategy
@@ -62,13 +64,13 @@ class Puppet::Indirector::Hiera < Puppet::Indirector::Terminus
       if strategy == 'deep'
         result = { :behavior => :deeper }
         # Remaining entries must have symbolic keys
-        merge.each_pair { |k,v| result[k.to_sym] = v unless k == 'strategy' }
+        merge.each_pair { |k, v| result[k.to_sym] = v unless k == 'strategy' }
         result
       else
         convert_merge(strategy)
       end
     else
-      #TRANSLATORS "merge" is a parameter name and should not be translated
+      # TRANSLATORS "merge" is a parameter name and should not be translated
       raise Puppet::DataBinding::LookupError, _("Unrecognized value for request 'merge' parameter: '%{merge}'") % { merge: merge }
     end
   end
@@ -97,4 +99,3 @@ class Puppet::Indirector::Hiera < Puppet::Indirector::Terminus
     self.class.hiera
   end
 end
-

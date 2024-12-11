@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Daemontools service management
 #
 # author Brice Figureau <brice-puppet@daysofwonder.com>
@@ -39,7 +41,7 @@ Puppet::Type.type(:service).provide :daemontools, :parent => :base do
 
   EOT
 
-  commands :svc  => "/usr/bin/svc", :svstat => "/usr/bin/svstat"
+  commands :svc => "/usr/bin/svc", :svstat => "/usr/bin/svstat"
 
   class << self
     attr_writer :defpath
@@ -58,9 +60,9 @@ Puppet::Type.type(:service).provide :daemontools, :parent => :base do
   # returns all providers for all existing services in @defpath
   # ie enabled or not
   def self.instances
-    path = self.defpath
+    path = defpath
     unless path
-      Puppet.info("#{self.name} is unsuitable because service directory is nil")
+      Puppet.info("#{name} is unsuitable because service directory is nil")
       return
     end
     unless FileTest.directory?(path)
@@ -72,7 +74,7 @@ Puppet::Type.type(:service).provide :daemontools, :parent => :base do
     # or don't contain a run file
     Dir.entries(path).reject { |e|
       fullpath = File.join(path, e)
-      e =~ /^\./ or ! FileTest.directory?(fullpath) or ! Puppet::FileSystem.exist?(File.join(fullpath,"run"))
+      e =~ /^\./ or !FileTest.directory?(fullpath) or !Puppet::FileSystem.exist?(File.join(fullpath, "run"))
     }.collect do |name|
       new(:name => name, :path => path)
     end
@@ -80,13 +82,13 @@ Puppet::Type.type(:service).provide :daemontools, :parent => :base do
 
   # returns the daemon dir on this node
   def self.daemondir
-    self.defpath
+    defpath
   end
 
   # find the service dir on this node
   def servicedir
     unless @servicedir
-      ["/service", "/etc/service","/var/lib/svscan"].each do |path|
+      ["/service", "/etc/service", "/var/lib/svscan"].each do |path|
         if Puppet::FileSystem.exist?(path)
           @servicedir = path
           break
@@ -100,7 +102,7 @@ Puppet::Type.type(:service).provide :daemontools, :parent => :base do
   # returns the full path of this service when enabled
   # (ie in the service directory)
   def service
-    File.join(self.servicedir, resource[:name])
+    File.join(servicedir, resource[:name])
   end
 
   # returns the full path to the current daemon directory
@@ -108,86 +110,87 @@ Puppet::Type.type(:service).provide :daemontools, :parent => :base do
   # definition
   def daemon
     path = resource[:path]
-    raise Puppet::Error.new("#{self.class.name} must specify a path for daemon directory") unless path
+    raise Puppet::Error, "#{self.class.name} must specify a path for daemon directory" unless path
+
     File.join(path, resource[:name])
   end
 
   def status
     begin
-      output = svstat self.service
+      output = svstat service
       if output =~ /:\s+up \(/
         return :running
       end
     rescue Puppet::ExecutionFailure => detail
-      raise Puppet::Error.new( "Could not get status for service #{resource.ref}: #{detail}", detail)
+      raise Puppet::Error.new("Could not get status for service #{resource.ref}: #{detail}", detail)
     end
     :stopped
   end
 
   def setupservice
-      if resource[:manifest]
-        Puppet.notice "Configuring #{resource[:name]}"
-        command = [ resource[:manifest], resource[:name] ]
-        system("#{command}")
-      end
+    if resource[:manifest]
+      Puppet.notice "Configuring #{resource[:name]}"
+      command = [resource[:manifest], resource[:name]]
+      system(command.to_s)
+    end
   rescue Puppet::ExecutionFailure => detail
-      raise Puppet::Error.new( "Cannot config #{self.service} to enable it: #{detail}", detail)
+    raise Puppet::Error.new("Cannot config #{service} to enable it: #{detail}", detail)
   end
 
   def enabled?
-    case self.status
+    case status
     when :running
       # obviously if the daemon is running then it is enabled
-      return :true
+      :true
     else
       # the service is enabled if it is linked
-      return Puppet::FileSystem.symlink?(self.service) ? :true : :false
+      Puppet::FileSystem.symlink?(service) ? :true : :false
     end
   end
 
   def enable
-    if ! FileTest.directory?(self.daemon)
+    unless FileTest.directory?(daemon)
       Puppet.notice "No daemon dir, calling setupservice for #{resource[:name]}"
-      self.setupservice
+      setupservice
     end
-    if self.daemon
-      if ! Puppet::FileSystem.symlink?(self.service)
-        Puppet.notice "Enabling #{self.service}: linking #{self.daemon} -> #{self.service}"
-        Puppet::FileSystem.symlink(self.daemon, self.service)
+    if daemon
+      unless Puppet::FileSystem.symlink?(service)
+        Puppet.notice "Enabling #{service}: linking #{daemon} -> #{service}"
+        Puppet::FileSystem.symlink(daemon, service)
       end
     end
-rescue Puppet::ExecutionFailure
-    raise Puppet::Error.new( "No daemon directory found for #{self.service}", $!)
+  rescue Puppet::ExecutionFailure => e
+    raise Puppet::Error.new("No daemon directory found for #{service}", e)
   end
 
   def disable
     begin
-      if ! FileTest.directory?(self.daemon)
+      unless FileTest.directory?(daemon)
         Puppet.notice "No daemon dir, calling setupservice for #{resource[:name]}"
-        self.setupservice
+        setupservice
       end
-      if self.daemon
-        if Puppet::FileSystem.symlink?(self.service)
-          Puppet.notice "Disabling #{self.service}: removing link #{self.daemon} -> #{self.service}"
-          Puppet::FileSystem.unlink(self.service)
+      if daemon
+        if Puppet::FileSystem.symlink?(service)
+          Puppet.notice "Disabling #{service}: removing link #{daemon} -> #{service}"
+          Puppet::FileSystem.unlink(service)
         end
       end
-    rescue Puppet::ExecutionFailure
-      raise Puppet::Error.new( "No daemon directory found for #{self.service}", $!)
+    rescue Puppet::ExecutionFailure => e
+      raise Puppet::Error.new("No daemon directory found for #{service}", e)
     end
-    self.stop
+    stop
   end
 
   def restart
-    svc "-t", self.service
+    svc "-t", service
   end
 
   def start
     enable unless enabled? == :true
-    svc "-u", self.service
+    svc "-u", service
   end
 
   def stop
-    svc "-d", self.service
+    svc "-d", service
   end
 end

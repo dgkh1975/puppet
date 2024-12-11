@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/transaction/report'
 require_relative '../../../puppet/indirector/json'
 
@@ -7,7 +9,7 @@ class Puppet::Transaction::Report::Json < Puppet::Indirector::JSON
   desc "Store last report as a flat file, serialized using JSON."
 
   # Force report to be saved there
-  def path(name,ext='.json')
+  def path(name, ext = '.json')
     Puppet[:lastrunreport]
   end
 
@@ -28,7 +30,7 @@ class Puppet::Transaction::Report::Json < Puppet::Indirector::JSON
         fh.print JSON.dump(request.instance)
       end
     rescue TypeError => detail
-      Puppet.err _("Could not save %{indirection} %{request}: %{detail}") % { indirection: self.name, request: request.key, detail: detail }
+      Puppet.err _("Could not save %{indirection} %{request}: %{detail}") % { indirection: name, request: request.key, detail: detail }
     end
   end
 end

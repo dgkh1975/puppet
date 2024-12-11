@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Util::Watcher
   require_relative 'watcher/timer'
   require_relative 'watcher/change_watcher'
@@ -6,11 +8,9 @@ module Puppet::Util::Watcher
   module Common
     def self.file_ctime_change_watcher(filename)
       Puppet::Util::Watcher::ChangeWatcher.watch(lambda do
-        begin
-          Puppet::FileSystem.stat(filename).ctime
-        rescue Errno::ENOENT, Errno::ENOTDIR
-          :absent
-        end
+        Puppet::FileSystem.stat(filename).ctime
+      rescue Errno::ENOENT, Errno::ENOTDIR
+        :absent
       end)
     end
   end

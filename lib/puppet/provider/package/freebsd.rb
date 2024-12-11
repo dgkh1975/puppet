@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:package).provide :freebsd, :parent => :openbsd do
   desc "The specific form of package management on FreeBSD.  This is an
     extremely quirky packaging system, in that it freely mixes between
@@ -6,17 +8,17 @@ Puppet::Type.type(:package).provide :freebsd, :parent => :openbsd do
     libraries."
 
   commands :pkginfo => "/usr/sbin/pkg_info",
-    :pkgadd => "/usr/sbin/pkg_add",
-    :pkgdelete => "/usr/sbin/pkg_delete"
+           :pkgadd => "/usr/sbin/pkg_add",
+           :pkgdelete => "/usr/sbin/pkg_delete"
 
-  confine :operatingsystem => :freebsd
+  confine 'os.name' => :freebsd
 
   def self.listcmd
     command(:pkginfo)
   end
 
   def install
-    if @resource[:source] =~ /\/$/
+    if @resource[:source] =~ %r{/$}
       if @resource[:source] =~ /^(ftp|https?):/
         Puppet::Util.withenv :PACKAGESITE => @resource[:source] do
           pkgadd "-r", @resource[:name]

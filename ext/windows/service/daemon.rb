@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'fileutils'
 require 'puppet/util/windows/daemon'
@@ -12,12 +13,12 @@ require 'puppet/util/windows/eventlog'
 require 'puppet/util/windows/monkey_patches/process'
 
 class WindowsDaemon < Puppet::Util::Windows::Daemon
-  CREATE_NEW_CONSOLE          = 0x00000010
+  CREATE_NEW_CONSOLE = 0x00000010
 
   @run_thread = nil
   @LOG_TO_FILE = false
   @loglevel = 0
-  LOG_FILE =  File.expand_path(File.join(ENV['ALLUSERSPROFILE'], 'PuppetLabs', 'puppet', 'var', 'log', 'windows.log'))
+  LOG_FILE =  File.expand_path(File.join(ENV.fetch('ALLUSERSPROFILE', nil), 'PuppetLabs', 'puppet', 'var', 'log', 'windows.log'))
   LEVELS = [:debug, :info, :notice, :warning, :err, :alert, :emerg, :crit]
   LEVELS.each do |level|
     define_method("log_#{level}") do |msg|
@@ -35,9 +36,9 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
 
     @LOG_TO_FILE = (argsv.index('--logtofile') ? true : false)
 
-    if (@LOG_TO_FILE)
+    if @LOG_TO_FILE
       FileUtils.mkdir_p(File.dirname(LOG_FILE))
-      args = args.gsub("--logtofile","")
+      args = args.gsub("--logtofile", "")
     end
 
     base_dir = File.expand_path(File.join(File.dirname(__FILE__), '..'))
@@ -48,7 +49,7 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
     #
     # Example code to register an event source;
     # eventlogdll =  File.expand_path(File.join(basedir, 'puppet', 'ext', 'windows', 'eventlog', 'puppetres.dll'))
-    # if (File.exists?(eventlogdll))
+    # if (File.exist?(eventlogdll))
     #   Win32::EventLog.add_event_source(
     #      'source' => "Application",
     #      'key_name' => "Puppet Agent",
@@ -74,28 +75,25 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
 
     service = self
     @run_thread = Thread.new do
-      begin
-        while service.running? do
-          runinterval = service.parse_runinterval(ruby_puppet_cmd)
+      while service.running?
+        runinterval = service.parse_runinterval(ruby_puppet_cmd)
 
-          if service.state == RUNNING or service.state == IDLE
-            service.log_notice("Executing agent with arguments: #{args}")
-            pid = Process.create(:command_line => "#{ruby_puppet_cmd} agent --onetime #{args}", :creation_flags => CREATE_NEW_CONSOLE).process_id
-            service.log_debug("Process created: #{pid}")
-          else
-            service.log_debug("Service is paused.  Not invoking Puppet agent")
-          end
-
-          service.log_debug("Service worker thread waiting for #{runinterval} seconds")
-          sleep(runinterval)
-          service.log_debug('Service worker thread woken up')
+        if service.state == RUNNING or service.state == IDLE
+          service.log_notice("Executing agent with arguments: #{args}")
+          pid = Process.create(:command_line => "#{ruby_puppet_cmd} agent --onetime #{args}", :creation_flags => CREATE_NEW_CONSOLE).process_id
+          service.log_debug("Process created: #{pid}")
+        else
+          service.log_debug("Service is paused.  Not invoking Puppet agent")
         end
-      rescue Exception => e
-        service.log_exception(e)
+
+        service.log_debug("Service worker thread waiting for #{runinterval} seconds")
+        sleep(runinterval)
+        service.log_debug('Service worker thread woken up')
       end
+    rescue Exception => e
+      service.log_exception(e)
     end
     @run_thread.join
-
   rescue Exception => e
     log_exception(e)
   ensure
@@ -131,7 +129,7 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
 
   def log(msg, level)
     if LEVELS.index(level) >= @loglevel
-      if (@LOG_TO_FILE)
+      if @LOG_TO_FILE
         # without this change its possible that we get Encoding errors trying to write UTF-8 messages in current codepage
         File.open(LOG_FILE, 'a:UTF-8') { |f| f.puts("#{Time.now} Puppet (#{level}): #{msg}") }
       end
@@ -141,30 +139,35 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
     end
   end
 
-  def report_windows_event(type,id,message)
-    begin
-      eventlog = nil
-      eventlog = Puppet::Util::Windows::EventLog.open("Puppet")
-      eventlog.report_event(
-        :event_type  => type,   # EVENTLOG_ERROR_TYPE, etc
-        :event_id    => id,     # 0x01 or 0x02, 0x03 etc.
-        :data        => message # "the message"
-      )
-    rescue Exception
-      # Ignore all errors
-    ensure
-      if (!eventlog.nil?)
-        eventlog.close
-      end
+  def report_windows_event(type, id, message)
+    eventlog = nil
+    eventlog = Puppet::Util::Windows::EventLog.open("Puppet")
+    eventlog.report_event(
+      :event_type => type, # EVENTLOG_ERROR_TYPE, etc
+      :event_id => id, # 0x01 or 0x02, 0x03 etc.
+      :data => message # "the message"
+    )
+  rescue Exception
+    # Ignore all errors
+  ensure
+    unless eventlog.nil?
+      eventlog.close
     end
   end
 
+  # Parses runinterval.
+  #
+  # @param puppet_path [String] The file path for the Puppet executable.
+  # @return runinterval [Integer] How often to do a Puppet run, in seconds.
   def parse_runinterval(puppet_path)
     begin
-      runinterval = %x{ #{puppet_path} config --section agent --log_level notice print runinterval }.to_i
-      if runinterval == 0
+      runinterval = %x(#{puppet_path} config --section agent --log_level notice print runinterval).chomp
+      if runinterval == ''
         runinterval = 1800
         log_err("Failed to determine runinterval, defaulting to #{runinterval} seconds")
+      else
+        # Use Kernel#Integer because to_i will return 0 with non-numeric strings.
+        runinterval = Integer(runinterval)
       end
     rescue Exception => e
       log_exception(e)
@@ -174,9 +177,9 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
     runinterval
   end
 
-  def parse_log_level(puppet_path,cmdline_debug)
+  def parse_log_level(puppet_path, cmdline_debug)
     begin
-      loglevel = %x{ #{puppet_path} config --section agent --log_level notice print log_level }.chomp
+      loglevel = "notice"
       unless loglevel && respond_to?("log_#{loglevel}")
         loglevel = :notice
         log_err("Failed to determine loglevel, defaulting to #{loglevel}")
@@ -186,33 +189,31 @@ class WindowsDaemon < Puppet::Util::Windows::Daemon
       loglevel = :notice
     end
 
-    LEVELS.index(cmdline_debug ? cmdline_debug : loglevel.to_sym)
+    LEVELS.index(cmdline_debug || loglevel.to_sym)
   end
 
   private
 
   def load_env(base_dir)
-    begin
-      # ENV that uses backward slashes
-      ENV['FACTER_env_windows_installdir'] = base_dir.tr('/', '\\')
-      ENV['PL_BASEDIR'] = base_dir.tr('/', '\\')
-      ENV['PUPPET_DIR'] = File.join(base_dir, 'puppet').tr('/', '\\')
-      ENV['OPENSSL_CONF'] = File.join(base_dir, 'puppet', 'ssl', 'openssl.cnf').tr('/', '\\')
-      ENV['SSL_CERT_DIR'] = File.join(base_dir, 'puppet', 'ssl', 'certs').tr('/', '\\')
-      ENV['SSL_CERT_FILE'] = File.join(base_dir, 'puppet', 'ssl', 'cert.pem').tr('/', '\\')
-      ENV['Path'] = [
-        File.join(base_dir, 'puppet', 'bin'),
-        File.join(base_dir, 'bin'),
-      ].join(';').tr('/', '\\') + ';' + ENV['Path']
+    # ENV that uses backward slashes
+    ENV['FACTER_env_windows_installdir'] = base_dir.tr('/', '\\')
+    ENV['PL_BASEDIR'] = base_dir.tr('/', '\\')
+    ENV['PUPPET_DIR'] = File.join(base_dir, 'puppet').tr('/', '\\')
+    ENV['OPENSSL_CONF'] = File.join(base_dir, 'puppet', 'ssl', 'openssl.cnf').tr('/', '\\')
+    ENV['SSL_CERT_DIR'] = File.join(base_dir, 'puppet', 'ssl', 'certs').tr('/', '\\')
+    ENV['SSL_CERT_FILE'] = File.join(base_dir, 'puppet', 'ssl', 'cert.pem').tr('/', '\\')
+    ENV['Path'] = [
+      File.join(base_dir, 'puppet', 'bin'),
+      File.join(base_dir, 'bin')
+    ].join(';').tr('/', '\\') + ';' + ENV.fetch('Path', nil)
 
-      # ENV that uses forward slashes
-      ENV['RUBYLIB'] = "#{File.join(base_dir, 'puppet','lib')};#{ENV['RUBYLIB']}"
-    rescue => e
-      log_exception(e)
-    end
+    # ENV that uses forward slashes
+    ENV['RUBYLIB'] = "#{File.join(base_dir, 'puppet', 'lib')};#{ENV.fetch('RUBYLIB', nil)}"
+  rescue => e
+    log_exception(e)
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   WindowsDaemon.mainloop
 end

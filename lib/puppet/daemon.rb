@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/application'
 require_relative '../puppet/scheduler'
 
@@ -24,6 +26,7 @@ class Puppet::Daemon
 
   def initialize(agent, pidfile, scheduler = Puppet::Scheduler::Scheduler.new())
     raise Puppet::DevError, _("Daemons must have an agent") unless agent
+
     @scheduler = scheduler
     @pidfile = pidfile
     @agent = agent
@@ -55,7 +58,7 @@ class Puppet::Daemon
 
   # Close stdin/stdout/stderr so that we can finish our transition into 'daemon' mode.
   # @return nil
-  def self.close_streams()
+  def self.close_streams
     Puppet.debug("Closing streams for daemon mode")
     begin
       $stdin.reopen "/dev/null"
@@ -65,7 +68,7 @@ class Puppet::Daemon
       Puppet.debug("Finished closing streams for daemon mode")
     rescue => detail
       Puppet.err "Could not start #{Puppet.run_mode.name}: #{detail}"
-      Puppet::Util::replace_file("/tmp/daemonout", 0644) do |f|
+      Puppet::Util.replace_file("/tmp/daemonout", 0o644) do |f|
         f.puts "Could not start #{Puppet.run_mode.name}: #{detail}"
       end
       exit(12)
@@ -73,20 +76,21 @@ class Puppet::Daemon
   end
 
   # Convenience signature for calling Puppet::Daemon.close_streams
-  def close_streams()
+  def close_streams
     Puppet::Daemon.close_streams
   end
 
   def reexec
     raise Puppet::DevError, _("Cannot reexec unless ARGV arguments are set") unless argv
-    command = $0 + " " + argv.join(" ")
+
+    command = $PROGRAM_NAME + " " + argv.join(" ")
     Puppet.notice "Restarting with '#{command}'"
     stop(:exit => false)
     exec(command)
   end
 
   def reload
-    agent.run({:splay => false})
+    agent.run({ :splay => false })
   rescue Puppet::LockError
     Puppet.notice "Not triggering already-running agent"
   end
@@ -111,8 +115,8 @@ class Puppet::Daemon
     end
 
     # extended signals not supported under windows
-    if !Puppet::Util::Platform.windows?
-      signals = {:HUP => :restart, :USR1 => :reload, :USR2 => :reopen_logs }
+    unless Puppet::Util::Platform.windows?
+      signals = { :HUP => :restart, :USR1 => :reload, :USR2 => :reopen_logs }
       signals.each do |signal, method|
         Signal.trap(signal) do
           Puppet.notice "Caught #{signal}; storing #{method}"
@@ -123,7 +127,7 @@ class Puppet::Daemon
   end
 
   # Stop everything
-  def stop(args = {:exit => true})
+  def stop(args = { :exit => true })
     Puppet::Application.stop!
 
     remove_pidfile
@@ -153,7 +157,15 @@ class Puppet::Daemon
 
   # Loop forever running events - or, at least, until we exit.
   def run_event_loop
-    agent_run = Puppet::Scheduler.create_job(Puppet[:runinterval], Puppet[:splay], Puppet[:splaylimit]) do
+    splaylimit = Puppet[:splay] ? Puppet[:splaylimit] : 0
+
+    agent_run = Puppet::Scheduler.create_job(Puppet[:runinterval], true, splaylimit) do |job|
+      if job.splay != 0
+        Puppet.info "Running agent every #{job.run_interval} seconds with splay #{job.splay} of #{job.splay_limit} seconds"
+      else
+        Puppet.info "Running agent every #{job.run_interval} seconds"
+      end
+
       # Splay for the daemon is handled in the scheduler
       agent.run(:splay => false)
     end
@@ -161,6 +173,9 @@ class Puppet::Daemon
     reparse_run = Puppet::Scheduler.create_job(Puppet[:filetimeout]) do
       Puppet.settings.reparse_config_files
       agent_run.run_interval = Puppet[:runinterval]
+      # Puppet[:splaylimit] defaults to Puppet[:runinterval] so if runinterval
+      # changes, but splaylimit doesn't, we'll still recalculate splay
+      agent_run.splay_limit = Puppet[:splay] ? Puppet[:splaylimit] : 0
       if Puppet[:filetimeout] == 0
         reparse_run.disable
       else
@@ -169,7 +184,7 @@ class Puppet::Daemon
     end
 
     signal_loop = Puppet::Scheduler.create_job(SIGNAL_CHECK_INTERVAL) do
-      while method = @signals.shift #rubocop:disable Lint/AssignmentInCondition
+      while method = @signals.shift # rubocop:disable Lint/AssignmentInCondition
         Puppet.notice "Processing #{method}"
         send(method)
       end
@@ -177,6 +192,7 @@ class Puppet::Daemon
 
     reparse_run.disable if Puppet[:filetimeout] == 0
 
+    # these are added in a different order than they are defined
     @scheduler.run_loop([reparse_run, agent_run, signal_loop])
   end
 end

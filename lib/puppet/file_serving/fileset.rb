@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'find'
 require_relative '../../puppet/file_serving'
 require_relative '../../puppet/file_serving/metadata'
@@ -27,11 +29,11 @@ class Puppet::FileServing::Fileset
   def initialize(path, options = {})
     if Puppet::Util::Platform.windows?
       # REMIND: UNC path
-      path = path.chomp(File::SEPARATOR) unless path =~ /^[A-Za-z]:\/$/
+      path = path.chomp(File::SEPARATOR) unless path =~ %r{^[A-Za-z]:/$}
     else
       path = path.chomp(File::SEPARATOR) unless path == File::SEPARATOR
     end
-    raise ArgumentError.new(_("Fileset paths must be fully qualified: %{path}") % { path: path }) unless Puppet::Util.absolute_path?(path)
+    raise ArgumentError, _("Fileset paths must be fully qualified: %{path}") % { path: path } unless Puppet::Util.absolute_path?(path)
 
     @path = path
 
@@ -48,9 +50,9 @@ class Puppet::FileServing::Fileset
       initialize_from_hash(options)
     end
 
-    raise ArgumentError.new(_("Fileset paths must exist")) unless valid?(path)
-    #TRANSLATORS "recurse" and "recurselimit" are parameter names and should not be translated
-    raise ArgumentError.new(_("Fileset recurse parameter must not be a number anymore, please use recurselimit")) if @recurse.is_a?(Integer)
+    raise ArgumentError, _("Fileset paths must exist") unless valid?(path)
+    # TRANSLATORS "recurse" and "recurselimit" are parameter names and should not be translated
+    raise ArgumentError, _("Fileset recurse parameter must not be a number anymore, please use recurselimit") if @recurse.is_a?(Integer)
   end
 
   # Return a list of all files in our fileset.  This is different from the
@@ -66,7 +68,7 @@ class Puppet::FileServing::Fileset
     munged_max_files = max_files == '-1' ? -1 : max_files
 
     if munged_max_files > 0 && files.size > munged_max_files
-      raise Puppet::Error.new _("The directory '%{path}' contains %{entries} entries, which exceeds the limit of %{munged_max_files} specified by the max_files parameter for this resource. The limit may be increased, but be aware that large number of file resources can result in excessive resource consumption and degraded performance. Consider using an alternate method to manage large directory trees") % { path: path, entries: files.size, munged_max_files: munged_max_files }
+      raise Puppet::Error, _("The directory '%{path}' contains %{entries} entries, which exceeds the limit of %{munged_max_files} specified by the max_files parameter for this resource. The limit may be increased, but be aware that large number of file resources can result in excessive resource consumption and degraded performance. Consider using an alternate method to manage large directory trees") % { path: path, entries: files.size, munged_max_files: munged_max_files }
     elsif munged_max_files == 0 && files.size > soft_max_files
       Puppet.warning _("The directory '%{path}' contains %{entries} entries, which exceeds the default soft limit %{soft_max_files} and may cause excessive resource consumption and degraded performance. To remove this warning set a value for `max_files` parameter or consider using an alternate method to manage large directory trees") % { path: path, entries: files.size, soft_max_files: soft_max_files }
     end
@@ -88,8 +90,9 @@ class Puppet::FileServing::Fileset
 
   def links=(links)
     links = links.to_sym
-    #TRANSLATORS ":links" is a parameter name and should not be translated
+    # TRANSLATORS ":links" is a parameter name and should not be translated
     raise(ArgumentError, _("Invalid :links value '%{links}'") % { links: links }) unless [:manage, :follow].include?(links)
+
     @links = links
     @stat_method = @links == :manage ? :lstat : :stat
   end
@@ -101,8 +104,8 @@ class Puppet::FileServing::Fileset
       method = option.to_s + "="
       begin
         send(method, value)
-      rescue NoMethodError
-        raise ArgumentError, _("Invalid option '%{option}'") % { option: option }, $!.backtrace
+      rescue NoMethodError => e
+        raise ArgumentError, _("Invalid option '%{option}'") % { option: option }, e.backtrace
       end
     end
   end
@@ -115,6 +118,7 @@ class Puppet::FileServing::Fileset
         value = request.options[param.to_s]
       end
       next if value.nil?
+
       value = true if value == "true"
       value = false if value == "false"
       value = Integer(value) if value.is_a?(String) and value =~ /^\d+$/
@@ -134,9 +138,9 @@ class Puppet::FileServing::Fileset
     def children
       return [] unless directory?
 
-      Dir.entries(path, encoding: Encoding::UTF_8).
-        reject { |child| ignore?(child) }.
-        collect { |child| down_level(child) }
+      Dir.entries(path, encoding: Encoding::UTF_8)
+         .reject { |child| ignore?(child) }
+         .collect { |child| down_level(child) }
     end
 
     def ignore?(child)
@@ -160,12 +164,12 @@ class Puppet::FileServing::Fileset
 
     result = []
 
-    while entry = current_dirs.shift #rubocop:disable Lint/AssignmentInCondition
-      if continue_recursion_at?(entry.depth + 1)
-        entry.children.each do |child|
-          result << child.path
-          current_dirs << child
-        end
+    while entry = current_dirs.shift # rubocop:disable Lint/AssignmentInCondition
+      next unless continue_recursion_at?(entry.depth + 1)
+
+      entry.children.each do |child|
+        result << child.path
+        current_dirs << child
       end
     end
 
@@ -181,6 +185,6 @@ class Puppet::FileServing::Fileset
 
   def continue_recursion_at?(depth)
     # recurse if told to, and infinite recursion or current depth not at the limit
-    self.recurse && (self.recurselimit == :infinite || depth <= self.recurselimit)
+    recurse && (recurselimit == :infinite || depth <= recurselimit)
   end
 end

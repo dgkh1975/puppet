@@ -97,6 +97,22 @@ describe Puppet::Util::RunMode do
         end
       end
     end
+
+    describe "#pkg_config_path" do
+      it { expect(@run_mode.pkg_config_path).to eq('/opt/puppetlabs/puppet/lib/pkgconfig') }
+    end
+
+    describe "#gem_cmd" do
+      it { expect(@run_mode.gem_cmd).to eq('/opt/puppetlabs/puppet/bin/gem') }
+    end
+
+    describe "#common_module_dir" do
+      it { expect(@run_mode.common_module_dir).to eq('/opt/puppetlabs/puppet/modules') }
+    end
+
+    describe "#vendor_module_dir" do
+      it { expect(@run_mode.vendor_module_dir).to eq('/opt/puppetlabs/puppet/vendor_modules') }
+    end
   end
 
   describe Puppet::Util::WindowsRunMode, :if => Puppet::Util::Platform.windows? do
@@ -172,27 +188,78 @@ describe Puppet::Util::RunMode do
       end
     end
 
-    describe "#without_env internal helper with UTF8 characters" do
-      let(:varname) { "\u16A0\u16C7\u16BB\u16EB\u16D2\u16E6\u16A6\u16EB\u16A0\u16B1\u16A9\u16A0\u16A2\u16B1\u16EB\u16A0\u16C1\u16B1\u16AA\u16EB\u16B7\u16D6\u16BB\u16B9\u16E6\u16DA\u16B3\u16A2\u16D7" }
-      let(:rune_utf8) { "\u16A0\u16C7\u16BB\u16EB\u16D2\u16E6\u16A6\u16EB\u16A0\u16B1\u16A9\u16A0\u16A2\u16B1\u16EB\u16A0\u16C1\u16B1\u16AA\u16EB\u16B7\u16D6\u16BB\u16B9\u16E6\u16DA\u16B3\u16A2\u16D7" }
-
+    describe '#gem_cmd' do
       before do
-        Puppet::Util::Windows::Process.set_environment_variable(varname, rune_utf8)
+        allow(ENV).to receive(:fetch).and_call_original
+        allow(ENV).to receive(:fetch).with('PUPPET_DIR', nil).and_return(puppetdir)
       end
 
-      it "removes environment variables within the block with UTF8 name" do
-        without_env(varname) do
-          expect(ENV[varname]).to be(nil)
+      context 'when PUPPET_DIR is not set' do
+        let(:puppetdir) { nil }
+
+        before do
+          allow(Gem).to receive(:default_bindir).and_return('default_gem_bin')
+        end
+
+        it 'uses Gem.default_bindir' do
+          expected_path = File.join('default_gem_bin', 'gem.bat')
+          expect(@run_mode.gem_cmd).to eql(expected_path)
         end
       end
 
-      it "restores UTF8 characters in environment variable values" do
-        without_env(varname) do
-          Puppet::Util::Windows::Process.set_environment_variable(varname, 'bad value')
-        end
+      context 'when PUPPET_DIR is set' do
+        let(:puppetdir) { 'puppet_dir' }
 
-        envhash = Puppet::Util::Windows::Process.get_environment_strings
-        expect(envhash[varname]).to eq(rune_utf8)
+        it 'uses Gem.default_bindir' do
+          expected_path = File.join('puppet_dir', 'bin', 'gem.bat')
+          expect(@run_mode.gem_cmd).to eql(expected_path)
+        end
+      end
+    end
+
+    describe '#common_module_dir' do
+      before do
+        allow(ENV).to receive(:fetch).and_call_original
+        allow(ENV).to receive(:fetch).with('FACTER_env_windows_installdir', nil).and_return(installdir)
+      end
+
+      context 'when installdir is not set' do
+        let(:installdir) { nil }
+
+        it 'returns nil' do
+          expect(@run_mode.common_module_dir).to be(nil)
+        end
+      end
+
+      context 'with installdir' do
+        let(:installdir) { 'C:\Program Files\Puppet Labs\Puppet' }
+
+        it 'returns INSTALLDIR/puppet/modules' do
+          expect(@run_mode.common_module_dir).to eq('C:\Program Files\Puppet Labs\Puppet/puppet/modules')
+        end
+      end
+    end
+
+    describe '#vendor_module_dir' do
+      before do
+        allow(ENV).to receive(:fetch).and_call_original
+        allow(ENV).to receive(:fetch).with('FACTER_env_windows_installdir', nil).and_return(installdir)
+      end
+
+      context 'when installdir is not set' do
+        let(:installdir) { nil }
+
+        it 'returns nil' do
+          expect(@run_mode.vendor_module_dir).to be(nil)
+        end
+      end
+
+      context 'with installdir' do
+        let(:installdir) { 'C:\Program Files\Puppet Labs\Puppet' }
+
+        it 'returns INSTALLDIR\puppet\vendor_modules' do
+          expect(@run_mode.vendor_module_dir).to eq('C:\Program Files\Puppet Labs\Puppet\puppet\vendor_modules')
+        end
       end
     end
   end
@@ -205,13 +272,5 @@ describe Puppet::Util::RunMode do
   def as_non_root
     allow(Puppet.features).to receive(:root?).and_return(false)
     yield
-  end
-
-  def without_env(name, &block)
-    saved = Puppet::Util.get_env(name)
-    Puppet::Util.set_env(name, nil)
-    yield
-  ensure
-    Puppet::Util.set_env(name, saved)
   end
 end

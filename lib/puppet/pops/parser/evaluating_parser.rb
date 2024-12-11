@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/concurrent/thread_local_singleton'
 
 module Puppet::Pops
 module Parser
-
 # Does not support "import" and parsing ruby files
 #
 class EvaluatingParser
@@ -10,7 +11,7 @@ class EvaluatingParser
 
   attr_reader :parser
 
-  def initialize()
+  def initialize
     @parser = Parser.new()
   end
 
@@ -46,7 +47,7 @@ class EvaluatingParser
     evaluate(scope, parse_file(file))
   end
 
-  def clear()
+  def clear
     @acceptor = nil
   end
 
@@ -57,6 +58,7 @@ class EvaluatingParser
 
   def evaluate(scope, model)
     return nil unless model
+
     evaluator.evaluate(model, scope)
   end
 
@@ -69,9 +71,10 @@ class EvaluatingParser
 
   def evaluator
     # Do not use the cached evaluator if this is a migration run
-    if (Puppet.lookup(:migration_checker) { nil })
+    if Puppet.lookup(:migration_checker) { nil }
       return Evaluator::EvaluatorImpl.new()
     end
+
     @@evaluator ||= Evaluator::EvaluatorImpl.new()
     @@evaluator
   end
@@ -86,7 +89,7 @@ class EvaluatingParser
     resulting_acceptor
   end
 
-  def acceptor()
+  def acceptor
     Validation::Acceptor.new
   end
 
@@ -96,13 +99,14 @@ class EvaluatingParser
 
   def assert_and_report(parse_result, file_source)
     return nil unless parse_result
+
     if parse_result['source_ref'].nil? || parse_result['source_ref'] == ''
       parse_result['source_ref'] = file_source
     end
     validation_result = validate(parse_result.model)
 
     IssueReporter.assert_and_report(validation_result,
-                                          :emit_warnings => true)
+                                    :emit_warnings => true)
     parse_result
   end
 
@@ -124,7 +128,7 @@ class EvaluatingParser
   # @return [String] The quoted string
   #
   def self.quote(x)
-    escaped = '"'
+    escaped = '"'.dup
     p = nil
     x.each_char do |c|
       case p
@@ -142,7 +146,7 @@ class EvaluatingParser
       when '"'
         escaped << '\\"'
       when '\\'
-        escaped << if c == '$' || c == 's'; p; else '\\\\'; end # don't escape \ when followed by s or $
+        escaped << ((c == '$' || c == 's') ? p : '\\\\') # don't escape \ when followed by s or $
       else
         escaped << p
       end
@@ -153,7 +157,7 @@ class EvaluatingParser
   end
 
   class EvaluatingEppParser < EvaluatingParser
-    def initialize()
+    def initialize
       @parser = EppParser.new()
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The RubyFunctionInstantiator instantiates a Puppet::Functions::Function given the ruby source
 # that calls Puppet::Functions.create_function.
 #
@@ -13,19 +15,21 @@ class Puppet::Pops::Loader::RubyFunctionInstantiator
   # @return [Puppet::Pops::Functions.Function] - an instantiated function with global scope closure associated with the given loader
   #
   def self.create(loader, typed_name, source_ref, ruby_code_string)
-    unless ruby_code_string.is_a?(String) && ruby_code_string =~ /Puppet\:\:Functions\.create_function/
+    unless ruby_code_string.is_a?(String) && ruby_code_string =~ /Puppet::Functions\.create_function/
       raise ArgumentError, _("The code loaded from %{source_ref} does not seem to be a Puppet 4x API function - no create_function call.") % { source_ref: source_ref }
     end
+
     # make the private loader available in a binding to allow it to be passed on
     loader_for_function = loader.private_loader
     here = get_binding(loader_for_function)
-    created = eval(ruby_code_string, here, source_ref, 1)
+    created = eval(ruby_code_string, here, source_ref, 1) # rubocop:disable Security/Eval
     unless created.is_a?(Class)
       raise ArgumentError, _("The code loaded from %{source_ref} did not produce a Function class when evaluated. Got '%{klass}'") % { source_ref: source_ref, klass: created.class }
     end
     unless created.name.to_s == typed_name.name()
       raise ArgumentError, _("The code loaded from %{source_ref} produced mis-matched name, expected '%{type_name}', got %{created_name}") % { source_ref: source_ref, type_name: typed_name.name, created_name: created.name }
     end
+
     # create the function instance - it needs closure (scope), and loader (i.e. where it should start searching for things
     # when calling functions etc.
     # It should be bound to global scope

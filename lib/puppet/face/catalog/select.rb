@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Select and show a list of resources of a given type.
 Puppet::Face.define(:catalog, '0.0.1') do
   action :select do
@@ -24,7 +26,7 @@ Puppet::Face.define(:catalog, '0.0.1') do
 
       $ puppet catalog select --terminus rest somenode.magpie.lan file
     EOT
-    when_invoked do |host, type, options|
+    when_invoked do |host, type, _options|
       # REVISIT: Eventually, type should have a default value that triggers
       # the non-specific behaviour.  For now, though, this will do.
       # --daniel 2011-05-03
@@ -42,7 +44,7 @@ Puppet::Face.define(:catalog, '0.0.1') do
       if value.nil? then
         _("no matching resources found")
       else
-        value.map {|x| x.to_s }.join("\n")
+        value.map(&:to_s).join("\n")
       end
     end
   end

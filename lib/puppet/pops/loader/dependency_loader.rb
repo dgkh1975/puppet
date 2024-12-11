@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # =DependencyLoader
 # This loader provides visibility into a set of other loaders. It is used as a child of a ModuleLoader (or other
 # loader) to make its direct dependencies visible for loading from contexts that have access to this dependency loader.
@@ -8,10 +10,6 @@
 # @api private
 #
 class Puppet::Pops::Loader::DependencyLoader < Puppet::Pops::Loader::BaseLoader
-
-  # An index of module_name to module loader used to speed up lookup of qualified names
-  attr_reader :index
-
   # Creates a DependencyLoader for one parent loader
   #
   # @param parent_loader [Puppet::Pops::Loader] typically a module loader for the root
@@ -46,7 +44,8 @@ class Puppet::Pops::Loader::DependencyLoader < Puppet::Pops::Loader::BaseLoader
       # (Note: superclass caches the result in this loader as it would have to repeat this search for every
       # lookup otherwise).
       loaded = @dependency_loaders.reduce(nil) do |previous, loader|
-        break previous if !previous.nil?
+        break previous unless previous.nil?
+
         loader.load_typed(typed_name)
       end
       if loaded
@@ -63,7 +62,7 @@ class Puppet::Pops::Loader::DependencyLoader < Puppet::Pops::Loader::BaseLoader
   end
 
   def to_s
-    "(DependencyLoader '#{@loader_name}' [" + @dependency_loaders.map {|loader| loader.to_s }.join(' ,') + "])"
+    "(DependencyLoader '#{@loader_name}' [" + @dependency_loaders.map(&:to_s).join(' ,') + "])"
   end
 
   private
@@ -82,13 +81,15 @@ class Puppet::Pops::Loader::DependencyLoader < Puppet::Pops::Loader::BaseLoader
       # (Note: superclass caches the result in this loader as it would have to repeat this search for every
       # lookup otherwise).
       @dependency_loaders.reduce(nil) do |previous, loader|
-        break previous if !previous.nil?
+        break previous unless previous.nil?
+
         loader.loaded_entry(typed_name, check_dependencies)
       end
     end
   end
 
+  # An index of module_name to module loader used to speed up lookup of qualified names
   def index
-    @index ||= @dependency_loaders.reduce({}) { |index, loader| index[loader.module_name] = loader; index }
+    @index ||= @dependency_loaders.each_with_object({}) { |loader, index| index[loader.module_name] = loader; }
   end
 end

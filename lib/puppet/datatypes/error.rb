@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::DataTypes.create_type('Error') do
   interface <<-PUPPET
     type_parameters => {
@@ -13,7 +15,7 @@ Puppet::DataTypes.create_type('Error') do
     functions => {
       message => Callable[[], String[1]]
     }
-    PUPPET
+  PUPPET
 
   require_relative '../../puppet/datatypes/impl/error'
 

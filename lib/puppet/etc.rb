@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../puppet/util/character_encoding'
 # Wrapper around Ruby Etc module allowing us to manage encoding in a single
 # place.
@@ -39,7 +41,6 @@ require_relative '../puppet/util/character_encoding'
 # @api private
 module Puppet::Etc
   class << self
-
     # Etc::getgrent returns an Etc::Group struct object
     # On first call opens /etc/group and returns parse of first entry. Each subsquent call
     # returns new struct the next entry or nil if EOF. Call ::endgrent to close file.
@@ -69,7 +70,7 @@ module Puppet::Etc
       ::Etc.endpwent
     end
 
-    #effectively equivalent to IO#rewind of /etc/passwd
+    # effectively equivalent to IO#rewind of /etc/passwd
     def setpwent
       ::Etc.setpwent
     end
@@ -115,7 +116,7 @@ module Puppet::Etc
 
       setgrent
       begin
-        while cur_group = getgrent #rubocop:disable Lint/AssignmentInCondition
+        while cur_group = getgrent # rubocop:disable Lint/AssignmentInCondition
           yield cur_group
         end
       ensure
@@ -131,6 +132,7 @@ module Puppet::Etc
     # these fields as well. API compatible with Etc::Passwd. Because Struct.new
     # defines a new Class object, we memoize to avoid superfluous extra Class
     # instantiations.
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     def puppet_etc_passwd_class
       @password_class ||= Struct.new(*Etc::Passwd.members, *Etc::Passwd.members.map { |member| "canonical_#{member}".to_sym })
     end
@@ -144,6 +146,7 @@ module Puppet::Etc
     def puppet_etc_group_class
       @group_class ||= Struct.new(*Etc::Group.members, *Etc::Group.members.map { |member| "canonical_#{member}".to_sym })
     end
+    # rubocop:enable Naming/MemoizedInstanceVariableName
 
     # Utility method for overriding the String values of a struct returned by
     # the Etc module to UTF-8. Structs returned by the ruby Etc module contain
@@ -159,12 +162,14 @@ module Puppet::Etc
     #   :canonical_<member name> struct member.
     def override_field_values_to_utf8(struct)
       return nil if struct.nil?
+
       new_struct = struct.is_a?(Etc::Passwd) ? puppet_etc_passwd_class.new : puppet_etc_group_class.new
       struct.each_pair do |member, value|
-        if value.is_a?(String)
+        case value
+        when String
           new_struct["canonical_#{member}".to_sym] = value.dup
           new_struct[member] = Puppet::Util::CharacterEncoding.override_encoding_to_utf_8(value).scrub
-        elsif value.is_a?(Array)
+        when Array
           new_struct["canonical_#{member}".to_sym] = value.inject([]) { |acc, elem| acc << elem.dup }
           new_struct[member] = value.inject([]) do |acc, elem|
             acc << Puppet::Util::CharacterEncoding.override_encoding_to_utf_8(elem).scrub

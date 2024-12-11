@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:package).provide :aptitude, :parent => :apt, :source => :dpkg do
   desc "Package management via `aptitude`."
 
@@ -17,9 +19,7 @@ Puppet::Type.type(:package).provide :aptitude, :parent => :apt, :source => :dpkg
 
     # Yay, stupid aptitude doesn't throw an error when the package is missing.
     if args.include?(:install) and output.to_s =~ /Couldn't find any package/
-      raise Puppet::Error.new(
-        _("Could not find package %{name}") % { name: self.name }
-      )
+      raise Puppet::Error, _("Could not find package %{name}") % { name: name }
     end
   end
 

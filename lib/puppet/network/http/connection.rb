@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/http'
 
 # This will be raised if too many redirects happen for a given HTTP request
-class Puppet::Network::HTTP::RedirectionLimitExceededException < Puppet::Error ; end
+class Puppet::Network::HTTP::RedirectionLimitExceededException < Puppet::Error; end
 
 # This class provides simple methods for issuing various types of HTTP
 # requests.  It's interface is intended to mirror Ruby's Net::HTTP
@@ -138,7 +140,7 @@ class Puppet::Network::HTTP::Connection
   # @param headers [Hash{String => String}]
   # @!macro common_options
   # @api public
-  def delete(path, headers = {'Depth' => 'Infinity'}, options = {})
+  def delete(path, headers = { 'Depth' => 'Infinity' }, options = {})
     headers ||= {}
     options[:ssl_context] ||= resolve_ssl_context
     options[:redirect_limit] ||= @redirect_limit
@@ -243,7 +245,7 @@ class Puppet::Network::HTTP::Connection
   end
 
   def to_url(path)
-    if path =~ /^https?:\/\//
+    if path =~ %r{^https?://}
       # The old Connection class accepts a URL as the request path, and sends
       # it in "absolute-form" in the request line, e.g. GET https://puppet:8140/.
       # See https://httpwg.org/specs/rfc7230.html#absolute-form. It just so happens
@@ -264,7 +266,7 @@ class Puppet::Network::HTTP::Connection
 
   def normalize_path(path)
     if path[0] == '/'
-      path[1..-1]
+      path[1..]
     else
       path
     end

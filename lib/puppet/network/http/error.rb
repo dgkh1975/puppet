@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/json'
 
 module Puppet::Network::HTTP::Error
   Issues = Puppet::Network::HTTP::Issues
 
-  class HTTPError < Exception
+  class HTTPError < Exception # rubocop:disable Lint/InheritException
     attr_reader :status, :issue_kind
 
     def initialize(message, status, issue_kind)
@@ -13,7 +15,7 @@ module Puppet::Network::HTTP::Error
     end
 
     def to_json
-      Puppet::Util::Json.dump({:message => message, :issue_kind => @issue_kind})
+      Puppet::Util::Json.dump({ :message => message, :issue_kind => @issue_kind })
     end
   end
 
@@ -67,7 +69,7 @@ module Puppet::Network::HTTP::Error
     end
 
     def to_json
-      Puppet::Util::Json.dump({:message => message, :issue_kind => @issue_kind})
+      Puppet::Util::Json.dump({ :message => message, :issue_kind => @issue_kind })
     end
   end
 end

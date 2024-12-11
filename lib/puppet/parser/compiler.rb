@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'forwardable'
 
 require_relative '../../puppet/node'
@@ -22,16 +24,16 @@ class Puppet::Parser::Compiler
     node.environment.check_for_reparse
 
     errors = node.environment.validation_errors
-    if !errors.empty?
+    unless errors.empty?
       errors.each { |e| Puppet.err(e) } if errors.size > 1
       errmsg = [
         _("Compilation has been halted because: %{error}") % { error: errors.first },
-        _("For more information, see https://puppet.com/docs/puppet/latest/environments_about.html"),
+        _("For more information, see https://puppet.com/docs/puppet/latest/environments_about.html")
       ]
       raise(Puppet::Error, errmsg.join(' '))
     end
 
-    new(node, :code_id => code_id).compile {|resulting_catalog| resulting_catalog.to_resource }
+    new(node, :code_id => code_id).compile(&:to_resource)
   rescue Puppet::ParseErrorWithIssue => detail
     detail.node = node.name
     Puppet.log_exception(detail)
@@ -77,8 +79,8 @@ class Puppet::Parser::Compiler
     # Note that this will fail if the resource is not unique.
     @catalog.add_resource(resource)
 
-    if not resource.class? and resource[:stage]
-      #TRANSLATORS "stage" is a keyword in Puppet and should not be translated
+    if !resource.class? and resource[:stage]
+      # TRANSLATORS "stage" is a keyword in Puppet and should not be translated
       raise ArgumentError, _("Only classes can set 'stage'; normal resources like %{resource} cannot change run stage") % { resource: resource }
     end
 
@@ -114,13 +116,13 @@ class Puppet::Parser::Compiler
   def_delegator :@catalog, :classes, :classlist
 
   def with_context_overrides(description = '', &block)
-    Puppet.override( @context_overrides , description, &block)
+    Puppet.override(@context_overrides, description, &block)
   end
 
   # Compiler our catalog.  This mostly revolves around finding and evaluating classes.
   # This is the main entry into our catalog.
   def compile
-    Puppet.override( @context_overrides , _("For compiling %{node}") % { node: node.name }) do
+    Puppet.override(@context_overrides, _("For compiling %{node}") % { node: node.name }) do
       @catalog.environment_instance = environment
 
       # Set the client's parameters into the top scope.
@@ -128,7 +130,7 @@ class Puppet::Parser::Compiler
 
       Puppet::Util::Profiler.profile(_("Compile: Created settings scope"), [:compiler, :create_settings_scope]) { create_settings_scope }
 
-      #TRANSLATORS "main" is a function name and should not be translated
+      # TRANSLATORS "main" is a function name and should not be translated
       Puppet::Util::Profiler.profile(_("Compile: Evaluated main"), [:compiler, :evaluate_main]) { evaluate_main }
 
       Puppet::Util::Profiler.profile(_("Compile: Evaluated AST node"), [:compiler, :evaluate_ast_node]) { evaluate_ast_node }
@@ -162,11 +164,11 @@ class Puppet::Parser::Compiler
   end
 
   # Constructs the overrides for the context
-  def context_overrides()
+  def context_overrides
     {
       :current_environment => environment,
-      :global_scope => @topscope,             # 4x placeholder for new global scope
-      :loaders  => @loaders,                  # 4x loaders
+      :global_scope => @topscope, # 4x placeholder for new global scope
+      :loaders => @loaders, # 4x loaders
     }
   end
 
@@ -184,12 +186,12 @@ class Puppet::Parser::Compiler
   # parameters won't conflict even if the class has already been included.
   def evaluate_node_classes
     if @node.classes.is_a? Hash
-      classes_with_params, classes_without_params = @node.classes.partition {|name,params| params and !params.empty?}
+      classes_with_params, classes_without_params = @node.classes.partition { |_name, params| params and !params.empty? }
 
       # The results from Hash#partition are arrays of pairs rather than hashes,
       # so we have to convert to the forms evaluate_classes expects (Hash, and
       # Array of class names)
-      classes_with_params = Hash[classes_with_params]
+      classes_with_params = classes_with_params.to_h
       classes_without_params.map!(&:first)
     else
       classes_with_params = {}
@@ -205,7 +207,7 @@ class Puppet::Parser::Compiler
   # @api private
   def evaluate_ast_node
     krt = environment.known_resource_types
-    return unless krt.nodes? #ast_nodes?
+    return unless krt.nodes? # ast_nodes?
 
     # Now see if we can find the node.
     astnode = nil
@@ -214,7 +216,7 @@ class Puppet::Parser::Compiler
       break if astnode
     end
 
-    unless (astnode ||= krt.node("default"))
+    unless astnode ||= krt.node("default")
       raise Puppet::ParseError, _("Could not find node statement with name 'default' or '%{names}'") % { names: node.names.join(", ") }
     end
 
@@ -234,10 +236,11 @@ class Puppet::Parser::Compiler
   #
   def evaluate_classes(classes, scope, lazy_evaluate = true)
     raise Puppet::DevError, _("No source for scope passed to evaluate_classes") unless scope.source
+
     class_parameters = nil
     # if we are a param class, save the classes hash
     # and transform classes to be the keys
-    if classes.class == Hash
+    if classes.instance_of?(Hash)
       class_parameters = classes
       classes = classes.keys
     end
@@ -248,14 +251,14 @@ class Puppet::Parser::Compiler
 
     if class_parameters
       resources = ensure_classes_with_parameters(scope, hostclasses, class_parameters)
-      if !lazy_evaluate
+      unless lazy_evaluate
         resources.each(&:evaluate)
       end
 
       resources
     else
       already_included, newly_included = ensure_classes_without_parameters(scope, hostclasses)
-      if !lazy_evaluate
+      unless lazy_evaluate
         newly_included.each(&:evaluate)
       end
 
@@ -342,18 +345,15 @@ class Puppet::Parser::Compiler
     exceptwrap do
       Puppet::Util::Profiler.profile(_("Evaluated definitions"), [:compiler, :evaluate_definitions]) do
         urs = unevaluated_resources.each do |resource|
-          begin
-            resource.evaluate
-          rescue Puppet::Pops::Evaluator::PuppetStopIteration => detail
-            # needs to be handled specifically as the error has the file/line/position where this
-            # occurred rather than the resource
-            fail(Puppet::Pops::Issues::RUNTIME_ERROR, detail, {:detail => detail.message}, detail)
-
-          rescue Puppet::Error => e
-            # PuppetError has the ability to wrap an exception, if so, use the wrapped exception's
-            # call stack instead
-            fail(Puppet::Pops::Issues::RUNTIME_ERROR, resource, {:detail => e.message}, e.original || e)
-          end
+          resource.evaluate
+        rescue Puppet::Pops::Evaluator::PuppetStopIteration => detail
+          # needs to be handled specifically as the error has the file/line/position where this
+          # occurred rather than the resource
+          fail(Puppet::Pops::Issues::RUNTIME_ERROR, detail, { :detail => detail.message }, detail)
+        rescue Puppet::Error => e
+          # PuppetError has the ability to wrap an exception, if so, use the wrapped exception's
+          # call stack instead
+          fail(Puppet::Pops::Issues::RUNTIME_ERROR, resource, { :detail => e.message }, e.original || e)
         end
         !urs.empty?
       end
@@ -411,7 +411,7 @@ class Puppet::Parser::Compiler
   def fail_on_unevaluated_overrides
     remaining = @resource_overrides.values.flatten.collect(&:ref)
 
-    if !remaining.empty?
+    unless remaining.empty?
       raise Puppet::ParseError, _("Could not find resource(s) %{resources} for overriding") % { resources: remaining.join(', ') }
     end
   end
@@ -422,7 +422,7 @@ class Puppet::Parser::Compiler
   #
   def fail_on_unevaluated_resource_collections
     remaining = @collections.collect(&:unresolved_resources).flatten.compact
-    if !remaining.empty?
+    unless remaining.empty?
       raise Puppet::ParseError, _("Failed to realize virtual resources %{resources}") % { resources: remaining.join(', ') }
     end
   end
@@ -455,7 +455,7 @@ class Puppet::Parser::Compiler
   def add_resource_metaparams
     main = catalog.resource(:class, :main)
     unless main
-      #TRANSLATORS "main" is a function name and should not be translated
+      # TRANSLATORS "main" is a function name and should not be translated
       raise _("Couldn't find main")
     end
 
@@ -482,14 +482,14 @@ class Puppet::Parser::Compiler
   def metaparams_as_data(resource, params)
     data = nil
     params.each do |param|
-      unless resource[param].nil?
-        # Because we could be creating a hash for every resource,
-        # and we actually probably don't often have any data here at all,
-        # we're optimizing a bit by only creating a hash if there's
-        # any data to put in it.
-        data ||= {}
-        data[param] = resource[param]
-      end
+      next if resource[param].nil?
+
+      # Because we could be creating a hash for every resource,
+      # and we actually probably don't often have any data here at all,
+      # we're optimizing a bit by only creating a hash if there's
+      # any data to put in it.
+      data ||= {}
+      data[param] = resource[param]
     end
     data
   end
@@ -529,7 +529,7 @@ class Puppet::Parser::Compiler
     # It cannot survive the initvars method, and is later reinstated
     # as part of compiling...
     #
-    Puppet.override( @context_overrides , _("For initializing compiler")) do
+    Puppet.override(@context_overrides, _("For initializing compiler")) do
       # THE MAGIC STARTS HERE ! This triggers parsing, loading etc.
       @catalog.version = environment.known_resource_types.version
       @loaders.pre_load
@@ -541,7 +541,7 @@ class Puppet::Parser::Compiler
     @resources = []
 
     # Make sure any external node classes are in our class list
-    if @node.classes.class == Hash
+    if @node.classes.instance_of?(Hash)
       @catalog.add_class(*@node.classes.keys)
     else
       @catalog.add_class(*@node.classes)
@@ -563,6 +563,7 @@ class Puppet::Parser::Compiler
       # case a custom node terminus has done any mucking about with
       # node.parameters.
       next if param.to_s == 'environment'
+
       # Ensure node does not leak Symbol instances in general
       @topscope[param.to_s] = value.is_a?(Symbol) ? value.to_s : value
     end
@@ -579,7 +580,7 @@ class Puppet::Parser::Compiler
     @topscope.set_facts(facts_hash)
   end
 
-  SETTINGS = 'settings'.freeze
+  SETTINGS = 'settings'
 
   def create_settings_scope
     settings_type = create_settings_type

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Applies a [lambda](https://puppet.com/docs/puppet/latest/lang_lambdas.html)
 # to every value in a data structure and returns an array containing the results.
 #
@@ -90,7 +92,7 @@ Puppet::Functions.create_function(:map) do
   def map_Hash_1(hash)
     result = []
     begin
-      hash.map {|x, y| result << yield([x, y]) }
+      hash.each { |x, y| result << yield([x, y]) }
     rescue StopIteration
     end
     result
@@ -99,7 +101,7 @@ Puppet::Functions.create_function(:map) do
   def map_Hash_2(hash)
     result = []
     begin
-      hash.map {|x, y| result << yield(x, y) }
+      hash.each { |x, y| result << yield(x, y) }
     rescue StopIteration
     end
     result
@@ -109,7 +111,9 @@ Puppet::Functions.create_function(:map) do
     result = []
     enum = Puppet::Pops::Types::Iterable.asserted_iterable(self, enumerable)
     begin
-      loop { result << yield(enum.next) }
+      enum.each do |val|
+        result << yield(val)
+      end
     rescue StopIteration
     end
     result
@@ -122,14 +126,11 @@ Puppet::Functions.create_function(:map) do
     else
       result = []
       begin
-        index = 0
-        loop do
-          result << yield(index, enum.next)
-          index = index + 1
+        enum.each_with_index do |val, index|
+          result << yield(index, val)
         end
       rescue StopIteration
       end
-
       result
     end
   end

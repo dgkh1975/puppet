@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/node/facts'
 require_relative '../../../puppet/indirector/code'
 
@@ -34,9 +36,17 @@ class Puppet::Node::Facts::Facter < Puppet::Indirector::Code
 
     result = if request.options[:resolve_options]
                raise(Puppet::Error, _("puppet facts show requires version 4.0.40 or greater of Facter.")) unless Facter.respond_to?(:resolve)
+
                find_with_options(request)
-             else
+             elsif Puppet[:include_legacy_facts]
+               # to_hash returns both structured and legacy facts
                Puppet::Node::Facts.new(request.key, Puppet.runtime[:facter].to_hash)
+             else
+               # resolve does not return legacy facts unless requested
+               facts = Puppet.runtime[:facter].resolve('')
+               # some versions of Facter 4 return a Facter::FactCollection instead of
+               # a Hash, breaking API compatibility, so force a hash using `to_h`
+               Puppet::Node::Facts.new(request.key, facts.to_h)
              end
 
     result.add_local_facts unless request.options[:resolve_options]
@@ -47,7 +57,7 @@ class Puppet::Node::Facts::Facter < Puppet::Indirector::Code
   def self.setup_search_paths(request)
     # Add any per-module fact directories to facter's search path
     dirs = request.environment.modulepath.collect do |dir|
-      ['lib', 'plugins'].map do |subdirectory|
+      %w[lib plugins].map do |subdirectory|
         Dir.glob("#{dir}/*/#{subdirectory}/facter")
       end
     end.flatten + Puppet[:factpath].split(File::PATH_SEPARATOR)
@@ -75,11 +85,11 @@ class Puppet::Node::Facts::Facter < Puppet::Indirector::Code
     # Add any per-module external fact directories to facter's external search path
     dirs = []
     request.environment.modules.each do |m|
-      if m.has_external_facts?
-        dir = m.plugin_fact_directory
-        Puppet.debug { "Loading external facts from #{dir}" }
-        dirs << dir
-      end
+      next unless m.has_external_facts?
+
+      dir = m.plugin_fact_directory
+      Puppet.debug { "Loading external facts from #{dir}" }
+      dirs << dir
     end
 
     # Add system external fact directory if it exists
@@ -97,7 +107,7 @@ class Puppet::Node::Facts::Facter < Puppet::Indirector::Code
 
   def find_with_options(request)
     options = request.options
-    options_for_facter = String.new
+    options_for_facter = ''.dup
     options_for_facter += options[:user_query].join(' ')
     options_for_facter += " --config #{options[:config_file]}" if options[:config_file]
     options_for_facter += " --show-legacy" if options[:show_legacy]

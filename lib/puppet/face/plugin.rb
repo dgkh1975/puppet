@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/face'
 require_relative '../../puppet/configurer/plugin_handler'
 
@@ -38,7 +40,7 @@ Puppet::Face.define(:plugin, '0.0.1') do
       $ Puppet::Face[:plugin, '0.0.1'].download
     EOT
 
-    when_invoked do |options|
+    when_invoked do |_options|
       remote_environment_for_plugins = Puppet::Node::Environment.remote(Puppet[:environment])
 
       begin

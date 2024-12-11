@@ -1,11 +1,13 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Time
 class Timestamp < TimeData
   DEFAULT_FORMATS_WO_TZ = ['%FT%T.%N', '%FT%T', '%F %T.%N', '%F %T', '%F']
   DEFAULT_FORMATS = ['%FT%T.%N %Z', '%FT%T %Z', '%F %T.%N %Z', '%F %T %Z', '%F %Z'] + DEFAULT_FORMATS_WO_TZ
 
-  CURRENT_TIMEZONE = 'current'.freeze
-  KEY_TIMEZONE = 'timezone'.freeze
+  CURRENT_TIMEZONE = 'current'
+  KEY_TIMEZONE = 'timezone'
 
   # Converts a timezone that strptime can parse using '%z' into '-HH:MM' or '+HH:MM'
   # @param [String] tz the timezone to convert
@@ -38,6 +40,7 @@ class Timestamp < TimeData
       hash = DateTime._strptime(timezone, '%z')
       offset = hash.nil? ? nil : hash[:offset]
       raise ArgumentError, _("Illegal timezone '%{timezone}'") % { timezone: timezone } if offset.nil?
+
       offset
     end
   end
@@ -73,6 +76,7 @@ class Timestamp < TimeData
       format.each do |fmt|
         parsed = DateTime._strptime(str, fmt)
         next if parsed.nil?
+
         if parsed.include?(:leftover) || (has_timezone && parsed.include?(:zone))
           parsed = nil
           next
@@ -81,16 +85,19 @@ class Timestamp < TimeData
       end
       if parsed.nil?
         raise ArgumentError, _(
-          "Unable to parse '%{str}' using any of the formats %{formats}") % { str: str, formats: format.join(', ') }
+          "Unable to parse '%{str}' using any of the formats %{formats}"
+        ) % { str: str, formats: format.join(', ') }
       end
     else
       parsed = DateTime._strptime(str, format)
       if parsed.nil? || parsed.include?(:leftover)
         raise ArgumentError, _("Unable to parse '%{str}' using format '%{format}'") % { str: str, format: format }
       end
+
       if has_timezone && parsed.include?(:zone)
         raise ArgumentError, _(
-          'Using a Timezone designator in format specification is mutually exclusive to providing an explicit timezone argument')
+          'Using a Timezone designator in format specification is mutually exclusive to providing an explicit timezone argument'
+        )
       end
     end
     unless has_timezone
@@ -100,7 +107,7 @@ class Timestamp < TimeData
     fraction = parsed[:sec_fraction]
 
     # Convert msec rational found in _strptime hash to usec
-    fraction = fraction * 1000000 unless fraction.nil?
+    fraction *= 1_000_000 unless fraction.nil?
 
     # Create the Time instance and adjust for timezone
     parsed_time = ::Time.utc(parsed[:year], parsed[:mon], parsed[:mday], parsed[:hour], parsed[:min], parsed[:sec], fraction)

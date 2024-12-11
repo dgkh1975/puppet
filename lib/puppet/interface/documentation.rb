@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Puppet::Interface
   # @api private
   module DocGen
@@ -32,14 +34,14 @@ class Puppet::Interface
       # without as methods.  When we are 1.9 only (hah!) you can totally
       # replace this with some up-and-up define_method. --daniel 2011-04-29
       module_eval(<<-EOT, __FILE__, __LINE__ + 1)
-        def #{name}(value = nil)
-          self.#{name} = value unless value.nil?
-          @#{name}
-        end
+        def #{name}(value = nil)                 # def attribute(value=nil)
+          self.#{name} = value unless value.nil? #   self.attribute = value unless value.nil?
+          @#{name}                               #   @value
+        end                                      # end
 
-        def #{name}=(value)
-          @#{name} = Puppet::Interface::DocGen.strip_whitespace(#{get_arg})
-        end
+        def #{name}=(value)                                                 # def attribute=(value)
+          @#{name} = Puppet::Interface::DocGen.strip_whitespace(#{get_arg}) #   @value = Puppet::Interface::DocGen.strip_whitespace(#{get_arg})
+        end                                                                 # end
       EOT
     end
   end
@@ -56,7 +58,7 @@ class Puppet::Interface
     # @dsl Faces
     attr_doc :summary do |value|
       value =~ /\n/ and
-        #TRANSLATORS 'Face' refers to a programming API in Puppet, 'summary' and 'description' are specifc attribute names and should not be translated
+        # TRANSLATORS 'Face' refers to a programming API in Puppet, 'summary' and 'description' are specifc attribute names and should not be translated
         raise ArgumentError, _("Face summary should be a single line; put the long text in 'description' instead.")
       value
     end
@@ -76,9 +78,8 @@ class Puppet::Interface
         s.text(" ")
 
         options.each do |option|
-          next if option == :extra
           option = get_option(option)
-          wrap = option.required? ? %w{ < > } : %w{ [ ] }
+          wrap = option.required? ? %w[< >] : %w{[ ]}
 
           s.group(0, *wrap) do
             option.optparse.each do |item|
@@ -95,7 +96,7 @@ class Puppet::Interface
         end
 
         display_global_options.sort.each do |option|
-          wrap = %w{ [ ] }
+          wrap = %w{[ ]}
           s.group(0, *wrap) do
             type = Puppet.settings.setting(option).default
             type ||= Puppet.settings.setting(option).type.to_s.upcase
@@ -110,7 +111,6 @@ class Puppet::Interface
         end
       end
     end
-
   end
 
   # This module can be mixed in to provide a full set of documentation
@@ -179,11 +179,12 @@ class Puppet::Interface
       self.short_description = value unless value.nil?
       if @short_description.nil? then
         return nil if @description.nil?
+
         lines = @description.split("\n")
         first_paragraph_break = lines.index('') || 5
-        grab  = [5, first_paragraph_break].min
+        grab = [5, first_paragraph_break].min
         @short_description = lines[0, grab].join("\n")
-        @short_description += ' [...]' if (grab < lines.length and first_paragraph_break >= 5)
+        @short_description += ' [...]' if grab < lines.length and first_paragraph_break >= 5
       end
       @short_description
     end
@@ -202,14 +203,15 @@ class Puppet::Interface
     def author(value = nil)
       unless value.nil? then
         unless value.is_a? String
-          #TRANSLATORS 'author' is an attribute name and should not be translated
+          # TRANSLATORS 'author' is an attribute name and should not be translated
           raise ArgumentError, _('author must be a string; use multiple statements for multiple authors')
         end
 
         if value =~ /\n/ then
-          #TRANSLATORS 'author' is an attribute name and should not be translated
+          # TRANSLATORS 'author' is an attribute name and should not be translated
           raise ArgumentError, _('author should be a single line; use multiple statements for multiple authors')
         end
+
         @authors.push(Puppet::Interface::DocGen.strip_whitespace(value))
       end
       @authors.empty? ? nil : @authors.join("\n")
@@ -226,11 +228,12 @@ class Puppet::Interface
     def author=(value)
       # I think it's a bug that this ends up being the exposed
       # version of `author` on ActionBuilder
-      if Array(value).any? {|x| x =~ /\n/ } then
-        #TRANSLATORS 'author' is an attribute name and should not be translated
+      if Array(value).any? { |x| x =~ /\n/ } then
+        # TRANSLATORS 'author' is an attribute name and should not be translated
         raise ArgumentError, _('author should be a single line; use multiple statements')
       end
-      @authors = Array(value).map{|x| Puppet::Interface::DocGen.strip_whitespace(x) }
+
+      @authors = Array(value).map { |x| Puppet::Interface::DocGen.strip_whitespace(x) }
     end
     alias :authors= :author=
 
@@ -247,15 +250,16 @@ class Puppet::Interface
     # @api public
     # @dsl Faces
     def copyright(owner = nil, years = nil)
-      if years.nil? and not owner.nil? then
-        #TRANSLATORS 'copyright' is an attribute name and should not be translated
+      if years.nil? and !owner.nil? then
+        # TRANSLATORS 'copyright' is an attribute name and should not be translated
         raise ArgumentError, _('copyright takes the owners names, then the years covered')
       end
+
       self.copyright_owner = owner unless owner.nil?
       self.copyright_years = years unless years.nil?
 
-      if self.copyright_years or self.copyright_owner then
-        "Copyright #{self.copyright_years} by #{self.copyright_owner}"
+      if copyright_years or copyright_owner then
+        "Copyright #{copyright_years} by #{copyright_owner}"
       else
         "Unknown copyright owner and years."
       end
@@ -266,16 +270,16 @@ class Puppet::Interface
     #   owners.
     # @return [String] Comma-separated list of copyright owners
     # @api private
-    attr_accessor :copyright_owner
+    attr_reader :copyright_owner
+
     def copyright_owner=(value)
       case value
       when String then @copyright_owner = value
       when Array  then @copyright_owner = value.join(", ")
       else
-        #TRANSLATORS 'copyright' is an attribute name and should not be translated
+        # TRANSLATORS 'copyright' is an attribute name and should not be translated
         raise ArgumentError, _("copyright owner must be a string or an array of strings")
       end
-      @copyright_owner
     end
 
     # Sets the copyright year
@@ -283,11 +287,12 @@ class Puppet::Interface
     #   copyright year or years.
     # @return [String]
     # @api private
-    attr_accessor :copyright_years
+    attr_reader :copyright_years
+
     def copyright_years=(value)
       years = munge_copyright_year value
-      years = (years.is_a?(Array) ? years : [years]).
-        sort_by do |x| x.is_a?(Range) ? x.first : x end
+      years = (years.is_a?(Array) ? years : [years])
+              .sort_by do |x| x.is_a?(Range) ? x.first : x end
 
       @copyright_years = years.map do |year|
         if year.is_a? Range then
@@ -309,9 +314,9 @@ class Puppet::Interface
           fault = "after #{future}"
         end
         if fault then
-          #TRANSLATORS 'copyright' is an attribute name and should not be translated
+          # TRANSLATORS 'copyright' is an attribute name and should not be translated
           raise ArgumentError, _("copyright with a year %{value} is very strange; did you accidentally add or subtract two years?") %
-              { value: fault }
+                               { value: fault }
         end
 
         input
@@ -324,13 +329,14 @@ class Puppet::Interface
           else
             found = part.split(/-/)
             if found
-              unless found.length == 2 and found.all? {|x| x.strip =~ /^\d+$/ }
-                #TRANSLATORS 'copyright' is an attribute name and should not be translated
+              unless found.length == 2 and found.all? { |x| x.strip =~ /^\d+$/ }
+                # TRANSLATORS 'copyright' is an attribute name and should not be translated
                 raise ArgumentError, _("%{value} is not a good copyright year or range") % { value: part.inspect }
               end
+
               Range.new(found[0].to_i, found[1].to_i)
             else
-              #TRANSLATORS 'copyright' is an attribute name and should not be translated
+              # TRANSLATORS 'copyright' is an attribute name and should not be translated
               raise ArgumentError, _("%{value} is not a good copyright year or range") % { value: part.inspect }
             end
           end
@@ -349,7 +355,7 @@ class Puppet::Interface
         result
 
       else
-        #TRANSLATORS 'copyright' is an attribute name and should not be translated
+        # TRANSLATORS 'copyright' is an attribute name and should not be translated
         raise ArgumentError, _("%{value} is not a good copyright year, set, or range") % { value: input.inspect }
       end
     end

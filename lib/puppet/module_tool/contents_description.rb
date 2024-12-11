@@ -1,12 +1,12 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/module_tool'
 
 module Puppet::ModuleTool
-
   # = ContentsDescription
   #
   # This class populates +Metadata+'s Puppet type information.
   class ContentsDescription
-
     # Instantiate object for string +module_path+.
     def initialize(module_path)
       @module_path = module_path
@@ -32,12 +32,12 @@ module Puppet::ModuleTool
       unless @data
         @data = []
         type_names = []
-        for module_filename in Dir[File.join(@module_path, "lib/puppet/type/*.rb")]
+        (Dir[File.join(@module_path, "lib/puppet/type/*.rb")]).each do |module_filename|
           require module_filename
           type_name = File.basename(module_filename, ".rb")
           type_names << type_name
 
-          for provider_filename in Dir[File.join(@module_path, "lib/puppet/provider/#{type_name}/*.rb")]
+          (Dir[File.join(@module_path, "lib/puppet/provider/#{type_name}/*.rb")]).each do |provider_filename|
             require provider_filename
           end
         end
@@ -45,7 +45,7 @@ module Puppet::ModuleTool
         type_names.each do |name|
           type = Puppet::Type.type(name.to_sym)
           if type
-            type_hash = {:name => name, :doc => type.doc}
+            type_hash = { :name => name, :doc => type.doc }
             type_hash[:properties] = attr_doc(type, :property)
             type_hash[:parameters] = attr_doc(type, :param)
             if type.providers.size > 0

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/terminus'
 require_relative '../../puppet/util'
 
@@ -7,9 +9,10 @@ require_relative '../../puppet/util'
 # implementations, since it is ~ 30 times faster
 class Puppet::Indirector::Msgpack < Puppet::Indirector::Terminus
   def initialize(*args)
-    if ! Puppet.features.msgpack?
+    unless Puppet.features.msgpack?
       raise _("MessagePack terminus not supported without msgpack library")
     end
+
     super
   end
 
@@ -21,18 +24,19 @@ class Puppet::Indirector::Msgpack < Puppet::Indirector::Terminus
     filename = path(request.key)
     FileUtils.mkdir_p(File.dirname(filename))
 
-    Puppet::FileSystem.replace_file(filename, 0660) {|f| f.print to_msgpack(request.instance) }
+    Puppet::FileSystem.replace_file(filename, 0o660) { |f| f.print to_msgpack(request.instance) }
   rescue TypeError => detail
-    Puppet.log_exception(detail, _("Could not save %{name} %{request}: %{detail}") % { name: self.name, request: request.key, detail: detail })
+    Puppet.log_exception(detail, _("Could not save %{name} %{request}: %{detail}") % { name: name, request: request.key, detail: detail })
   end
 
   def destroy(request)
     Puppet::FileSystem.unlink(path(request.key))
   rescue => detail
     unless detail.is_a? Errno::ENOENT
-      raise Puppet::Error, _("Could not destroy %{name} %{request}: %{detail}") % { name: self.name, request: request.key, detail: detail }, detail.backtrace
+      raise Puppet::Error, _("Could not destroy %{name} %{request}: %{detail}") % { name: name, request: request.key, detail: detail }, detail.backtrace
     end
-    1                           # emulate success...
+
+    1 # emulate success...
   end
 
   def search(request)
@@ -62,12 +66,12 @@ class Puppet::Indirector::Msgpack < Puppet::Indirector::Terminus
     rescue Errno::ENOENT
       return nil
     rescue => detail
-      #TRANSLATORS "MessagePack" is a program name and should not be translated
+      # TRANSLATORS "MessagePack" is a program name and should not be translated
       raise Puppet::Error, _("Could not read MessagePack data for %{indirection} %{key}: %{detail}") % { indirection: indirection.name, key: key, detail: detail }, detail.backtrace
     end
 
     begin
-      return from_msgpack(msgpack)
+      from_msgpack(msgpack)
     rescue => detail
       raise Puppet::Error, _("Could not parse MessagePack data for %{indirection} %{key}: %{detail}") % { indirection: indirection.name, key: key, detail: detail }, detail.backtrace
     end

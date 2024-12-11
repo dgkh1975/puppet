@@ -1,13 +1,14 @@
+# frozen_string_literal: true
+
 # Utility methods for interacting with POSIX objects; mostly user and group
 module Puppet::Util::POSIX
-
   # This is a list of environment variables that we will set when we want to override the POSIX locale
-  LOCALE_ENV_VARS = ['LANG', 'LC_ALL', 'LC_MESSAGES', 'LANGUAGE',
-                           'LC_COLLATE', 'LC_CTYPE', 'LC_MONETARY', 'LC_NUMERIC', 'LC_TIME']
+  LOCALE_ENV_VARS = %w[LANG LC_ALL LC_MESSAGES LANGUAGE
+                       LC_COLLATE LC_CTYPE LC_MONETARY LC_NUMERIC LC_TIME]
 
   # This is a list of user-related environment variables that we will unset when we want to provide a pristine
   # environment for "exec" runs
-  USER_ENV_VARS = ['HOME', 'USER', 'LOGNAME']
+  USER_ENV_VARS = %w[HOME USER LOGNAME]
 
   class << self
     # Returns an array of all the groups that the user's a member of.
@@ -33,19 +34,20 @@ module Puppet::Util::POSIX
     end
 
     private
+
     def get_groups_list(user)
       raise LoadError, "The 'getgrouplist' method is not available" unless Puppet::FFI::POSIX::Functions.respond_to?(:getgrouplist)
 
       user_gid = Puppet::Etc.getpwnam(user).gid
       ngroups = Puppet::FFI::POSIX::Constants::MAXIMUM_NUMBER_OF_GROUPS
 
-      while true do # rubocop:disable Lint/LiteralInCondition
+      loop do
         FFI::MemoryPointer.new(:int) do |ngroups_ptr|
           FFI::MemoryPointer.new(:uint, ngroups) do |groups_ptr|
             old_ngroups = ngroups
             ngroups_ptr.write_int(ngroups)
 
-            if Puppet::FFI::POSIX::Functions::getgrouplist(user, user_gid, groups_ptr, ngroups_ptr) != -1
+            if Puppet::FFI::POSIX::Functions.getgrouplist(user, user_gid, groups_ptr, ngroups_ptr) != -1
               groups_gids = groups_ptr.get_array_of_uint(0, ngroups_ptr.read_int)
 
               result = []
@@ -85,10 +87,10 @@ module Puppet::Util::POSIX
     end
 
     begin
-      return Etc.send(method, id).send(field)
+      Etc.send(method, id).send(field)
     rescue NoMethodError, ArgumentError
       # ignore it; we couldn't find the object
-      return nil
+      nil
     end
   end
 
@@ -126,46 +128,46 @@ module Puppet::Util::POSIX
   # Determine what the field name is for users and groups.
   def idfield(space)
     case space.intern
-    when :gr, :group; return :gid
-    when :pw, :user, :passwd; return :uid
+    when :gr, :group; :gid
+    when :pw, :user, :passwd; :uid
     else
-      raise ArgumentError.new(_("Can only handle users and groups"))
+      raise ArgumentError, _("Can only handle users and groups")
     end
   end
 
   # Determine what the method is to get users and groups by id
   def methodbyid(space)
     case space.intern
-    when :gr, :group; return :getgrgid
-    when :pw, :user, :passwd; return :getpwuid
+    when :gr, :group; :getgrgid
+    when :pw, :user, :passwd; :getpwuid
     else
-      raise ArgumentError.new(_("Can only handle users and groups"))
+      raise ArgumentError, _("Can only handle users and groups")
     end
   end
 
   # Determine what the method is to get users and groups by name
   def methodbyname(space)
     case space.intern
-    when :gr, :group; return :getgrnam
-    when :pw, :user, :passwd; return :getpwnam
+    when :gr, :group; :getgrnam
+    when :pw, :user, :passwd; :getpwnam
     else
-      raise ArgumentError.new(_("Can only handle users and groups"))
+      raise ArgumentError, _("Can only handle users and groups")
     end
   end
 
   # Get the GID
   def gid(group)
-      get_posix_value(:group, :gid, group)
+    get_posix_value(:group, :gid, group)
   end
 
   # Get the UID
   def uid(user)
-      get_posix_value(:passwd, :uid, user)
+    get_posix_value(:passwd, :uid, user)
   end
 
   private
 
-  # Get the specified id_field of a given field (user or group), 
+  # Get the specified id_field of a given field (user or group),
   # whether an ID name is provided
   def get_posix_value(location, id_field, field)
     begin
@@ -176,11 +178,13 @@ module Puppet::Util::POSIX
     if field.is_a?(Integer)
       name = get_posix_field(location, :name, field)
       return nil unless name
+
       id = get_posix_field(location, id_field, name)
       check_value = id
     else
       id = get_posix_field(location, id_field, field)
       return nil unless id
+
       name = get_posix_field(location, :name, id)
       check_value = name
     end
@@ -190,14 +194,13 @@ module Puppet::Util::POSIX
 
       if id == check_value_id
         Puppet.debug("Multiple entries found for resource: '#{location}' with #{id_field}: #{id}")
-        return id
+        id
       else
         Puppet.debug("The value retrieved: '#{check_value}' is different than the required state: '#{field}', searching in all entries")
-        return search_posix_field(location, id_field, field)
+        search_posix_field(location, id_field, field)
       end
     else
-      return id
+      id
     end
   end
 end
-

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet'
 require_relative '../../puppet/indirector'
 require_relative '../../puppet/file_serving'
@@ -7,7 +9,6 @@ require 'uri'
 
 # A class that handles retrieving file metadata.
 class Puppet::FileServing::Metadata < Puppet::FileServing::Base
-
   include Puppet::Util::Checksums
 
   extend Puppet::Indirector
@@ -46,7 +47,7 @@ class Puppet::FileServing::Metadata < Puppet::FileServing::Base
 
     def initialize(stat, source_permissions)
       @stat = stat
-      @source_permissions_ignore = (!source_permissions || source_permissions == :ignore)
+      @source_permissions_ignore = !source_permissions || source_permissions == :ignore
     end
 
     def owner
@@ -58,7 +59,7 @@ class Puppet::FileServing::Metadata < Puppet::FileServing::Base
     end
 
     def mode
-      @source_permissions_ignore ? 0644 : @stat.mode
+      @source_permissions_ignore ? 0o644 : @stat.mode
     end
 
     def_delegators :@stat, :ftype
@@ -77,10 +78,9 @@ class Puppet::FileServing::Metadata < Puppet::FileServing::Base
 
     { :owner => 'S-1-5-32-544',
       :group => 'S-1-0-0',
-      :mode => 0644
-    }.each do |method, default_value|
+      :mode => 0o644 }.each do |method, default_value|
       define_method method do
-        return default_value
+        default_value
       end
     end
   end
@@ -107,23 +107,30 @@ class Puppet::FileServing::Metadata < Puppet::FileServing::Base
     @ftype = stat.ftype
 
     # We have to mask the mode, yay.
-    @mode = stat.mode & 007777
+    @mode = stat.mode & 0o07777
 
     case stat.ftype
     when "file"
-      @checksum = ("{#{@checksum_type}}") + send("#{@checksum_type}_file", real_path).to_s
+      @checksum = "{#{@checksum_type}}" + send("#{@checksum_type}_file", real_path).to_s
     when "directory" # Always just timestamp the directory.
       @checksum_type = "ctime"
-      @checksum = ("{#{@checksum_type}}") + send("#{@checksum_type}_file", path).to_s
+      @checksum = "{#{@checksum_type}}" + send("#{@checksum_type}_file", path).to_s
     when "link"
       @destination = Puppet::FileSystem.readlink(real_path)
-      @checksum = ("{#{@checksum_type}}") + send("#{@checksum_type}_file", real_path).to_s rescue nil
+      @checksum = begin
+        "{#{@checksum_type}}" + send("#{@checksum_type}_file", real_path).to_s
+      rescue
+        nil
+      end
+    when "fifo", "socket"
+      @checksum_type = "none"
+      @checksum = "{#{@checksum_type}}" + send("#{@checksum_type}_file", real_path).to_s
     else
       raise ArgumentError, _("Cannot manage files of type %{file_type}") % { file_type: stat.ftype }
     end
   end
 
-  def initialize(path,data={})
+  def initialize(path, data = {})
     @owner       = data.delete('owner')
     @group       = data.delete('group')
     @mode        = data.delete('mode')
@@ -147,22 +154,21 @@ class Puppet::FileServing::Metadata < Puppet::FileServing::Base
   def to_data_hash
     super.update(
       {
-        'owner'        => owner,
-        'group'        => group,
-        'mode'         => mode,
-        'checksum'     => {
-          'type'   => checksum_type,
-          'value'  => checksum
+        'owner' => owner,
+        'group' => group,
+        'mode' => mode,
+        'checksum' => {
+          'type' => checksum_type,
+          'value' => checksum
         },
-        'type'         => ftype,
-        'destination'  => destination,
-      }.merge(content_uri ? {'content_uri' => content_uri} : {})
-       .merge(source ? {'source' => source} : {})
+        'type' => ftype,
+        'destination' => destination,
+      }.merge(content_uri ? { 'content_uri' => content_uri } : {})
+       .merge(source ? { 'source' => source } : {})
     )
   end
 
   def self.from_data_hash(data)
     new(data.delete('path'), data)
   end
-
 end

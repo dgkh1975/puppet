@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 require 'fileutils'
 require_relative '../../puppet/util/lockfile'
 
 class Puppet::Util::Pidlock
-
   def initialize(lockfile)
     @lockfile = Puppet::Util::Lockfile.new(lockfile)
   end
@@ -24,7 +25,7 @@ class Puppet::Util::Pidlock
 
   def unlock
     if mine?
-      return @lockfile.unlock
+      @lockfile.unlock
     else
       false
     end
@@ -47,18 +48,18 @@ class Puppet::Util::Pidlock
 
   def ps_argument_for_current_kernel
     case Puppet.runtime[:facter].value(:kernel)
-      when "Linux"
-        "-eq"
-      when "AIX"
-        "-T"
-      else
-        "-p"
+    when "Linux"
+      "-eq"
+    when "AIX"
+      "-T"
+    else
+      "-p"
     end
   end
 
   def clear_if_stale
     pid = lock_pid
-    return @lockfile.unlock if pid == nil
+    return @lockfile.unlock if pid.nil?
     return if Process.pid == pid
 
     errors = [Errno::ESRCH]
@@ -92,7 +93,7 @@ class Puppet::Util::Pidlock
       # On Windows, we're checking if the filesystem path name of the running
       # process is our vendored ruby:
       begin
-        exe_path = Puppet::Util::Windows::Process::get_process_image_name_by_pid(pid)
+        exe_path = Puppet::Util::Windows::Process.get_process_image_name_by_pid(pid)
         @lockfile.unlock unless exe_path =~ /\\bin\\ruby.exe$/
       rescue Puppet::Util::Windows::Error => e
         Puppet.debug("Failed to read pidfile #{file_path}: #{e.message}")

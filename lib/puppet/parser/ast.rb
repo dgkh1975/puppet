@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # The base class for the 3x "parse tree", now only used by the top level
 # constructs and the compiler.
 # Handles things like file name, line #, and also does the initialization
@@ -26,21 +28,20 @@ class Puppet::Parser::AST
   def safeevaluate(scope)
     # We duplicate code here, rather than using exceptwrap, because this
     # is called so many times during parsing.
-    begin
-      return self.evaluate(scope)
-    rescue Puppet::Pops::Evaluator::PuppetStopIteration => detail
-      raise detail
-#      # Only deals with StopIteration from the break() function as a general
-#      # StopIteration is a general runtime problem
-#      raise Puppet::ParseError.new(detail.message, detail.file, detail.line, detail)
-    rescue Puppet::Error => detail
-      raise adderrorcontext(detail)
-    rescue => detail
-      error = Puppet::ParseError.new(detail.to_s, nil, nil, detail)
-      # We can't use self.fail here because it always expects strings,
-      # not exceptions.
-      raise adderrorcontext(error, detail)
-    end
+
+    evaluate(scope)
+  rescue Puppet::Pops::Evaluator::PuppetStopIteration => detail
+    raise detail
+  #      # Only deals with StopIteration from the break() function as a general
+  #      # StopIteration is a general runtime problem
+  #      raise Puppet::ParseError.new(detail.message, detail.file, detail.line, detail)
+  rescue Puppet::Error => detail
+    raise adderrorcontext(detail)
+  rescue => detail
+    error = Puppet::ParseError.new(detail.to_s, nil, nil, detail)
+    # We can't use self.fail here because it always expects strings,
+    # not exceptions.
+    raise adderrorcontext(error, detail)
   end
 
   def initialize(file: nil, line: nil, pos: nil)

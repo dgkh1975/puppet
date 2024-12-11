@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../../puppet/generate/models/type/property'
 
 module Puppet
@@ -38,16 +40,17 @@ module Puppet
               Property.new(type.paramclass(name))
             end
             sc = Puppet::Pops::Types::StringConverter.singleton
-            @title_patterns = Hash[type.title_patterns.map do |mapping|
+            @title_patterns = type.title_patterns.to_h do |mapping|
               [
                 sc.convert(mapping[0], '%p'),
                 sc.convert(mapping[1].map do |names|
                   next if names.empty?
                   raise Puppet::Error, _('title patterns that use procs are not supported.') unless names.size == 1
+
                   names[0].to_s
                 end, '%p')
               ]
-            end]
+            end
             @isomorphic = type.isomorphic?
             # continue to emit capability as false when rendering the ERB
             # template, so that pcore modules generated prior to puppet7 can be

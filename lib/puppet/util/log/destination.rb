@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A type of log destination.
 class Puppet::Util::Log::Destination
   class << self
@@ -30,9 +32,9 @@ class Puppet::Util::Log::Destination
 
   def name
     if defined?(@name)
-      return @name
+      @name
     else
-      return self.class.name
+      self.class.name
     end
   end
 
@@ -46,4 +48,3 @@ class Puppet::Util::Log::Destination
     define_method(:initialize, &block)
   end
 end
-

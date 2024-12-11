@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/resource/status'
 
 class Puppet::Transaction::ResourceHarness
@@ -20,7 +22,7 @@ class Puppet::Transaction::ResourceHarness
       context = ResourceApplicationContext.from_resource(resource, status)
       perform_changes(resource, context)
 
-      if status.changed? && ! resource.noop?
+      if status.changed? && !resource.noop?
         cache(resource, :synced, Time.now)
         resource.flush if resource.respond_to?(:flush)
       end
@@ -35,6 +37,7 @@ class Puppet::Transaction::ResourceHarness
 
   def scheduled?(resource)
     return true if Puppet[:ignoreschedules]
+
     schedule = schedule(resource)
     return true unless schedule
 
@@ -54,6 +57,7 @@ class Puppet::Transaction::ResourceHarness
 
     name = resource[:schedule]
     return nil unless name
+
     resource.catalog.resource(:schedule, name) || resource.fail(_("Could not find schedule %{name}") % { name: name })
   end
 
@@ -213,10 +217,10 @@ class Puppet::Transaction::ResourceHarness
 
     # The event we've been provided might have been redacted so we need to use the state stored within
     # the resource application context to see if an event was actually generated.
-    if !are_audited_values_equal(context.historical_values[property.name], context.current_values[property.name])
+    unless are_audited_values_equal(context.historical_values[property.name], context.current_values[property.name])
       event.message = property.format(_("audit change: previously recorded value %s has been changed to %s"),
-                 property.is_to_s(event.historical_value),
-                 property.is_to_s(event.previous_value))
+                                      property.is_to_s(event.historical_value),
+                                      property.is_to_s(event.previous_value))
     end
 
     event
@@ -231,9 +235,13 @@ class Puppet::Transaction::ResourceHarness
   end
 
   def noop(event, param, current_value, audit_message)
-    event.message = param.format(_("current_value %s, should be %s (noop)"),
-                                 param.is_to_s(current_value),
-                                 param.should_to_s(param.should)) + audit_message.to_s
+    if param.sensitive
+      event.message = param.format(_("current_value %s, should be %s (noop)"),
+                                   param.is_to_s(current_value),
+                                   param.should_to_s(param.should)) + audit_message.to_s
+    else
+      event.message = "#{param.change_to_s(current_value, param.should)} (noop)#{audit_message}"
+    end
     event.status = "noop"
   end
 
@@ -306,10 +314,10 @@ class Puppet::Transaction::ResourceHarness
       ResourceApplicationContext.new(resource,
                                      resource.retrieve_resource.to_hash,
                                      Puppet::Util::Storage.cache(resource).dup,
-                                     (resource[:audit] || []).map { |p| p.to_sym },
+                                     (resource[:audit] || []).map(&:to_sym),
                                      [],
                                      status,
-                                     resource.parameters.select { |n,p| p.is_a?(Puppet::Property) && !p.sensitive })
+                                     resource.parameters.select { |_n, p| p.is_a?(Puppet::Property) && !p.sensitive })
     end
 
     def resource_present?

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/package/version/gem'
 require_relative '../../../puppet/util/package/version/range'
 require_relative '../../../puppet/provider/package_targetable'
@@ -55,9 +57,11 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
   # that contains the content of PATH but without puppet/bin dir.
   # This is used to pass a custom PATH and execute commands in a controlled environment
   def self.windows_path_without_puppet_bin
-    @path ||= Puppet::Util.get_env('PATH').split(File::PATH_SEPARATOR)
-                                          .reject { |dir| dir =~ /puppet\\bin$/ }
-                                          .join(File::PATH_SEPARATOR)
+    # rubocop:disable Naming/MemoizedInstanceVariableName
+    @path ||= ENV['PATH'].split(File::PATH_SEPARATOR)
+                         .reject { |dir| dir =~ /puppet\\bin$/ }
+                         .join(File::PATH_SEPARATOR)
+    # rubocop:enable Naming/MemoizedInstanceVariableName
   end
 
   private_class_method :windows_path_without_puppet_bin
@@ -73,13 +77,14 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
     validate_command(command)
     cmd = [command] << command_options
 
-    custom_environment = {'HOME'=>Puppet::Util.get_env('HOME')}.merge(custom_environment)
+    custom_environment = { 'HOME' => ENV.fetch('HOME', nil) }.merge(custom_environment)
 
     if Puppet::Util::Platform.windows?
       custom_environment[:PATH] = windows_path_without_puppet_bin
     end
 
-    execute(cmd, {:failonfail => true, :combine => true, :custom_environment => custom_environment})
+    # This uses an unusual form of passing the command and args as [<cmd>, [<arg1>, <arg2>, ...]]
+    execute(cmd, { :failonfail => true, :combine => true, :custom_environment => custom_environment })
   end
 
   def self.instances(target_command = nil)
@@ -115,17 +120,16 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
     end
 
     begin
-      list = execute_gem_command(options[:command], command_options).lines.
-        map {|set| gemsplit(set) }.
-        reject {|x| x.nil? }
+      list = execute_gem_command(options[:command], command_options).lines
+                                                                    .filter_map { |set| gemsplit(set) }
     rescue Puppet::ExecutionFailure => detail
       raise Puppet::Error, _("Could not list gems: %{detail}") % { detail: detail }, detail.backtrace
     end
 
     if options[:justme]
-      return list.shift
+      list.shift
     else
-      return list
+      list
     end
   end
 
@@ -137,11 +141,11 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
     # so we don't need to check for them
 
     if desc =~ /^(\S+)\s+\((.+)\)/
-      gem_name = $1
-      versions = $2.sub('default: ', '').split(/,\s*/)
+      gem_name = Regexp.last_match(1)
+      versions = Regexp.last_match(2).sub('default: ', '').split(/,\s*/)
       {
-        :name     => gem_name,
-        :ensure   => versions.map{|v| v.split[0]},
+        :name => gem_name,
+        :ensure => versions.map { |v| v.split[0] },
         :provider => name
       }
     else
@@ -152,6 +156,7 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
 
   def insync?(is)
     return false unless is && is != :absent
+
     is = [is] unless is.is_a? Array
     should = @resource[:ensure]
 
@@ -164,12 +169,10 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
       end
 
       return is.any? do |version|
-        begin
-          should_range.include?(GEM_VERSION.parse(version))
-        rescue GEM_VERSION::ValidationFailure
-          Puppet.debug("Cannot parse #{version} as a ruby gem version")
-          false
-        end
+        should_range.include?(GEM_VERSION.parse(version))
+      rescue GEM_VERSION::ValidationFailure
+        Puppet.debug("Cannot parse #{version} as a ruby gem version")
+        false
       end
     end
 
@@ -207,9 +210,9 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
     end
 
     if Puppet::Util::Platform.windows?
-      command_options << "-v" << %Q["#{should}"] if useversion && !should.is_a?(Symbol)
-    else
-      command_options << "-v" << should if useversion && !should.is_a?(Symbol)
+      command_options << "-v" << %Q("#{should}") if useversion && !should.is_a?(Symbol)
+    elsif useversion && !should.is_a?(Symbol)
+      command_options << "-v" << should
     end
 
     if Puppet::Util::Package.versioncmp(rubygem_version(command), '2.0.0') == -1
@@ -234,14 +237,14 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
         command_options << uri.path
       when 'puppet'
         # we don't support puppet:// URLs (yet)
-        raise Puppet::Error.new(_("puppet:// URLs are not supported as gem sources"))
+        raise Puppet::Error, _("puppet:// URLs are not supported as gem sources")
       else
         # check whether it's an absolute file path to help Windows out
         if Puppet::Util.absolute_path?(source)
           command_options << source
         else
           # interpret it as a gem repository
-          command_options << "--source" << "#{source}" << resource[:name]
+          command_options << "--source" << source.to_s << resource[:name]
         end
       end
     else
@@ -280,7 +283,7 @@ Puppet::Type.type(:package).provide :gem, :parent => Puppet::Provider::Package::
   end
 
   def update
-    self.install(false)
+    install(false)
   end
 
   def install_options

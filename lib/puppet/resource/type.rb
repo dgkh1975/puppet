@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/parser'
 require_relative '../../puppet/util/warnings'
 require_relative '../../puppet/util/errors'
@@ -15,21 +17,31 @@ class Puppet::Resource::Type
 
   # Map the names used in our documentation to the names used internally
   RESOURCE_KINDS_TO_EXTERNAL_NAMES = {
-      :hostclass => "class",
-      :node => "node",
-      :definition => "defined_type"
+    :hostclass => "class",
+    :node => "node",
+    :definition => "defined_type"
   }
   RESOURCE_EXTERNAL_NAMES_TO_KINDS = RESOURCE_KINDS_TO_EXTERNAL_NAMES.invert
 
-  NAME = 'name'.freeze
-  TITLE = 'title'.freeze
-  MODULE_NAME = 'module_name'.freeze
-  CALLER_MODULE_NAME = 'caller_module_name'.freeze
-  PARAMETERS = 'parameters'.freeze
-  KIND = 'kind'.freeze
-  NODES = 'nodes'.freeze
-  DOUBLE_COLON = '::'.freeze
+  NAME = 'name'
+  TITLE = 'title'
+  MODULE_NAME = 'module_name'
+  CALLER_MODULE_NAME = 'caller_module_name'
+  PARAMETERS = 'parameters'
+  KIND = 'kind'
+  NODES = 'nodes'
+  DOUBLE_COLON = '::'
   EMPTY_ARRAY = [].freeze
+
+  LOOKAROUND_OPERATORS = {
+    "(" => 'LP',
+    "?" => "QU",
+    "<" => "LT",
+    ">" => "GT",
+    "!" => "EX",
+    "=" => "EQ",
+    ")" => 'RP'
+  }.freeze
 
   attr_accessor :file, :line, :doc, :code, :parent, :resource_type_collection, :override
   attr_reader :namespace, :arguments, :behaves_like, :module_name
@@ -45,7 +57,7 @@ class Puppet::Resource::Type
   attr_reader :type
 
   RESOURCE_KINDS.each do |t|
-    define_method("#{t}?") { self.type == t }
+    define_method("#{t}?") { type == t }
   end
 
   # Are we a child of the passed class?  Do a recursive search up our
@@ -54,12 +66,11 @@ class Puppet::Resource::Type
     return true if override
     return false unless parent
 
-    return(klass == parent_type ? true : parent_type.child_of?(klass))
+    (klass == parent_type ? true : parent_type.child_of?(klass))
   end
 
   # Now evaluate the code associated with this class or definition.
   def evaluate_code(resource)
-
     static_parent = evaluate_parent_type(resource)
     scope = static_parent || resource.scope
 
@@ -93,6 +104,7 @@ class Puppet::Resource::Type
     [:code, :doc, :line, :file, :parent].each do |param|
       value = options[param]
       next unless value
+
       send(param.to_s + '=', value)
     end
 
@@ -116,6 +128,7 @@ class Puppet::Resource::Type
   def merge(other)
     fail _("%{name} is not a class; cannot add code to it") % { name: name } unless type == :hostclass
     fail _("%{name} is not a class; cannot add code from it") % { name: other.name } unless other.type == :hostclass
+
     if name == "" && Puppet.settings[:freeze_main]
       # It is ok to merge definitions into main even if freeze is on (definitions are nodes, classes, defines, functions, and types)
       unless other.code.is_definitions_only?
@@ -137,7 +150,7 @@ class Puppet::Resource::Type
     # This might just be an empty, stub class.
     return unless other.code
 
-    unless self.code
+    unless code
       self.code = other.code
       return
     end
@@ -150,16 +163,16 @@ class Puppet::Resource::Type
   # classes and nodes.  No parameters are be supplied--if this is a
   # parameterized class, then all parameters take on their default
   # values.
-  def ensure_in_catalog(scope, parameters=nil)
+  def ensure_in_catalog(scope, parameters = nil)
     resource_type =
-    case type
-    when :definition
-      raise ArgumentError, _('Cannot create resources for defined resource types')
-    when :hostclass
-      :class
-    when :node
-      :node
-    end
+      case type
+      when :definition
+        raise ArgumentError, _('Cannot create resources for defined resource types')
+      when :hostclass
+        :class
+      when :node
+        :node
+      end
 
     # Do nothing if the resource already exists; this makes sure we don't
     # get multiple copies of the class resource, which helps provide the
@@ -172,7 +185,7 @@ class Puppet::Resource::Type
       resource = scope.catalog.resource(resource_type, name)
       return resource unless resource.nil?
     elsif parameters.is_a?(Hash)
-      parameters = parameters.map {|k, v| Puppet::Parser::Resource::Param.new(:name => k, :value => v, :source => self)}
+      parameters = parameters.map { |k, v| Puppet::Parser::Resource::Param.new(:name => k, :value => v, :source => self) }
     end
     resource = Puppet::Parser::Resource.new(resource_type, name, :scope => scope, :source => self, :parameters => parameters)
     instantiate_resource(scope, resource)
@@ -186,14 +199,18 @@ class Puppet::Resource::Type
       parent_type(scope).ensure_in_catalog(scope)
     end
 
-    if ['Class', 'Node'].include? resource.type
+    if %w[Class Node].include? resource.type
       scope.catalog.merge_tags_from(resource)
     end
   end
 
   def name
     if type == :node && name_is_regex?
-      "__node_regexp__#{@name.source.downcase.gsub(/[^-\w:.]/,'').sub(/^\.+/,'')}"
+      # Normalize lookarround regex patthern
+      internal_name = @name.source.downcase.gsub(/\(\?[^)]*\)/) do |str|
+        str.gsub(/./) { |ch| LOOKAROUND_OPERATORS[ch] || ch }
+      end
+      "__node_regexp__#{internal_name.gsub(/[^-\w:.]/, '').sub(/^\.+/, '')}"
     else
       @name
     end
@@ -207,7 +224,7 @@ class Puppet::Resource::Type
     return nil unless parent
 
     @parent_type ||= scope.environment.known_resource_types.send("find_#{type}", parent) ||
-      fail(Puppet::ParseError, _("Could not find parent resource type '%{parent}' of type %{parent_type} in %{env}") % { parent: parent, parent_type: type, env: scope.environment })
+                     fail(Puppet::ParseError, _("Could not find parent resource type '%{parent}' of type %{parent_type} in %{env}") % { parent: parent, parent_type: type, env: scope.environment })
   end
 
   # Validate and set any arguments passed by the resource as variables in the scope.
@@ -229,12 +246,12 @@ class Puppet::Resource::Type
 
     if @type == :hostclass
       scope[TITLE] = resource.title.to_s.downcase
-      scope[NAME] =  resource.name.to_s.downcase
+      scope[NAME] = resource.name.to_s.downcase
     else
       scope[TITLE] = resource.title
-      scope[NAME] =  resource.name
+      scope[NAME] = resource.name
     end
-    scope.class_set(self.name,scope) if hostclass? || node?
+    scope.class_set(name, scope) if hostclass? || node?
 
     param_hash = scope.with_parameter_scope(resource.to_s, arguments.keys) do |param_scope|
       # Assign directly to the parameter scope to avoid scope parameter validation at this point. It
@@ -248,7 +265,7 @@ class Puppet::Resource::Type
     validate_resource_hash(resource, param_hash)
 
     # Assign parameter values to current scope
-    param_hash.each { |param, value| exceptwrap { scope[param] = value }}
+    param_hash.each { |param, value| exceptwrap { scope[param] = value } }
   end
 
   # Lookup and inject parameters from external scope
@@ -257,11 +274,13 @@ class Puppet::Resource::Type
   def inject_external_parameters(resource, scope)
     # Only lookup parameters for host classes
     return unless type == :hostclass
+
     parameters = resource.parameters
     arguments.each do |param_name, default|
       sym_name = param_name.to_sym
       param = parameters[sym_name]
       next unless param.nil? || param.value.nil?
+
       catch(:no_such_key) do
         bound_value = Puppet::Pops::Lookup.search_and_merge("#{name}::#{param_name}", Puppet::Pops::Lookup::Invocation.new(scope), nil)
         # Assign bound value but don't let an undef trump a default expression
@@ -273,12 +292,15 @@ class Puppet::Resource::Type
 
   def assign_defaults(resource, param_scope, scope)
     return unless resource.is_a?(Puppet::Parser::Resource)
+
     parameters = resource.parameters
     arguments.each do |param_name, default|
       next if default.nil?
+
       name = param_name.to_sym
       param = parameters[name]
       next unless param.nil? || param.value.nil?
+
       value = exceptwrap { param_scope.evaluate3x(param_name, default, scope) }
       resource[name] = value
       param_scope[param_name] = value
@@ -298,11 +320,10 @@ class Puppet::Resource::Type
     # recreated as a Sensitive in order to perform correct type checking.
     sensitives = Set.new(resource.sensitive_parameters)
     validate_resource_hash(resource,
-      Hash[resource.parameters.map do |name, value|
-        value_to_validate = sensitives.include?(name) ? Puppet::Pops::Types::PSensitiveType::Sensitive.new(value.value) : value.value
-        [name.to_s, value_to_validate]
-      end
-    ])
+                           resource.parameters.to_h do |name, value|
+                             value_to_validate = sensitives.include?(name) ? Puppet::Pops::Types::PSensitiveType::Sensitive.new(value.value) : value.value
+                             [name.to_s, value_to_validate]
+                           end)
   end
 
   # Check whether a given argument is valid.
@@ -330,6 +351,7 @@ class Puppet::Resource::Type
     @argument_types = {}
     @parameter_struct = nil
     return unless name_to_type_hash
+
     name_to_type_hash.each do |name, t|
       # catch internal errors
       unless @arguments.include?(name)
@@ -338,6 +360,7 @@ class Puppet::Resource::Type
       unless t.is_a? Puppet::Pops::Types::PAnyType
         raise Puppet::DevError, _("Parameter '%{name}' is given a type that is not a Puppet Type, got %{class_name}") % { name: name, class_name: t.class }
       end
+
       @argument_types[name] = t
     end
   end
@@ -357,6 +380,7 @@ class Puppet::Resource::Type
     klass = parent_type(resource.scope)
     parent_resource = resource.scope.compiler.catalog.resource(:class, klass.name) || resource.scope.compiler.catalog.resource(:node, klass.name) if klass
     return unless klass && parent_resource
+
     parent_resource.evaluate unless parent_resource.evaluated?
     parent_scope(resource.scope, klass)
   end
@@ -366,7 +390,7 @@ class Puppet::Resource::Type
     ary = fullname.split(DOUBLE_COLON)
     n = ary.pop || ""
     ns = ary.join(DOUBLE_COLON)
-    return ns, n
+    [ns, n]
   end
 
   def parent_scope(scope, klass)
@@ -391,9 +415,9 @@ class Puppet::Resource::Type
     return unless Puppet::Type.metaparamclass(param)
 
     if default
-      warnonce _("%{param} is a metaparam; this value will inherit to all contained resources in the %{name} definition") % { param: param, name: self.name }
+      warnonce _("%{param} is a metaparam; this value will inherit to all contained resources in the %{name} definition") % { param: param, name: name }
     else
-      raise Puppet::ParseError, _("%{param} is a metaparameter; please choose another parameter name in the %{name} definition") % { param: param, name: self.name }
+      raise Puppet::ParseError, _("%{param} is a metaparameter; please choose another parameter name in the %{name} definition") % { param: param, name: name }
     end
   end
 
@@ -404,7 +428,7 @@ class Puppet::Resource::Type
   def create_params_struct
     arg_types = argument_types
     type_factory = Puppet::Pops::Types::TypeFactory
-    members = { type_factory.optional(type_factory.string(NAME)) =>  type_factory.any }
+    members = { type_factory.optional(type_factory.string(NAME)) => type_factory.any }
 
     Puppet::Type.eachmetaparam do |name|
       # TODO: Once meta parameters are typed, this should change to reflect that type

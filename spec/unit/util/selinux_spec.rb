@@ -6,7 +6,7 @@ require 'puppet/util/selinux'
 describe Puppet::Util::SELinux do
   include Puppet::Util::SELinux
 
-  let(:selinux) { double('selinux', is_selinux_enabled: false) }
+  let(:selinux) { double('selinux', is_selinux_enabled: 0) }
 
   before :each do
     stub_const('Selinux', selinux)
@@ -29,7 +29,7 @@ describe Puppet::Util::SELinux do
     end
 
     it "should return nil if /proc/mounts does not exist" do
-      allow(File).to receive(:open).with("/proc/mounts").and_raise("No such file or directory - /proc/mounts")
+      allow(File).to receive(:new).with("/proc/mounts").and_raise("No such file or directory - /proc/mounts")
       expect(read_mounts).to eq(nil)
     end
   end
@@ -37,8 +37,8 @@ describe Puppet::Util::SELinux do
   describe "read_mounts" do
     before :each do
       fh = double('fh', :close => nil)
-      allow(File).to receive(:open).and_call_original()
-      allow(File).to receive(:open).with("/proc/mounts").and_return(fh)
+      allow(File).to receive(:new).and_call_original()
+      allow(File).to receive(:new).with("/proc/mounts").and_return(fh)
       times_fh_called = 0
       expect(fh).to receive(:read_nonblock) do
         times_fh_called += 1
@@ -65,6 +65,7 @@ describe Puppet::Util::SELinux do
         '/'        => 'ext3',
         '/sys'     => 'sysfs',
         '/mnt/nfs' => 'nfs',
+        '/mnt/zfs' => 'zfs',
         '/proc'    => 'proc',
         '/dev'     => 'tmpfs' })
     end
@@ -83,6 +84,10 @@ describe Puppet::Util::SELinux do
 
     it "should return true if tmpfs" do
       expect(selinux_label_support?('/dev/shm/testfile')).to be_truthy
+    end
+
+    it "should return true if zfs" do
+      expect(selinux_label_support?('/mnt/zfs/testfile')).to be_truthy
     end
 
     it "should return false for a noncapable filesystem" do
@@ -236,6 +241,122 @@ describe Puppet::Util::SELinux do
     end
   end
 
+  describe "get_selinux_default_context_with_handle" do
+    it "should return a context if a default context exists" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true)
+        expect(self).to receive(:find_fs).with("/foo").and_return("ext3")
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd, '/foo', 0).and_return([0, "user_u:role_r:type_t:s0"])
+        expect(get_selinux_default_context_with_handle("/foo", hnd)).to eq("user_u:role_r:type_t:s0")
+      end
+    end
+
+    it "should return nil when permission denied errors are encountered" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true)
+        expect(self).to receive(:selinux_label_support?).and_return(true)
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd, "/root/chuj", 0).and_return(-1)
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_raise(Errno::EACCES, "/root/chuj")
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd)).to be_nil
+      end
+    end
+
+    it "should return nil when no such file or directory errors are encountered and resource_ensure is unset" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true)
+        expect(self).to receive(:selinux_label_support?).and_return(true)
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd, "/root/chuj", 0).and_return(-1)
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_raise(Errno::ENOENT, "/root/chuj")
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd)).to be_nil
+      end
+    end
+
+    it "should pass through lstat mode when file exists" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true).twice
+        expect(self).to receive(:selinux_label_support?).and_return(true).twice
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        fstat = double("File::Stat", :mode => 16384)
+        expect(Selinux).to receive(:selabel_lookup).with(hnd,  "/root/chuj", fstat.mode).and_return([0, "user_u:role_r:type_t:s0"]).twice
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_return(fstat).twice
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd)).to eq("user_u:role_r:type_t:s0")
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd, :file)).to eq("user_u:role_r:type_t:s0")
+      end
+    end
+
+    it "should determine mode based on resource ensure when set to file" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true).twice
+        expect(self).to receive(:selinux_label_support?).and_return(true).twice
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd,  "/root/chuj", 32768).and_return(-1).twice
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_raise(Errno::ENOENT, "/root/chuj").twice
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd, :present)).to be_nil
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd, :file)).to be_nil
+      end
+    end
+
+    it "should determine mode based on resource ensure when set to dir" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true)
+        expect(self).to receive(:selinux_label_support?).and_return(true)
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd, "/root/chuj", 16384).and_return(-1)
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_raise(Errno::ENOENT, "/root/chuj")
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd, :directory)).to be_nil
+      end
+    end
+
+    it "should determine mode based on resource ensure when set to link" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true)
+        expect(self).to receive(:selinux_label_support?).and_return(true)
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd, "/root/chuj", 40960).and_return(-1)
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_raise(Errno::ENOENT, "/root/chuj")
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd, :link)).to be_nil
+      end
+    end
+
+    it "should determine mode based on resource ensure when set to unknown" do
+      without_partial_double_verification do
+        expect(self).to receive(:selinux_support?).and_return(true)
+        expect(self).to receive(:selinux_label_support?).and_return(true)
+        hnd = double("SWIG::TYPE_p_selabel_handle")
+        expect(Selinux).to receive(:selabel_lookup).with(hnd, "/root/chuj", 0).and_return(-1)
+        expect(self).to receive(:file_lstat).with("/root/chuj").and_raise(Errno::ENOENT, "/root/chuj")
+
+        expect(get_selinux_default_context_with_handle("/root/chuj", hnd, "unknown")).to be_nil
+      end
+    end
+
+    it "should raise an ArgumentError when handle is nil" do
+      allow(self).to receive(:selinux_support?).and_return(true)
+      allow(self).to receive(:selinux_label_support?).and_return(true)
+      expect{get_selinux_default_context_with_handle("/foo", nil)}.to raise_error(ArgumentError, /Cannot get default context with nil handle/)
+    end
+
+    it "should return nil if there is no SELinux support" do
+      expect(self).to receive(:selinux_support?).and_return(false)
+      expect(get_selinux_default_context_with_handle("/foo", nil)).to be_nil
+    end
+
+    it "should return nil if selinux_label_support returns false" do
+      expect(self).to receive(:selinux_support?).and_return(true)
+      expect(self).to receive(:find_fs).with("/foo").and_return("nfs")
+      expect(get_selinux_default_context_with_handle("/foo", nil)).to be_nil
+    end
+  end
+
   describe "parse_selinux_context" do
     it "should return nil if no context is passed" do
       expect(parse_selinux_context(:seluser, nil)).to be_nil
@@ -299,7 +420,7 @@ describe Puppet::Util::SELinux do
   describe "set_selinux_context" do
     before :each do
       fh = double('fh', :close => nil)
-      allow(File).to receive(:open).with("/proc/mounts").and_return(fh)
+      allow(File).to receive(:new).with("/proc/mounts").and_return(fh)
       times_fh_called = 0
       allow(fh).to receive(:read_nonblock) do
         times_fh_called += 1

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # Factory is a helper class that makes construction of a Pops Model
 # much more convenient. It can be viewed as a small internal DSL for model
 # constructions.
@@ -115,7 +116,7 @@ class Factory
   end
 
   # Polymorphic interpolate
-  def interpolate()
+  def interpolate
     INTERPOLATION_VISITOR.visit_this_class(self, @model_class, EMPTY_ARRAY)
   end
 
@@ -334,7 +335,7 @@ class Factory
   #
   def infer_Hash(o)
     @model_class = LiteralHash
-    @init_hash['entries'] = o.sort_by { |k,_| k.to_s }.map { |k, v| Factory.new(KeyedEntry, Factory.infer(k), Factory.infer(v)) }
+    @init_hash['entries'] = o.sort_by { |k, _| k.to_s }.map { |k, v| Factory.new(KeyedEntry, Factory.infer(k), Factory.infer(v)) }
     @unfolded = false
   end
 
@@ -373,7 +374,7 @@ class Factory
     @init_hash['return_type'] = return_type unless return_type.nil?
   end
 
-  def build_PlanDefinition(o, name, parameters, body, return_type=nil)
+  def build_PlanDefinition(o, name, parameters, body, return_type = nil)
     @init_hash[KEY_PARAMETERS] = parameters
     b = f_build_body(body)
     @init_hash[KEY_BODY] = b unless b.nil?
@@ -598,7 +599,6 @@ class Factory
 
   def lambda=(lambda)
     @init_hash['lambda'] = lambda
-    self
   end
 
   # Assignment =
@@ -646,8 +646,9 @@ class Factory
   def self.set_resource_form(expr, form)
     # Note: Validation handles illegal combinations
     return false unless expr.instance_of?(self) && expr.model_class <= AbstractResource
+
     expr['form'] = form
-    return true
+    true
   end
 
   # Returns symbolic information about an expected shape of a resource expression given the LHS of a resource expr.
@@ -694,15 +695,15 @@ class Factory
 
   def self.block(*args);                 new(BlockExpression, args.map { |arg| infer(arg) }); end
 
-  def self.string(*args);                new(ConcatenatedString, args.map { |arg| infer(arg) });           end
+  def self.string(*args);                new(ConcatenatedString, args.map { |arg| infer(arg) }); end
 
-  def self.text(o);                      infer(o).text;                                  end
+  def self.text(o);                      infer(o).text; end
 
-  def self.IF(test_e,then_e,else_e);     new(IfExpression, test_e, then_e, else_e);      end
+  def self.IF(test_e, then_e, else_e);     new(IfExpression, test_e, then_e, else_e);      end
 
-  def self.UNLESS(test_e,then_e,else_e); new(UnlessExpression, test_e, then_e, else_e);  end
+  def self.UNLESS(test_e, then_e, else_e); new(UnlessExpression, test_e, then_e, else_e);  end
 
-  def self.CASE(test_e,*options);        new(CaseExpression, test_e, options);           end
+  def self.CASE(test_e, *options); new(CaseExpression, test_e, options); end
 
   def self.WHEN(values_list, block);     new(CaseOption, values_list, block);            end
 
@@ -720,9 +721,9 @@ class Factory
 
   def self.LIST(entries);                new(LiteralList, entries);                      end
 
-  def self.PARAM(name, expr=nil);        new(Parameter, name, expr);                     end
+  def self.PARAM(name, expr = nil); new(Parameter, name, expr); end
 
-  def self.NODE(hosts, parent, body);    new(NodeDefinition, hosts, parent, body);       end
+  def self.NODE(hosts, parent, body); new(NodeDefinition, hosts, parent, body); end
 
   # Parameters
 
@@ -787,7 +788,7 @@ class Factory
     LAMBDA(params, new(EppExpression, parameters_specified, body), nil)
   end
 
-  def self.RESERVED(name, future=false)
+  def self.RESERVED(name, future = false)
     new(ReservedWord, name, future)
   end
 
@@ -809,9 +810,9 @@ class Factory
       end
     else
       # Bad number should already have been caught by lexer - this should never happen
-      #TRANSLATORS 'NUMBER' refers to a method name and the 'name_or_numeric' was the passed in value and should not be translated
+      # TRANSLATORS 'NUMBER' refers to a method name and the 'name_or_numeric' was the passed in value and should not be translated
       raise ArgumentError, _("Internal Error, NUMBER token does not contain a valid number, %{name_or_numeric}") %
-          { name_or_numeric: name_or_numeric }
+                           { name_or_numeric: name_or_numeric }
     end
   end
 
@@ -971,19 +972,19 @@ class Factory
     'realize' => true,
     'include' => true,
     'contain' => true,
-    'tag'     => true,
+    'tag' => true,
 
-    'debug'   => true,
-    'info'    => true,
-    'notice'  => true,
+    'debug' => true,
+    'info' => true,
+    'notice' => true,
     'warning' => true,
-    'err'     => true,
+    'err' => true,
 
-    'fail'    => true,
-    'import'  => true,  # discontinued, but transform it to make it call error reporting function
-    'break'   => true,
-    'next'    => true,
-    'return'  => true
+    'fail' => true,
+    'import' => true, # discontinued, but transform it to make it call error reporting function
+    'break' => true,
+    'next' => true,
+    'return' => true
   }.freeze
 
   # Returns true if the given name is a "statement keyword" (require, include, contain,
@@ -995,6 +996,7 @@ class Factory
 
   class ArgsToNonCallError < RuntimeError
     attr_reader :args, :name_expr
+
     def initialize(args, name_expr)
       @args = args
       @name_expr = name_expr
@@ -1005,7 +1007,7 @@ class Factory
   # expression, or expression list.
   #
   def self.transform_calls(expressions)
-    expressions.reduce([]) do |memo, expr|
+    expressions.each_with_object([]) do |expr, memo|
       name = memo[-1]
       if name.instance_of?(Factory) && name.model_class <= QualifiedName && name_is_statement?(name[KEY_VALUE])
         if expr.is_a?(Array)
@@ -1033,7 +1035,6 @@ class Factory
           expr['rval_required'] = false
         end
       end
-      memo
     end
   end
 
@@ -1043,14 +1044,15 @@ class Factory
     # Returning nil means accepting the given as a potential resource expression
     return nil unless attribute_ops.is_a? Array
     return nil unless left.model_class <= QualifiedName
+
     keyed_entries = attribute_ops.map do |ao|
       return nil if ao[KEY_OPERATOR] == '+>'
+
       KEY_ENTRY(infer(ao['attribute_name']), ao['value_expr'])
     end
     a_hash = HASH(keyed_entries)
     a_hash.record_position(left[KEY_LOCATOR], lbrace_token, rbrace_token)
-    result = block_or_expression(transform_calls([left, a_hash]))
-    result
+    block_or_expression(transform_calls([left, a_hash]))
   end
 
   def interpolate_Factory(c)
@@ -1059,7 +1061,7 @@ class Factory
 
   def interpolate_LiteralInteger(c)
     # convert number to a variable
-    self.var
+    var
   end
 
   def interpolate_Object(c)
@@ -1067,7 +1069,7 @@ class Factory
   end
 
   def interpolate_QualifiedName(c)
-    self.var
+    var
   end
 
   # rewrite left expression to variable if it is name, number, and recurse if it is an access expression

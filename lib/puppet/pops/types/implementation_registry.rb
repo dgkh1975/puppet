@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
   # The {ImplementationRegistry} maps names types in the Puppet Type System to names of corresponding implementation
@@ -47,7 +49,8 @@ module Types
       ns = TypeFormatter::NAME_SEGMENT_SEPARATOR
       register_implementation_regexp(
         [/\A#{type_namespace}#{ns}(\w+)\z/, "#{impl_namespace}#{ns}\\1"],
-        [/\A#{impl_namespace}#{ns}(\w+)\z/, "#{type_namespace}#{ns}\\1"])
+        [/\A#{impl_namespace}#{ns}(\w+)\z/, "#{type_namespace}#{ns}\\1"]
+      )
     end
 
     # Register a bidirectional regexp mapping

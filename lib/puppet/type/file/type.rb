@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet
   Puppet::Type.type(:file).newproperty(:type) do
     require 'etc'
@@ -12,9 +14,8 @@ module Puppet
       current_value
     end
 
-    validate do |val|
+    validate do |_val|
       fail "type is read-only"
     end
   end
 end
-

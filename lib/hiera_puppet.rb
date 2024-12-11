@@ -1,4 +1,6 @@
-require 'hiera'
+# frozen_string_literal: true
+
+Puppet.features.hiera?
 require 'hiera/scope'
 require_relative 'puppet'
 
@@ -45,11 +47,8 @@ module HieraPuppet
     default  = args[1]
     override = args[2]
 
-    return [key, default, override]
+    [key, default, override]
   end
-
-  private
-  module_function
 
   def hiera
     @hiera ||= Hiera.new(:config => hiera_config)
@@ -77,4 +76,3 @@ module HieraPuppet
     end
   end
 end
-

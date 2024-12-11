@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/parser/scope'
 require_relative '../../../puppet/pops/evaluator/compare_operator'
 require_relative '../../../puppet/pops/evaluator/relationship_operator'
@@ -33,12 +35,7 @@ class EvaluatorImpl
   include Runtime3Support
   include ExternalSyntaxSupport
 
-  COMMA_SEPARATOR = ', '.freeze
-
-  # Reference to Issues name space makes it easier to refer to issues
-  # (Issues are shared with the validator).
-  #
-  Issues = Issues
+  COMMA_SEPARATOR = ', '
 
   def initialize
     @@initialized ||= static_initialize
@@ -77,53 +74,44 @@ class EvaluatorImpl
   # @api public
   #
   def evaluate(target, scope)
-    begin
-      @@eval_visitor.visit_this_1(self, target, scope)
-
-    rescue SemanticError => e
-      # A raised issue may not know the semantic target, use errors call stack, but fill in the
-      # rest from a supplied semantic object, or the target instruction if there is not semantic
-      # object.
-      #
-      fail(e.issue, e.semantic || target, e.options, e)
-
-    rescue Puppet::PreformattedError => e
-      # Already formatted with location information, and with the wanted call stack.
-      # Note this is currently a specialized ParseError, so rescue-order is important
-      #
+    @@eval_visitor.visit_this_1(self, target, scope)
+  rescue SemanticError => e
+    # A raised issue may not know the semantic target, use errors call stack, but fill in the
+    # rest from a supplied semantic object, or the target instruction if there is not semantic
+    # object.
+    #
+    fail(e.issue, e.semantic || target, e.options, e)
+  rescue Puppet::PreformattedError => e
+    # Already formatted with location information, and with the wanted call stack.
+    # Note this is currently a specialized ParseError, so rescue-order is important
+    #
+    raise e
+  rescue Puppet::ParseError => e
+    # ParseError may be raised in ruby code without knowing the location
+    # in puppet code.
+    # Accept a ParseError that has file or line information available
+    # as an error that should be used verbatim. (Tests typically run without
+    # setting a file name).
+    # ParseError can supply an original - it is impossible to determine which
+    # call stack that should be propagated, using the ParseError's backtrace.
+    #
+    if e.file || e.line
       raise e
-
-    rescue Puppet::ParseError => e
-      # ParseError may be raised in ruby code without knowing the location
-      # in puppet code.
-      # Accept a ParseError that has file or line information available
-      # as an error that should be used verbatim. (Tests typically run without
-      # setting a file name).
-      # ParseError can supply an original - it is impossible to determine which
-      # call stack that should be propagated, using the ParseError's backtrace.
-      #
-      if e.file || e.line
-        raise e
-      else
-        # Since it had no location information, treat it as user intended a general purpose
-        # error. Pass on its call stack.
-        fail(Issues::RUNTIME_ERROR, target, {:detail => e.message}, e)
-      end
-
-
-    rescue Puppet::Error => e
-      # PuppetError has the ability to wrap an exception, if so, use the wrapped exception's
-      # call stack instead
-      fail(Issues::RUNTIME_ERROR, target, {:detail => e.message}, e.original || e)
-
-    rescue StopIteration => e
-      # Ensure these are not rescued as StandardError
-      raise e
-
-    rescue StandardError => e
-      # All other errors, use its message and call stack
-      fail(Issues::RUNTIME_ERROR, target, {:detail => e.message}, e)
+    else
+      # Since it had no location information, treat it as user intended a general purpose
+      # error. Pass on its call stack.
+      fail(Issues::RUNTIME_ERROR, target, { :detail => e.message }, e)
     end
+  rescue Puppet::Error => e
+    # PuppetError has the ability to wrap an exception, if so, use the wrapped exception's
+    # call stack instead
+    fail(Issues::RUNTIME_ERROR, target, { :detail => e.message }, e.original || e)
+  rescue StopIteration => e
+    # Ensure these are not rescued as StandardError
+    raise e
+  rescue StandardError => e
+    # All other errors, use its message and call stack
+    fail(Issues::RUNTIME_ERROR, target, { :detail => e.message }, e)
   end
 
   # Assigns the given _value_ to the given _target_. The additional argument _o_ is the instruction that
@@ -202,7 +190,7 @@ class EvaluatorImpl
 
   # An array is assignable if all entries are lvalues
   def lvalue_LiteralList(o, scope)
-    o.values.map {|x| lvalue(x, scope) }
+    o.values.map { |x| lvalue(x, scope) }
   end
 
   # Assign value to named variable.
@@ -217,14 +205,15 @@ class EvaluatorImpl
   #
   def assign_String(name, value, o, scope)
     if name =~ /::/
-      fail(Issues::CROSS_SCOPE_ASSIGNMENT, o.left_expr, {:name => name})
+      fail(Issues::CROSS_SCOPE_ASSIGNMENT, o.left_expr, { :name => name })
     end
+
     set_variable(name, value, o, scope)
     value
   end
 
   def assign_Numeric(n, value, o, scope)
-    fail(Issues::ILLEGAL_NUMERIC_ASSIGNMENT, o.left_expr, {:varname => n.to_s})
+    fail(Issues::ILLEGAL_NUMERIC_ASSIGNMENT, o.left_expr, { :varname => n.to_s })
   end
 
   # Catches all illegal assignment (e.g. 1 = 2, {'a'=>1} = 2, etc)
@@ -234,16 +223,18 @@ class EvaluatorImpl
   end
 
   def assign_Array(lvalues, values, o, scope)
-    if values.is_a?(Hash)
+    case values
+    when Hash
       lvalues.map do |lval|
         assign(lval,
-          values.fetch(lval) {|k| fail(Issues::MISSING_MULTI_ASSIGNMENT_KEY, o, :key =>k)},
-          o, scope)
+               values.fetch(lval) { |k| fail(Issues::MISSING_MULTI_ASSIGNMENT_KEY, o, :key => k) },
+               o, scope)
       end
-    elsif values.is_a?(Puppet::Pops::Types::PClassType)
+    when Puppet::Pops::Types::PClassType
       if Puppet[:tasks]
-        fail(Issues::CATALOG_OPERATION_NOT_SUPPORTED_WHEN_SCRIPTING, o, {:operation => _('multi var assignment from class')})
+        fail(Issues::CATALOG_OPERATION_NOT_SUPPORTED_WHEN_SCRIPTING, o, { :operation => _('multi var assignment from class') })
       end
+
       # assign variables from class variables
       # lookup class resource and return one or more parameter values
       # TODO: behavior when class_name is nil
@@ -258,18 +249,19 @@ class EvaluatorImpl
             result = get_variable_value(varname, o, scope)
             assign(lval, result, o, scope)
           else
-            fail(Puppet::Pops::Issues::MISSING_MULTI_ASSIGNMENT_VARIABLE, o.left_expr.values[idx], {:name => varname})
+            fail(Puppet::Pops::Issues::MISSING_MULTI_ASSIGNMENT_VARIABLE, o.left_expr.values[idx], { :name => varname })
           end
         end
       else
-        fail(Issues::UNKNOWN_RESOURCE, o.right_expr, {:type_name => 'Class', :title => values.class_name})
+        fail(Issues::UNKNOWN_RESOURCE, o.right_expr, { :type_name => 'Class', :title => values.class_name })
       end
 
     else
       values = [values] unless values.is_a?(Array)
       if values.size != lvalues.size
-        fail(Issues::ILLEGAL_MULTI_ASSIGNMENT_SIZE, o, :expected =>lvalues.size, :actual => values.size)
+        fail(Issues::ILLEGAL_MULTI_ASSIGNMENT_SIZE, o, :expected => lvalues.size, :actual => values.size)
       end
+
       lvalues.zip(values).map { |lval, val| assign(lval, val, o, scope) }
     end
   end
@@ -303,7 +295,7 @@ class EvaluatorImpl
   #
   def eval_ReservedWord(o, scope)
     if !o.future
-      fail(Issues::RESERVED_WORD, o, {:word => o.word})
+      fail(Issues::RESERVED_WORD, o, { :word => o.word })
     else
       o.word
     end
@@ -321,12 +313,13 @@ class EvaluatorImpl
   #
   def eval_QualifiedReference(o, scope)
     type = Types::TypeParser.singleton.interpret(o)
-    fail(Issues::UNKNOWN_RESOURCE_TYPE, o, {:type_name => type.type_string }) if type.is_a?(Types::PTypeReferenceType)
+    fail(Issues::UNKNOWN_RESOURCE_TYPE, o, { :type_name => type.type_string }) if type.is_a?(Types::PTypeReferenceType)
+
     type
   end
 
   def eval_NotExpression(o, scope)
-    ! is_true?(evaluate(o.expr, scope), o.expr)
+    !is_true?(evaluate(o.expr, scope), o.expr)
   end
 
   def eval_UnaryMinusExpression(o, scope)
@@ -355,7 +348,7 @@ class EvaluatorImpl
   # @return <Array<Object, Object>> array with result of evaluating left and right expressions
   #
   def eval_BinaryExpression o, scope
-    [ evaluate(o.left_expr, scope), evaluate(o.right_expr, scope) ]
+    [evaluate(o.left_expr, scope), evaluate(o.right_expr, scope)]
   end
 
   # Evaluates assignment with operators =, +=, -= and
@@ -372,7 +365,7 @@ class EvaluatorImpl
     if o.operator == '='
       assign(name, value, o, scope)
     else
-      fail(Issues::UNSUPPORTED_OPERATOR, o, {:operator => o.operator})
+      fail(Issues::UNSUPPORTED_OPERATOR, o, { :operator => o.operator })
     end
     value
   end
@@ -389,18 +382,17 @@ class EvaluatorImpl
     begin
       result = calculate(left, right, o, scope)
     rescue ArgumentError => e
-      fail(Issues::RUNTIME_ERROR, o, {:detail => e.message}, e)
+      fail(Issues::RUNTIME_ERROR, o, { :detail => e.message }, e)
     end
     result
   end
-
 
   # Handles binary expression where lhs and rhs are array/hash or numeric and operator is +, - , *, % / << >>
   #
   def calculate(left, right, bin_expr, scope)
     operator = bin_expr.operator
     unless ARITHMETIC_OPERATORS.include?(operator)
-      fail(Issues::UNSUPPORTED_OPERATOR, bin_expr, {:operator => operator})
+      fail(Issues::UNSUPPORTED_OPERATOR, bin_expr, { :operator => operator })
     end
 
     left_o = bin_expr.left_expr
@@ -415,8 +407,9 @@ class EvaluatorImpl
         delete(left, right)
       when '<<'
         unless left.is_a?(Array)
-          fail(Issues::OPERATOR_NOT_APPLICABLE, left_o, {:operator => operator, :left_value => left})
+          fail(Issues::OPERATOR_NOT_APPLICABLE, left_o, { :operator => operator, :left_value => left })
         end
+
         left + [right]
       end
     else
@@ -426,8 +419,9 @@ class EvaluatorImpl
       begin
         if operator == '%' && (left.is_a?(Float) || right.is_a?(Float))
           # Deny users the fun of seeing severe rounding errors and confusing results
-          fail(Issues::OPERATOR_NOT_APPLICABLE, left_o, {:operator => operator, :left_value => left}) if left.is_a?(Float)
-          fail(Issues::OPERATOR_NOT_APPLICABLE_WHEN, left_o, {:operator => operator, :left_value => left, :right_value => right})
+          fail(Issues::OPERATOR_NOT_APPLICABLE, left_o, { :operator => operator, :left_value => left }) if left.is_a?(Float)
+
+          fail(Issues::OPERATOR_NOT_APPLICABLE_WHEN, left_o, { :operator => operator, :left_value => left, :right_value => right })
         end
         if right.is_a?(Time::TimeData) && !left.is_a?(Time::TimeData)
           if operator == '+' || operator == '*' && right.is_a?(Time::Timespan)
@@ -438,23 +432,23 @@ class EvaluatorImpl
           elsif operator == '-' && right.is_a?(Time::Timespan)
             left = Time::Timespan.new((left * Time::NSECS_PER_SEC).to_i)
           else
-            fail(Issues::OPERATOR_NOT_APPLICABLE_WHEN, left_o, {:operator => operator, :left_value => left, :right_value => right})
+            fail(Issues::OPERATOR_NOT_APPLICABLE_WHEN, left_o, { :operator => operator, :left_value => left, :right_value => right })
           end
         end
         result = left.send(operator, right)
       rescue NoMethodError
-        fail(Issues::OPERATOR_NOT_APPLICABLE, left_o, {:operator => operator, :left_value => left})
+        fail(Issues::OPERATOR_NOT_APPLICABLE, left_o, { :operator => operator, :left_value => left })
       rescue ZeroDivisionError
         fail(Issues::DIV_BY_ZERO, bin_expr.right_expr)
       end
       case result
       when Float
         if result == Float::INFINITY || result == -Float::INFINITY
-          fail(Issues::RESULT_IS_INFINITY, left_o, {:operator => operator})
+          fail(Issues::RESULT_IS_INFINITY, left_o, { :operator => operator })
         end
       when Integer
         if result < MIN_INTEGER || result > MAX_INTEGER
-          fail(Issues::NUMERIC_OVERFLOW, bin_expr, {:value => result})
+          fail(Issues::NUMERIC_OVERFLOW, bin_expr, { :value => result })
         end
       end
       result
@@ -514,9 +508,9 @@ class EvaluatorImpl
     keys = o.keys || []
     if left.is_a?(Types::PClassType)
       # Evaluate qualified references without errors no undefined types
-      keys = keys.map {|key| key.is_a?(Model::QualifiedReference) ? Types::TypeParser.singleton.interpret(key) : evaluate(key, scope) }
+      keys = keys.map { |key| key.is_a?(Model::QualifiedReference) ? Types::TypeParser.singleton.interpret(key) : evaluate(key, scope) }
     else
-      keys = keys.map {|key| evaluate(key, scope) }
+      keys = keys.map { |key| evaluate(key, scope) }
       # Resource[File] becomes File
       return keys[0] if Types::PResourceType::DEFAULT == left && keys.size == 1 && keys[0].is_a?(Types::PResourceType)
     end
@@ -530,54 +524,55 @@ class EvaluatorImpl
     right = evaluate(o.right_expr, scope)
 
     begin
-    # Left is a type
-    if left.is_a?(Types::PAnyType)
-      case o.operator
-      when '=='
-        @@type_calculator.equals(left,right)
+      # Left is a type
+      if left.is_a?(Types::PAnyType)
+        case o.operator
+        when '=='
+          @@type_calculator.equals(left, right)
 
-      when '!='
-        !@@type_calculator.equals(left,right)
+        when '!='
+          !@@type_calculator.equals(left, right)
 
-      when '<'
-        # left can be assigned to right, but they are not equal
-        @@type_calculator.assignable?(right, left) && ! @@type_calculator.equals(left,right)
-      when '<='
-        # left can be assigned to right
-        @@type_calculator.assignable?(right, left)
-      when '>'
-        # right can be assigned to left, but they are not equal
-        @@type_calculator.assignable?(left,right) && ! @@type_calculator.equals(left,right)
-      when '>='
-        # right can be assigned to left
-        @@type_calculator.assignable?(left, right)
+        when '<'
+          # left can be assigned to right, but they are not equal
+          @@type_calculator.assignable?(right, left) && !@@type_calculator.equals(left, right)
+        when '<='
+          # left can be assigned to right
+          @@type_calculator.assignable?(right, left)
+        when '>'
+          # right can be assigned to left, but they are not equal
+          @@type_calculator.assignable?(left, right) && !@@type_calculator.equals(left, right)
+        when '>='
+          # right can be assigned to left
+          @@type_calculator.assignable?(left, right)
+        else
+          fail(Issues::UNSUPPORTED_OPERATOR, o, { :operator => o.operator })
+        end
       else
-        fail(Issues::UNSUPPORTED_OPERATOR, o, {:operator => o.operator})
+        case o.operator
+        when '=='
+          @@compare_operator.equals(left, right)
+        when '!='
+          !@@compare_operator.equals(left, right)
+        when '<'
+          @@compare_operator.compare(left, right) < 0
+        when '<='
+          @@compare_operator.compare(left, right) <= 0
+        when '>'
+          @@compare_operator.compare(left, right) > 0
+        when '>='
+          @@compare_operator.compare(left, right) >= 0
+        else
+          fail(Issues::UNSUPPORTED_OPERATOR, o, { :operator => o.operator })
+        end
       end
-    else
-      case o.operator
-      when '=='
-        @@compare_operator.equals(left,right)
-      when '!='
-        ! @@compare_operator.equals(left,right)
-      when '<'
-        @@compare_operator.compare(left,right) < 0
-      when '<='
-        @@compare_operator.compare(left,right) <= 0
-      when '>'
-        @@compare_operator.compare(left,right) > 0
-      when '>='
-        @@compare_operator.compare(left,right) >= 0
-      else
-        fail(Issues::UNSUPPORTED_OPERATOR, o, {:operator => o.operator})
-      end
-    end
     rescue ArgumentError => e
       fail(Issues::COMPARISON_NOT_POSSIBLE, o, {
-        :operator => o.operator,
-        :left_value => left,
-        :right_value => right,
-        :detail => e.message}, e)
+             :operator => o.operator,
+             :left_value => left,
+             :right_value => right,
+             :detail => e.message
+           }, e)
     end
   end
 
@@ -620,14 +615,14 @@ class EvaluatorImpl
     begin
       pattern = Regexp.new(pattern) unless pattern.is_a?(Regexp)
     rescue StandardError => e
-      fail(Issues::MATCH_NOT_REGEXP, o.right_expr, {:detail => e.message}, e)
+      fail(Issues::MATCH_NOT_REGEXP, o.right_expr, { :detail => e.message }, e)
     end
     unless left.is_a?(String)
-      fail(Issues::MATCH_NOT_STRING, o.left_expr, {:left_value => left})
+      fail(Issues::MATCH_NOT_STRING, o.left_expr, { :left_value => left })
     end
 
     matched = pattern.match(left) # nil, or MatchData
-    set_match_data(matched,scope) # creates ephemeral
+    set_match_data(matched, scope) # creates ephemeral
 
     # convert match result to Boolean true, or false
     o.operator == '=~' ? !!matched : !matched
@@ -670,13 +665,13 @@ class EvaluatorImpl
   #
   def eval_LiteralHash o, scope
     # optimized
-    o.entries.reduce({}) {|h,entry| h[evaluate(entry.key, scope)] = evaluate(entry.value, scope); h }
+    o.entries.each_with_object({}) { |entry, h| h[evaluate(entry.key, scope)] = evaluate(entry.value, scope); }
   end
 
   # Evaluates all statements and produces the last evaluated value
   #
   def eval_BlockExpression o, scope
-    o.statements.reduce(nil) {|memo, s| evaluate(s, scope)}
+    o.statements.reduce(nil) { |_memo, s| evaluate(s, scope) }
   end
 
   # Performs optimized search over case option values, lazily evaluating each
@@ -696,7 +691,7 @@ class EvaluatorImpl
       the_default = nil
       if o.options.find do |co|
         # the first case option that matches
-        if co.values.find do |c|
+        next unless co.values.find do |c|
           c = unwind_parentheses(c)
           case c
           when Model::LiteralDefault
@@ -705,14 +700,14 @@ class EvaluatorImpl
           when Model::UnfoldExpression
             # not ideal for error reporting, since it is not known which unfolded result
             # that caused an error - the entire unfold expression is blamed (i.e. the var c, passed to is_match?)
-            evaluate(c, scope).any? {|v| is_match?(test, v, c, co, scope) }
+            evaluate(c, scope).any? { |v| is_match?(test, v, c, co, scope) }
           else
             is_match?(test, evaluate(c, scope), c, co, scope)
           end
         end
+
         result = evaluate(co.then_expr, scope)
         true # the option was picked
-        end
       end
         result # an option was picked, and produced a result
       else
@@ -729,7 +724,7 @@ class EvaluatorImpl
     if o.query.is_a?(Model::ExportedQuery)
       optionally_fail(Issues::RT_NO_STORECONFIGS, o);
     end
-    CollectorTransformer.new().transform(o,scope)
+    CollectorTransformer.new().transform(o, scope)
   end
 
   def eval_ParenthesizedExpression(o, scope)
@@ -749,17 +744,15 @@ class EvaluatorImpl
   end
 
   def eval_Program(o, scope)
-    begin
-      file = o.locator.file
-      line = 0
-      # Add stack frame for "top scope" logic. See Puppet::Pops::PuppetStack
-      return Puppet::Pops::PuppetStack.stack(file, line, self, 'evaluate', [o.body, scope])
-      #evaluate(o.body, scope)
-    rescue Puppet::Pops::Evaluator::PuppetStopIteration => ex
-      # breaking out of a file level program is not allowed
-      #TRANSLATOR break() is a method that should not be translated
-      raise Puppet::ParseError.new(_("break() from context where this is illegal"), ex.file, ex.line)
-    end
+    file = o.locator.file
+    line = 0
+    # Add stack frame for "top scope" logic. See Puppet::Pops::PuppetStack
+    Puppet::Pops::PuppetStack.stack(file, line, self, 'evaluate', [o.body, scope])
+    # evaluate(o.body, scope)
+  rescue Puppet::Pops::Evaluator::PuppetStopIteration => ex
+    # breaking out of a file level program is not allowed
+    # TRANSLATOR break() is a method that should not be translated
+    raise Puppet::ParseError.new(_("break() from context where this is illegal"), ex.file, ex.line)
   end
 
   # Produces Array[PAnyType], an array of resource references
@@ -770,49 +763,51 @@ class EvaluatorImpl
 
     # Get the type name
     type_name =
-    if (tmp_name = o.type_name).is_a?(Model::QualifiedName)
-      tmp_name.value # already validated as a name
-    else
-      type_name_acceptable =
-      case o.type_name
-      when Model::QualifiedReference
-        true
-      when Model::AccessExpression
-        o.type_name.left_expr.is_a?(Model::QualifiedReference)
-      end
-
-      evaluated_name = evaluate(tmp_name, scope)
-      unless type_name_acceptable
-        actual = type_calculator.generalize(type_calculator.infer(evaluated_name)).to_s
-        fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, {:actual => actual})
-      end
-
-      # must be a CatalogEntry subtype
-      case evaluated_name
-      when Types::PClassType
-        unless evaluated_name.class_name.nil?
-          fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, {:actual=> evaluated_name.to_s})
-        end
-        'class'
-
-      when Types::PResourceType
-        unless evaluated_name.title().nil?
-          fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, {:actual=> evaluated_name.to_s})
-        end
-        evaluated_name.type_name # assume validated
-
-      when Types::PTypeReferenceType
-        fail(Issues::UNKNOWN_RESOURCE_TYPE, o.type_string, {:type_name => evaluated_name.to_s})
-
+      if (tmp_name = o.type_name).is_a?(Model::QualifiedName)
+        tmp_name.value # already validated as a name
       else
-        actual = type_calculator.generalize(type_calculator.infer(evaluated_name)).to_s
-        fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, {:actual=>actual})
+        type_name_acceptable =
+          case o.type_name
+          when Model::QualifiedReference
+            true
+          when Model::AccessExpression
+            o.type_name.left_expr.is_a?(Model::QualifiedReference)
+          end
+
+        evaluated_name = evaluate(tmp_name, scope)
+        unless type_name_acceptable
+          actual = type_calculator.generalize(type_calculator.infer(evaluated_name)).to_s
+          fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, { :actual => actual })
+        end
+
+        # must be a CatalogEntry subtype
+        case evaluated_name
+        when Types::PClassType
+          unless evaluated_name.class_name.nil?
+            fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, { :actual => evaluated_name.to_s })
+          end
+
+          'class'
+
+        when Types::PResourceType
+          unless evaluated_name.title().nil?
+            fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, { :actual => evaluated_name.to_s })
+          end
+
+          evaluated_name.type_name # assume validated
+
+        when Types::PTypeReferenceType
+          fail(Issues::UNKNOWN_RESOURCE_TYPE, o.type_string, { :type_name => evaluated_name.to_s })
+
+        else
+          actual = type_calculator.generalize(type_calculator.infer(evaluated_name)).to_s
+          fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_name, { :actual => actual })
+        end
       end
-    end
 
     # This is a runtime check - the model is valid, but will have runtime issues when evaluated
     # and storeconfigs is not set.
-    if(o.exported)
+    if o.exported
       optionally_fail(Issues::RT_NO_STORECONFIGS_EXPORT, o);
     end
 
@@ -821,7 +816,7 @@ class EvaluatorImpl
     body_to_params = {}
 
     # titles are evaluated before attribute operations
-    o.bodies.map do | body |
+    o.bodies.map do |body|
       titles = evaluate(body.title, scope)
 
       # Title may not be nil
@@ -833,23 +828,25 @@ class EvaluatorImpl
       if titles.nil?
         fail(Issues::MISSING_TITLE, body.title)
       end
+
       titles = [titles].flatten
 
       # Check types of evaluated titles and duplicate entries
       titles.each_with_index do |title, index|
         if title.nil?
-          fail(Issues::MISSING_TITLE_AT, body.title, {:index => index})
+          fail(Issues::MISSING_TITLE_AT, body.title, { :index => index })
 
         elsif !title.is_a?(String) && title != :default
           actual = type_calculator.generalize(type_calculator.infer(title)).to_s
-          fail(Issues::ILLEGAL_TITLE_TYPE_AT, body.title, {:index => index, :actual => actual})
+          fail(Issues::ILLEGAL_TITLE_TYPE_AT, body.title, { :index => index, :actual => actual })
 
         elsif title == EMPTY_STRING
-         fail(Issues::EMPTY_STRING_TITLE_AT, body.title, {:index => index})
+          fail(Issues::EMPTY_STRING_TITLE_AT, body.title, { :index => index })
 
         elsif titles_to_body[title]
-          fail(Issues::DUPLICATE_TITLE, o, {:title => title})
+          fail(Issues::DUPLICATE_TITLE, o, { :title => title })
         end
+
         titles_to_body[title] = body
       end
 
@@ -860,16 +857,16 @@ class EvaluatorImpl
 
       # Store evaluated parameters in a hash associated with the body, but do not yet create resource
       # since the entry containing :defaults may appear later
-      body_to_params[body] = body.operations.reduce({}) do |param_memo, op|
+      body_to_params[body] = body.operations.each_with_object({}) do |op, param_memo|
         params = evaluate(op, scope)
         params = [params] unless params.is_a?(Array)
         params.each do |p|
           if param_memo.include? p.name
-            fail(Issues::DUPLICATE_ATTRIBUTE, o, {:attribute => p.name})
+            fail(Issues::DUPLICATE_ATTRIBUTE, o, { :attribute => p.name })
           end
+
           param_memo[p.name] = p
         end
-        param_memo
       end
     end
 
@@ -878,7 +875,7 @@ class EvaluatorImpl
     # evaluating the ResourceExpression.
     #
     defaults_hash = body_to_params[titles_to_body[:default]] || {}
-    o.bodies.map do | body |
+    o.bodies.map do |body|
       titles = body_to_titles[body]
       params = defaults_hash.merge(body_to_params[body] || {})
       create_resources(o, scope, virtual, exported, type_name, titles, params.values)
@@ -913,9 +910,9 @@ class EvaluatorImpl
     hashed_params = evaluate(o.expr, scope)
     unless hashed_params.is_a?(Hash)
       actual = type_calculator.generalize(type_calculator.infer(hashed_params)).to_s
-      fail(Issues::TYPE_MISMATCH, o.expr, {:expected => 'Hash', :actual => actual})
+      fail(Issues::TYPE_MISMATCH, o.expr, { :expected => 'Hash', :actual => actual })
     end
-    hashed_params.map { |k,v| create_resource_parameter(o, scope, k, v, '=>') }
+    hashed_params.map { |k, v| create_resource_parameter(o, scope, k, v, '=>') }
   end
 
   # Sets default parameter values for a type, produces the type
@@ -923,13 +920,13 @@ class EvaluatorImpl
   def eval_ResourceDefaultsExpression(o, scope)
     type = evaluate(o.type_ref, scope)
     type_name =
-    if type.is_a?(Types::PResourceType) && !type.type_name.nil? && type.title.nil?
-      type.type_name # assume it is a valid name
-    else
-      actual = type_calculator.generalize(type_calculator.infer(type))
-      fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_ref, {:actual => actual})
-    end
-    evaluated_parameters = o.operations.map {|op| evaluate(op, scope) }
+      if type.is_a?(Types::PResourceType) && !type.type_name.nil? && type.title.nil?
+        type.type_name # assume it is a valid name
+      else
+        actual = type_calculator.generalize(type_calculator.infer(type))
+        fail(Issues::ILLEGAL_RESOURCE_TYPE, o.type_ref, { :actual => actual })
+      end
+    evaluated_parameters = o.operations.map { |op| evaluate(op, scope) }
     create_resource_defaults(o, scope, type_name, evaluated_parameters)
     # Produce the type
     type
@@ -943,7 +940,7 @@ class EvaluatorImpl
     #
     functor = o.functor_expr
     if functor.is_a?(Model::QualifiedReference) ||
-      functor.is_a?(Model::AccessExpression) && functor.left_expr.is_a?(Model::QualifiedReference)
+       functor.is_a?(Model::AccessExpression) && functor.left_expr.is_a?(Model::QualifiedReference)
       # instantiation
       type = evaluate(functor, scope)
       return call_function_with_block('new', unfold([type], o.arguments || [], scope), o, scope)
@@ -958,7 +955,7 @@ class EvaluatorImpl
       # helpful to point out this easy to make Epp error
       fail(Issues::ILLEGAL_EPP_PARAMETERS, o)
     else
-      fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, {:feature=>'function name', :container => o})
+      fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, { :feature => 'function name', :container => o })
     end
     name = o.functor_expr.value
     call_function_with_block(name, unfold([], o.arguments, scope), o, scope)
@@ -968,13 +965,15 @@ class EvaluatorImpl
   #
   def eval_CallMethodExpression(o, scope)
     unless o.functor_expr.is_a? Model::NamedAccessExpression
-      fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, {:feature=>'function accessor', :container => o})
+      fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, { :feature => 'function accessor', :container => o })
     end
+
     receiver = unfold([], [o.functor_expr.left_expr], scope)
     name = o.functor_expr.right_expr
     unless name.is_a? Model::QualifiedName
-      fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, {:feature=>'function name', :container => o})
+      fail(Issues::ILLEGAL_EXPRESSION, o.functor_expr, { :feature => 'function name', :container => o })
     end
+
     name = name.value # the string function name
 
     obj = receiver[0]
@@ -1025,7 +1024,7 @@ class EvaluatorImpl
         when Model::UnfoldExpression
           # not ideal for error reporting, since it is not known which unfolded result
           # that caused an error - the entire unfold expression is blamed (i.e. the var c, passed to is_match?)
-          evaluate(me, scope).any? {|v| is_match?(test, v, me, s, scope) }
+          evaluate(me, scope).any? { |v| is_match?(test, v, me, s, scope) }
         else
           is_match?(test, evaluate(me, scope), me, s, scope)
         end
@@ -1065,10 +1064,10 @@ class EvaluatorImpl
   # Evaluates Puppet DSL `unless`
   def eval_UnlessExpression o, scope
     scope.with_guarded_scope do
-      unless is_true?(evaluate(o.test, scope), o.test)
-        evaluate(o.then_expr, scope)
-      else
+      if is_true?(evaluate(o.test, scope), o.test)
         evaluate(o.else_expr, scope)
+      else
+        evaluate(o.then_expr, scope)
       end
     end
   end
@@ -1087,7 +1086,9 @@ class EvaluatorImpl
     # may occur for some evaluation use cases.
     case name
     when String
+      # do nothing
     when Numeric
+      # do nothing
     else
       fail(Issues::ILLEGAL_VARIABLE_EXPRESSION, o.expr)
     end
@@ -1097,9 +1098,8 @@ class EvaluatorImpl
   # Evaluates double quoted strings that may contain interpolation
   #
   def eval_ConcatenatedString o, scope
-    o.segments.collect {|expr| string(evaluate(expr, scope), scope)}.join
+    o.segments.collect { |expr| string(evaluate(expr, scope), scope) }.join
   end
-
 
   # If the wrapped expression is a QualifiedName, it is taken as the name of a variable in scope.
   # Note that this is different from the 3.x implementation, where an initial qualified name
@@ -1124,7 +1124,7 @@ class EvaluatorImpl
   end
 
   def string_Symbol(o, scope)
-    if :undef == o  # optimized comparison 1.44 vs 1.95
+    if :undef == o # optimized comparison 1.44 vs 1.95
       EMPTY_STRING
     else
       o.to_s
@@ -1132,11 +1132,11 @@ class EvaluatorImpl
   end
 
   def string_Array(o, scope)
-    "[#{o.map {|e| string(e, scope)}.join(COMMA_SEPARATOR)}]"
+    "[#{o.map { |e| string(e, scope) }.join(COMMA_SEPARATOR)}]"
   end
 
   def string_Hash(o, scope)
-    "{#{o.map {|k,v| "#{string(k, scope)} => #{string(v, scope)}"}.join(COMMA_SEPARATOR)}}"
+    "{#{o.map { |k, v| "#{string(k, scope)} => #{string(v, scope)}" }.join(COMMA_SEPARATOR)}}"
   end
 
   def string_Regexp(o, scope)
@@ -1210,37 +1210,38 @@ class EvaluatorImpl
     case x
     when Array
       y = case y
-      when Array then y
-      when Hash  then y.to_a
-      else
-        [y]
-      end
+          when Array then y
+          when Hash  then y.to_a
+          else            [y]
+          end
       x + y # new array with concatenation
     when Hash
       y = case y
-      when Hash then y
-      when Array
-        # Hash[[a, 1, b, 2]] => {}
-        # Hash[a,1,b,2] => {a => 1, b => 2}
-        # Hash[[a,1], [b,2]] => {[a,1] => [b,2]}
-        # Hash[[[a,1], [b,2]]] => {a => 1, b => 2}
-        # Use type calculator to determine if array is Array[Array[?]], and if so use second form
-        # of call
-        t = @@type_calculator.infer(y)
-        if t.element_type.is_a? Types::PArrayType
-          Hash[y]
-        else
-          Hash[*y]
-        end
-      else
-        raise ArgumentError.new(_('Can only append Array or Hash to a Hash'))
-      end
+          when Hash then y
+          when Array
+            # Hash[[a, 1, b, 2]] => {}
+            # Hash[a,1,b,2] => {a => 1, b => 2}
+            # Hash[[a,1], [b,2]] => {[a,1] => [b,2]}
+            # Hash[[[a,1], [b,2]]] => {a => 1, b => 2}
+            # Use type calculator to determine if array is Array[Array[?]], and if so use second form
+            # of call
+            t = @@type_calculator.infer(y)
+            if t.element_type.is_a? Types::PArrayType
+              y.to_h
+            else
+              Hash[*y]
+            end
+          else
+            raise ArgumentError, _('Can only append Array or Hash to a Hash')
+          end
       x.merge y # new hash with overwrite
     when URI
-      raise ArgumentError.new(_('An URI can only be merged with an URI or String')) unless y.is_a?(String) || y.is_a?(URI)
+      raise ArgumentError, _('An URI can only be merged with an URI or String') unless y.is_a?(String) || y.is_a?(URI)
+
       x + y
     when Types::PBinaryType::Binary
-      raise ArgumentError.new(_('Can only append Binary to a Binary')) unless y.is_a?(Types::PBinaryType::Binary)
+      raise ArgumentError, _('Can only append Binary to a Binary') unless y.is_a?(Types::PBinaryType::Binary)
+
       Types::PBinaryType::Binary.from_binary_string(x.binary_buffer + y.binary_buffer)
     else
       concatenate([x], y)
@@ -1258,22 +1259,20 @@ class EvaluatorImpl
     case x
     when Array
       y = case y
-      when Array then y
-      when Hash then y.to_a
-      else
-        [y]
-      end
-      y.each {|e| result.delete(e) }
+          when Array then y
+          when Hash  then y.to_a
+          else            [y]
+          end
+      y.each { |e| result.delete(e) }
     when Hash
       y = case y
-      when Array then y
-      when Hash then y.keys
-      else
-        [y]
-      end
-      y.each {|e| result.delete(e) }
+          when Array then y
+          when Hash  then y.keys
+          else            [y]
+          end
+      y.each { |e| result.delete(e) }
     else
-      raise ArgumentError.new(_("Can only delete from an Array or Hash."))
+      raise ArgumentError, _("Can only delete from an Array or Hash.")
     end
     result
   end
@@ -1309,6 +1308,7 @@ class EvaluatorImpl
 
   def unwind_parentheses(o)
     return o unless o.is_a?(Model::ParenthesizedExpression)
+
     unwind_parentheses(o.expr)
   end
   private :unwind_parentheses

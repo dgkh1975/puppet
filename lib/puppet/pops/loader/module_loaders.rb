@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Loader
 # =ModuleLoaders
@@ -19,9 +21,8 @@ module Loader
 # @api private
 #
 module ModuleLoaders
-
   # Wildcard module name for module loaders, makes loading possible from any namespace.
-  NAMESPACE_WILDCARD = '*'.freeze
+  NAMESPACE_WILDCARD = '*'
 
   # This is exactly the same as the #system_loader_from method, but the argument for path is changed to
   # location where pluginsync stores functions. It also accepts definitions in any namespace since pluginsync
@@ -29,12 +30,11 @@ module ModuleLoaders
   #
   def self.cached_loader_from(parent_loader, loaders)
     LibRootedFileBased.new(parent_loader,
-      loaders,
-      NAMESPACE_WILDCARD,
-      Puppet[:libdir],
-      'cached_puppet_lib',
-      [:func_4x, :func_3x, :datatype]
-    )
+                           loaders,
+                           NAMESPACE_WILDCARD,
+                           Puppet[:libdir],
+                           'cached_puppet_lib',
+                           [:func_4x, :func_3x, :datatype])
   end
 
   def self.system_loader_from(parent_loader, loaders)
@@ -47,10 +47,9 @@ module ModuleLoaders
     LibRootedFileBased.new(parent_loader,
                            loaders,
                            nil,
-                           puppet_lib,   # may or may not have a 'lib' above 'puppet'
+                           puppet_lib, # may or may not have a 'lib' above 'puppet'
                            'puppet_system',
-                           [:func_4x, :func_3x, :datatype]   # only load ruby functions and types from "puppet"
-                          )
+                           [:func_4x, :func_3x, :datatype]) # only load ruby functions and types from "puppet"
   end
 
   def self.environment_loader_from(parent_loader, loaders, env_path)
@@ -58,35 +57,32 @@ module ModuleLoaders
       EmptyLoader.new(parent_loader, ENVIRONMENT, loaders.environment)
     else
       FileBased.new(parent_loader,
-        loaders,
-        ENVIRONMENT,
-        env_path,
-        ENVIRONMENT
-      )
+                    loaders,
+                    ENVIRONMENT,
+                    env_path,
+                    ENVIRONMENT)
     end
   end
 
   def self.module_loader_from(parent_loader, loaders, module_name, module_path)
     ModuleLoaders::FileBased.new(parent_loader,
-                                                       loaders,
-                                                       module_name,
-                                                       module_path,
-                                                       module_name
-                                                       )
+                                 loaders,
+                                 module_name,
+                                 module_path,
+                                 module_name)
   end
 
   def self.pcore_resource_type_loader_from(parent_loader, loaders, environment_path)
     ModuleLoaders::FileBased.new(parent_loader,
-      loaders,
-      nil,
-      environment_path,
-      'pcore_resource_types'
-    )
+                                 loaders,
+                                 nil,
+                                 environment_path,
+                                 'pcore_resource_types')
   end
 
   class EmptyLoader < BaseLoader
     def find(typed_name)
-      return nil
+      nil
     end
 
     def private_loader
@@ -99,10 +95,8 @@ module ModuleLoaders
   end
 
   class AbstractPathBasedModuleLoader < BaseLoader
-
     # The name of the module, or nil, if this is a global "component", or "any module" if set to the `NAMESPACE_WILDCARD` (*)
     attr_reader :module_name
-
 
     # The path to the location of the module/component - semantics determined by subclass
     attr_reader :path
@@ -115,7 +109,7 @@ module ModuleLoaders
     # created a different way, this loader can be set explicitly by the loaders bootstrap logic.
     #
     # @api private
-    attr_accessor :private_loader
+    attr_writer :private_loader
 
     # Initialize a kind of ModuleLoader for one module
     # @param parent_loader [Loader] loader with higher priority
@@ -135,9 +129,10 @@ module ModuleLoaders
       @loaders = loaders
       @loadables = loadables
       unless (loadables - LOADABLE_KINDS).empty?
-        #TRANSLATORS 'loadables' is a variable containing loadable modules and should not be translated
+        # TRANSLATORS 'loadables' is a variable containing loadable modules and should not be translated
         raise ArgumentError, _('given loadables are not of supported loadable kind')
       end
+
       loaders.add_loader_by_name(self)
     end
 
@@ -152,6 +147,7 @@ module ModuleLoaders
           relative_paths(sp).each do |rp|
             tp = sp.typed_name(type, name_authority, rp, global ? nil : @module_name)
             next unless sp.valid_name?(tp)
+
             begin
               load_typed(tp) unless block_given? && !block.yield(tp)
             rescue StandardError => e
@@ -162,7 +158,8 @@ module ModuleLoaders
                   Issues::LOADER_FAILURE.format(:type => type),
                   'PUPPET_LOADER_FAILURE',
                   { 'original_error' => e.message },
-                  Issues::LOADER_FAILURE.issue_code)
+                  Issues::LOADER_FAILURE.issue_code
+                )
                 error_collector << err unless error_collector.include?(err)
               end
             end
@@ -202,7 +199,7 @@ module ModuleLoaders
           # Can be defined in module using a global name. No action required
 
         when :plan
-          if !global?
+          unless global?
             # Global name must be the name of the module
             return nil unless name_parts[0] == module_name
 
@@ -212,7 +209,7 @@ module ModuleLoaders
           end
 
         when :task
-          if !global?
+          unless global?
             # Global name must be the name of the module
             return nil unless name_parts[0] == module_name
 
@@ -222,7 +219,7 @@ module ModuleLoaders
           end
 
         when :type
-          if !global?
+          unless global?
             # Global name must be the name of the module
             unless name_parts[0] == module_name || module_name == NAMESPACE_WILDCARD
               # Check for ruby defined data type in global namespace before giving up
@@ -242,7 +239,7 @@ module ModuleLoaders
 
             # TRANSLATORS 'TypeSet' should not be translated
             raise ArgumentError, _("The code loaded from %{origin} does not define the TypeSet '%{module_name}'") %
-                { origin: origin, module_name: name_parts[0].capitalize }
+                                 { origin: origin, module_name: name_parts[0].capitalize }
           end
         else
           # anything else cannot possibly be in this module
@@ -300,7 +297,7 @@ module ModuleLoaders
     # @return [Boolean] true if there is content in the directory appointed by the relative path
     #
     def meaningful_to_search?(smart_path)
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     # Abstract method that subclasses override to answer if the given relative path exists, and if so returns that path
@@ -309,7 +306,7 @@ module ModuleLoaders
     # @return [String, nil] the found path or nil if no such path was found
     #
     def existing_path(resolved_path)
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     # Abstract method that subclasses override to return an array of paths that may be associated with the resolved path.
@@ -318,7 +315,7 @@ module ModuleLoaders
     # @return [Array<String>]
     #
     def candidate_paths(resolved_path)
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     # Abstract method that subclasses override to produce the content of the effective path.
@@ -328,7 +325,7 @@ module ModuleLoaders
     # @return [String] the content of the file
     #
     def get_contents(effective_path)
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     # Abstract method that subclasses override to produce a source reference String used to identify the
@@ -338,7 +335,7 @@ module ModuleLoaders
     # @return [String] a reference to the source file (in file system, zip file, or elsewhere).
     #
     def get_source_ref(relative_path)
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     # Answers the question if this loader represents a global component (true for resource type loader and environment loader)
@@ -350,7 +347,7 @@ module ModuleLoaders
     end
 
     # Answers `true` if the loader used by this instance is rooted beneath 'lib'. This is
-    # typically true for the the system_loader. It will have a path relative to the parent
+    # typically true for the system_loader. It will have a path relative to the parent
     # of 'puppet' instead of the parent of 'lib/puppet' since the 'lib' directory of puppet
     # is renamed during install. This is significant for loaders that load ruby code.
     #
@@ -373,7 +370,7 @@ module ModuleLoaders
     # @param smart_path [SmartPath] the path to find relative paths for
     # @return [Array<String>] found paths
     def relative_paths(smart_path)
-      raise NotImplementedError.new
+      raise NotImplementedError
     end
 
     private
@@ -404,6 +401,7 @@ module ModuleLoaders
       is_global = global?
       smart_paths.effective_paths(typed_name.type).each do |sp|
         next unless sp.valid_name?(typed_name)
+
         origin = sp.effective_path(typed_name, is_global ? 0 : 1)
         unless origin.nil?
           if sp.fuzzy_matching?
@@ -411,12 +409,11 @@ module ModuleLoaders
             # whichever ones exist. Otherwise, find all paths that *might* be
             # related to origin
             if origin.is_a?(Array)
-              origins = origin.map { |ori| existing_path(ori) }.compact
-              return [origins, sp] unless origins.empty?
+              origins = origin.filter_map { |ori| existing_path(ori) }
             else
               origins = candidate_paths(origin)
-              return [origins, sp] unless origins.empty?
             end
+            return [origins, sp] unless origins.empty?
           else
             existing = existing_path(origin)
             return [origin, sp] unless existing.nil?
@@ -430,7 +427,6 @@ module ModuleLoaders
   # @api private
   #
   class FileBased < AbstractPathBasedModuleLoader
-
     attr_reader :smart_paths
     attr_reader :path_index
 
@@ -468,10 +464,10 @@ module ModuleLoaders
     end
 
     def meaningful_to_search?(smart_path)
-      ! add_to_index(smart_path).empty?
+      !add_to_index(smart_path).empty?
     end
 
-    def to_s()
+    def to_s
       "(ModuleLoader::FileBased '#{loader_name}' '#{module_name}')"
     end
 
@@ -547,7 +543,7 @@ module ModuleLoaders
       super parent_loader, loaders, module_name, gem_dir(gem_ref), loader_name, loadables
     end
 
-    def to_s()
+    def to_s
       "(ModuleLoader::GemBased '#{loader_name}' '#{@gem_ref}' [#{module_name}])"
     end
   end

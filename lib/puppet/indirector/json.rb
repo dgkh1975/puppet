@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/terminus'
 require_relative '../../puppet/util'
 
@@ -14,18 +16,19 @@ class Puppet::Indirector::JSON < Puppet::Indirector::Terminus
     filename = path(request.key)
     FileUtils.mkdir_p(File.dirname(filename))
 
-    Puppet::FileSystem.replace_file(filename, 0660) {|f| f.print to_json(request.instance).force_encoding(Encoding::BINARY) }
+    Puppet::FileSystem.replace_file(filename, 0o660) { |f| f.print to_json(request.instance).force_encoding(Encoding::BINARY) }
   rescue TypeError => detail
-    Puppet.log_exception(detail, _("Could not save %{json} %{request}: %{detail}") % { json: self.name, request: request.key, detail: detail })
+    Puppet.log_exception(detail, _("Could not save %{json} %{request}: %{detail}") % { json: name, request: request.key, detail: detail })
   end
 
   def destroy(request)
     Puppet::FileSystem.unlink(path(request.key))
   rescue => detail
     unless detail.is_a? Errno::ENOENT
-      raise Puppet::Error, _("Could not destroy %{json} %{request}: %{detail}") % { json: self.name, request: request.key, detail: detail }, detail.backtrace
+      raise Puppet::Error, _("Could not destroy %{json} %{request}: %{detail}") % { json: name, request: request.key, detail: detail }, detail.backtrace
     end
-    1                           # emulate success...
+
+    1 # emulate success...
   end
 
   def search(request)
@@ -47,7 +50,7 @@ class Puppet::Indirector::JSON < Puppet::Indirector::Terminus
 
   private
 
-  def data_dir()
+  def data_dir
     Puppet.run_mode.server? ? Puppet[:server_datadir] : Puppet[:client_datadir]
   end
 
@@ -63,7 +66,7 @@ class Puppet::Indirector::JSON < Puppet::Indirector::Terminus
     end
 
     begin
-      return from_json(json)
+      from_json(json)
     rescue => detail
       raise Puppet::Error, _("Could not parse JSON data for %{name} %{key}: %{detail}") % { name: indirection.name, key: key, detail: detail }, detail.backtrace
     end

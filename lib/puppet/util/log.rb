@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/tagging'
 require_relative '../../puppet/util/classgen'
 require_relative '../../puppet/util/psych_support'
@@ -13,20 +15,19 @@ class Puppet::Util::Log
   include Puppet::Util::Tagging
   include Puppet::Network::FormatSupport
 
-  @levels = [:debug,:info,:notice,:warning,:err,:alert,:emerg,:crit]
+  @levels = [:debug, :info, :notice, :warning, :err, :alert, :emerg, :crit]
   @loglevel = 2
 
   @desttypes = {}
 
   # Create a new destination type.
   def self.newdesttype(name, options = {}, &block)
-
     dest = genclass(
       name,
-      :parent     => Puppet::Util::Log::Destination,
-      :prefix     => "Dest",
-      :block      => block,
-      :hash       => @desttypes,
+      :parent => Puppet::Util::Log::Destination,
+      :prefix => "Dest",
+      :block => block,
+      :hash => @desttypes,
       :attributes => options
     )
     dest.match(dest.name)
@@ -62,19 +63,19 @@ class Puppet::Util::Log
     @destinations.keys.each { |dest|
       close(dest)
     }
-    #TRANSLATORS "Log.close_all" is a method name and should not be translated
-    raise Puppet::DevError.new(_("Log.close_all failed to close %{destinations}") % { destinations: @destinations.keys.inspect }) if !@destinations.empty?
+    # TRANSLATORS "Log.close_all" is a method name and should not be translated
+    raise Puppet::DevError, _("Log.close_all failed to close %{destinations}") % { destinations: @destinations.keys.inspect } unless @destinations.empty?
   end
 
   # Flush any log destinations that support such operations.
   def Log.flush
-    @destinations.each { |type, dest|
+    @destinations.each { |_type, dest|
       dest.flush if dest.respond_to?(:flush)
     }
   end
 
   def Log.autoflush=(v)
-    @destinations.each do |type, dest|
+    @destinations.each do |_type, dest|
       dest.autoflush = v if dest.respond_to?(:autoflush=)
     end
   end
@@ -84,6 +85,7 @@ class Puppet::Util::Log
   def Log.create(hash)
     raise Puppet::DevError, _("Logs require a level") unless hash.include?(:level)
     raise Puppet::DevError, _("Invalid log level %{level}") % { level: hash[:level] } unless @levels.index(hash[:level])
+
     @levels.index(hash[:level]) >= @loglevel ? Puppet::Util::Log.new(hash) : nil
   end
 
@@ -125,19 +127,19 @@ class Puppet::Util::Log
   # Create a new log destination.
   def Log.newdestination(dest)
     # Each destination can only occur once.
-    if @destinations.find { |name, obj| obj.name == dest }
+    if @destinations.find { |_name, obj| obj.name == dest }
       return
     end
 
-    _, type = @desttypes.find do |name, klass|
+    _, type = @desttypes.find do |_name, klass|
       klass.match?(dest)
     end
 
-    if type.respond_to?(:suitable?) and not type.suitable?(dest)
+    if type.respond_to?(:suitable?) and !type.suitable?(dest)
       return
     end
 
-    raise Puppet::DevError, _("Unknown destination type %{dest}") % { dest: dest} unless type
+    raise Puppet::DevError, _("Unknown destination type %{dest}") % { dest: dest } unless type
 
     begin
       if type.instance_method(:initialize).arity == 1
@@ -178,7 +180,7 @@ class Puppet::Util::Log
 
     # We only select the last 10 callers in the stack to avoid being spammy
     message = _("Received a Log attribute with invalid encoding:%{log_message}") %
-        { log_message: Puppet::Util::CharacterEncoding.convert_to_utf_8(str.dump)}
+              { log_message: Puppet::Util::CharacterEncoding.convert_to_utf_8(str.dump) }
     message += '\n' + _("Backtrace:\n%{backtrace}") % { backtrace: caller(1, 10).join("\n") }
     message
   end
@@ -196,7 +198,7 @@ class Puppet::Util::Log
 
     queuemessage(msg) if @destinations.length == 0
 
-    @destinations.each do |name, dest|
+    @destinations.each do |_name, dest|
       dest.handle(msg)
     end
   end
@@ -207,6 +209,7 @@ class Puppet::Util::Log
 
   def Log.flushqueue
     return unless @destinations.size >= 1
+
     @queued.each do |msg|
       Log.newmessage(msg)
     end
@@ -220,8 +223,8 @@ class Puppet::Util::Log
   #  the program is about to exit--most likely in a horrific
   #  error scenario.
   # @return nil
-  def Log.force_flushqueue()
-    if (@destinations.empty? and !(@queued.empty?))
+  def Log.force_flushqueue
+    if @destinations.empty? and !@queued.empty?
       newdestination(:console)
     end
     flushqueue
@@ -235,7 +238,7 @@ class Puppet::Util::Log
   def Log.reopen
     Puppet.notice _("Reopening log files")
     types = @destinations.keys
-    @destinations.each { |type, dest|
+    @destinations.each { |_type, dest|
       dest.close if dest.respond_to?(:close)
     }
     @destinations.clear
@@ -254,8 +257,12 @@ class Puppet::Util::Log
 
   def self.setup_default
     Log.newdestination(
-      (Puppet.features.syslog?   ? :syslog   :
-      (Puppet.features.eventlog? ? :eventlog : Puppet[:puppetdlog])))
+      if Puppet.features.syslog?
+        :syslog
+      else
+        Puppet.features.eventlog? ? :eventlog : Puppet[:puppetdlog]
+      end
+    )
   end
 
   # Is the passed level a valid log level?
@@ -289,13 +296,12 @@ class Puppet::Util::Log
     #       as this is good enough, but does not reflect the true call-stack, but is a rough estimate
     #       of where the logging call originates from).
     #
-    Puppet::Util::Log.create({:level => level, :source => scope, :message => vals.join(" ")})
+    Puppet::Util::Log.create({ :level => level, :source => scope, :message => vals.join(" ") })
     nil
   end
 
-
-  attr_accessor :time, :remote, :file, :line, :pos, :source, :issue_code, :environment, :node, :backtrace
-  attr_reader :level, :message
+  attr_accessor :time, :remote, :file, :line, :pos, :issue_code, :environment, :node, :backtrace
+  attr_reader :level, :message, :source
 
   def initialize(args)
     self.level = args[:level]
@@ -306,13 +312,14 @@ class Puppet::Util::Log
 
     tags = args[:tags]
     if tags
-      tags.each { |t| self.tag(t) }
+      tags.each { |t| tag(t) }
     end
 
     # Don't add these unless defined (preserve 3.x API as much as possible)
     [:file, :line, :pos, :issue_code, :environment, :node, :backtrace].each do |attr|
       value = args[attr]
       next unless value
+
       send(attr.to_s + '=', value)
     end
 
@@ -329,15 +336,16 @@ class Puppet::Util::Log
       @time = Time.parse(@time)
     end
     # Don't add these unless defined (preserve 3.x API as much as possible)
-    %w(file line pos issue_code environment node backtrace).each do |name|
+    %w[file line pos issue_code environment node backtrace].each do |name|
       value = data[name]
       next unless value
+
       send(name + '=', value)
     end
   end
 
   def to_hash
-    self.to_data_hash
+    to_data_hash
   end
 
   def to_data_hash
@@ -360,7 +368,7 @@ class Puppet::Util::Log
       'tags' => @tags.to_a,
       'time' => @time.iso8601(9),
     }
-    %w(file line pos issue_code environment node backtrace).each do |name|
+    %w[file line pos issue_code environment node backtrace].each do |name|
       attr_name = "@#{name}"
       hash[name] = instance_variable_get(attr_name) if instance_variable_defined?(attr_name)
     end
@@ -368,16 +376,18 @@ class Puppet::Util::Log
   end
 
   def message=(msg)
-    #TRANSLATORS 'Puppet::Util::Log' refers to a Puppet source code class
+    # TRANSLATORS 'Puppet::Util::Log' refers to a Puppet source code class
     raise ArgumentError, _("Puppet::Util::Log requires a message") unless msg
+
     @message = msg.to_s
   end
 
   def level=(level)
-    #TRANSLATORS 'Puppet::Util::Log' refers to a Puppet source code class
+    # TRANSLATORS 'Puppet::Util::Log' refers to a Puppet source code class
     raise ArgumentError, _("Puppet::Util::Log requires a log level") unless level
-    #TRANSLATORS 'Puppet::Util::Log' refers to a Puppet source code class
+    # TRANSLATORS 'Puppet::Util::Log' refers to a Puppet source code class
     raise ArgumentError, _("Puppet::Util::Log requires a symbol or string") unless level.respond_to? "to_sym"
+
     @level = level.to_sym
     raise ArgumentError, _("Invalid log level %{level}") % { level: @level } unless self.class.validlevel?(@level)
 
@@ -418,7 +428,6 @@ class Puppet::Util::Log
     end
     msg
   end
-
 end
 
 # This is for backward compatibility from when we changed the constant to

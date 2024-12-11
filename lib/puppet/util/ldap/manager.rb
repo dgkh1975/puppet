@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/ldap'
 require_relative '../../../puppet/util/ldap/connection'
 require_relative '../../../puppet/util/ldap/generator'
@@ -29,7 +31,7 @@ class Puppet::Util::Ldap::Manager
     attributes = attributes.dup
 
     # Add the objectclasses
-    attributes["objectClass"] = objectclasses.collect { |o| o.to_s }
+    attributes["objectClass"] = objectclasses.collect(&:to_s)
     attributes["objectClass"] << "top" unless attributes["objectClass"].include?("top")
 
     attributes[rdn.to_s] = [name]
@@ -44,7 +46,7 @@ class Puppet::Util::Ldap::Manager
   # Open, yield, and close the connection.  Cannot be left
   # open, at this point.
   def connect
-    #TRANSLATORS '#connect' is a method name and and should not be translated, 'block' refers to a Ruby code block
+    # TRANSLATORS '#connect' is a method name and and should not be translated, 'block' refers to a Ruby code block
     raise ArgumentError, _("You must pass a block to #connect") unless block_given?
 
     unless @connection
@@ -55,7 +57,7 @@ class Puppet::Util::Ldap::Manager
       else
         ssl = false
       end
-      options = {:ssl => ssl}
+      options = { :ssl => ssl }
       user = Puppet[:ldapuser]
       if user && user != ""
         options[:user] = user
@@ -88,7 +90,7 @@ class Puppet::Util::Ldap::Manager
 
   # Convert an ldap-style entry hash to a provider-style hash.
   def entry2provider(entry)
-    #TRANSLATOR 'dn' refers to a 'distinguished name' in LDAP (Lightweight Directory Access Protocol) and they should not be translated
+    # TRANSLATOR 'dn' refers to a 'distinguished name' in LDAP (Lightweight Directory Access Protocol) and they should not be translated
     raise ArgumentError, _("Could not get dn from ldap entry") unless entry["dn"]
 
     # DN is always a single-entry array.  Strip off the bits before the
@@ -96,7 +98,7 @@ class Puppet::Util::Ldap::Manager
     # name.
     name = entry["dn"].dup.pop.split(",").shift.split("=").pop
 
-    result = {:name => name}
+    result = { :name => name }
 
     @ldap2puppet.each do |ldap, puppet|
       result[puppet] = entry[ldap.to_s] || :absent
@@ -107,21 +109,19 @@ class Puppet::Util::Ldap::Manager
 
   # Create our normal search filter.
   def filter
-    return(objectclasses.length == 1 ? "objectclass=#{objectclasses[0]}" : "(&(objectclass=" + objectclasses.join(")(objectclass=") + "))")
+    (objectclasses.length == 1 ? "objectclass=#{objectclasses[0]}" : "(&(objectclass=" + objectclasses.join(")(objectclass=") + "))")
   end
 
   # Find the associated entry for a resource.  Returns a hash, minus
   # 'dn', or nil if the entry cannot be found.
   def find(name)
     connect do |conn|
-      begin
-        conn.search2(dn(name), 0, "objectclass=*") do |result|
-          # Convert to puppet-appropriate attributes
-          return entry2provider(result)
-        end
-      rescue
-        return nil
+      conn.search2(dn(name), 0, "objectclass=*") do |result|
+        # Convert to puppet-appropriate attributes
+        return entry2provider(result)
       end
+    rescue
+      return nil
     end
   end
 
@@ -143,7 +143,7 @@ class Puppet::Util::Ldap::Manager
         value = values[generator.source]
         unless value
           raise ArgumentError, _("%{source} must be defined to generate %{name}") %
-              { source: generator.source, name: generator.name }
+                               { source: generator.source, name: generator.name }
         end
         result = generator.generate(value)
       else
@@ -151,7 +151,7 @@ class Puppet::Util::Ldap::Manager
       end
 
       result = [result] unless result.is_a?(Array)
-      result = result.collect { |r| r.to_s }
+      result = result.collect(&:to_s)
 
       values[generator.name] = result
     end
@@ -176,7 +176,7 @@ class Puppet::Util::Ldap::Manager
     @puppet2ldap = attributes
 
     # and the ldap attributes as the keys.
-    @ldap2puppet = attributes.inject({}) { |map, ary| map[ary[1]] = ary[0]; map }
+    @ldap2puppet = attributes.each_with_object({}) { |ary, map| map[ary[1]] = ary[0]; }
 
     self
   end
@@ -213,7 +213,7 @@ class Puppet::Util::Ldap::Manager
         result << entry2provider(entry)
       end
     end
-    return(result.empty? ? nil : result)
+    (result.empty? ? nil : result)
   end
 
   # Update the ldap entry with the desired state.
@@ -267,7 +267,7 @@ class Puppet::Util::Ldap::Manager
 
   # Is this a complete ldap configuration?
   def valid?
-    location and objectclasses and ! objectclasses.empty? and puppet2ldap
+    location and objectclasses and !objectclasses.empty? and puppet2ldap
   end
 
   private
@@ -275,10 +275,9 @@ class Puppet::Util::Ldap::Manager
   # Convert a hash of attributes to ldap-like forms.  This mostly means
   # getting rid of :ensure and making sure everything's an array of strings.
   def ldap_convert(attributes)
-    attributes.reject { |param, value| value == :absent or param == :ensure }.inject({}) do |result, ary|
-      value = (ary[1].is_a?(Array) ? ary[1] : [ary[1]]).collect { |v| v.to_s }
+    attributes.reject { |param, value| value == :absent or param == :ensure }.each_with_object({}) do |ary, result|
+      value = (ary[1].is_a?(Array) ? ary[1] : [ary[1]]).collect(&:to_s)
       result[ldap_name(ary[0])] = value
-      result
     end
   end
 end

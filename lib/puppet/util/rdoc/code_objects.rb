@@ -1,7 +1,8 @@
+# frozen_string_literal: true
+
 require 'rdoc/code_objects'
 
 module RDoc
-
   # This modules contains various class that are used to hold information
   # about the various Puppet language structures we found while parsing.
   #
@@ -17,7 +18,7 @@ module RDoc
   # @api private
   module AddClassModuleComment
     def add_comment(comment, location = nil)
-        super
+      super
     end
   end
 
@@ -29,11 +30,11 @@ module RDoc
 
     attr_accessor :facts, :plugins
 
-    def initialize(name,superclass=nil)
+    def initialize(name, superclass = nil)
       @facts = []
       @plugins = []
       @nodes = {}
-      super(name,superclass)
+      super(name, superclass)
     end
 
     def add_plugin(plugin)
@@ -45,10 +46,11 @@ module RDoc
       meth.document_self = true
       meth.singleton = false
       meth.comment = plugin.comment
-      if type == 'function'
+      case type
+      when 'function'
         @function_container ||= add_module(NormalModule, "__functions__")
         @function_container.add_method(meth)
-      elsif type == 'type'
+      when 'type'
         @type_container ||= add_module(NormalModule, "__types__")
         @type_container.add_method(meth)
       end
@@ -63,27 +65,28 @@ module RDoc
 
     # Adds a module called __nodes__ and adds nodes to it as classes
     #
-    def add_node(name,superclass)
+    def add_node(name, superclass)
       cls = @nodes[name]
       if cls
         return cls
       end
+
       @node_container ||= add_module(NormalModule, "__nodes__")
       cls = @node_container.add_class(PuppetNode, name, superclass)
-      @nodes[name] = cls if !@done_documenting
+      @nodes[name] = cls unless @done_documenting
       cls
     end
 
     def each_fact
-      @facts.each {|c| yield c}
+      @facts.each { |c| yield c }
     end
 
     def each_plugin
-      @plugins.each {|c| yield c}
+      @plugins.each { |c| yield c }
     end
 
     def each_node
-      @nodes.each {|c| yield c}
+      @nodes.each { |c| yield c }
     end
 
     def nodes
@@ -100,7 +103,7 @@ module RDoc
     attr_accessor :resource_list, :requires, :childs, :realizes
 
     def initialize(name, superclass)
-      super(name,superclass)
+      super(name, superclass)
       @resource_list = []
       @requires = []
       @realizes = []
@@ -142,9 +145,9 @@ module RDoc
     # or class1::class2#method. Since our definitions are mapped to RDoc methods
     # but are written class1::class2::define we need to perform the lookup by
     # ourselves.
-    def find_symbol(symbol, method=nil)
+    def find_symbol(symbol, method = nil)
       result = super(symbol)
-      if not result and symbol =~ /::/
+      if !result and symbol =~ /::/
         modules = symbol.split(/::/)
         unless modules.empty?
           module_name = modules.shift
@@ -165,7 +168,7 @@ module RDoc
           end
         end
         if result && method
-          if !result.respond_to?(:find_local_symbol)
+          unless result.respond_to?(:find_local_symbol)
             p result.name
             p method
             fail
@@ -175,7 +178,6 @@ module RDoc
       end
       result
     end
-
   end
 
   # PuppetNode holds a puppet node
@@ -183,10 +185,6 @@ module RDoc
   # A node is just a variation of a class
   class PuppetNode < PuppetClass
     include AddClassModuleComment
-
-    def initialize(name, superclass)
-      super(name,superclass)
-    end
 
     def is_module?
       false

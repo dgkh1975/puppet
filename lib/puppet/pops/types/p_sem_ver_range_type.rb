@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Types
-
 # An unparameterized type that represents all VersionRange instances
 #
 # @api public
@@ -157,7 +158,7 @@ class PSemVerRangeType < PAnyType
       end
 
       def from_hash(hash)
-        from_versions(hash['min'], hash.fetch('max') { :default }, hash.fetch('exclude_max') { false })
+        from_versions(hash['min'], hash.fetch('max', :default), hash.fetch('exclude_max', false))
       end
     end
   end

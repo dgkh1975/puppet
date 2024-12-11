@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 # The standard init-based service type.  Many other service types are
 # customizations of this module.
 Puppet::Type.type(:service).provide :init, :parent => :base do
   desc "Standard `init`-style service management."
 
   def self.defpath
-    case Puppet.runtime[:facter].value(:operatingsystem)
+    case Puppet.runtime[:facter].value('os.name')
     when "FreeBSD", "DragonFly"
       ["/etc/rc.d", "/usr/local/etc/rc.d"]
     when "HP-UX"
@@ -19,15 +21,12 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
   end
 
   # Debian and Ubuntu should use the Debian provider.
+  confine :false => %w[Debian Ubuntu].include?(Puppet.runtime[:facter].value('os.name'))
   # RedHat systems should use the RedHat provider.
-  confine :true => begin
-      os = Puppet.runtime[:facter].value(:operatingsystem).downcase
-      family = Puppet.runtime[:facter].value(:osfamily).downcase
-      !(os == 'debian' || os == 'ubuntu' || family == 'redhat')
-  end
+  confine :false => Puppet.runtime[:facter].value('os.family') == 'RedHat'
 
   # We can't confine this here, because the init path can be overridden.
-  #confine :exists => defpath
+  # confine :exists => defpath
 
   # some init scripts are not safe to execute, e.g. we do not want
   # to suddenly run /etc/init.d/reboot.sh status and reboot our system. The
@@ -36,9 +35,9 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
   def self.excludes
     excludes = []
     # these exclude list was found with grep -L '\/sbin\/runscript' /etc/init.d/* on gentoo
-    excludes += %w{functions.sh reboot.sh shutdown.sh}
+    excludes += %w[functions.sh reboot.sh shutdown.sh]
     # this exclude list is all from /sbin/service (5.x), but I did not exclude kudzu
-    excludes += %w{functions halt killall single linuxconf reboot boot}
+    excludes += %w[functions halt killall single linuxconf reboot boot]
     # 'wait-for-state' and 'portmap-wait' are excluded from instances here
     # because they take parameters that have unclear meaning. It looks like
     # 'wait-for-state' is a generic waiter mainly used internally for other
@@ -50,41 +49,41 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
     # eventually explain how to use the wait-for-state service or perhaps why
     # it should remain excluded. When that bug is addressed this should be
     # reexamined.
-    excludes += %w{wait-for-state portmap-wait}
+    excludes += %w[wait-for-state portmap-wait]
     # these excludes were found with grep -r -L start /etc/init.d
-    excludes += %w{rcS module-init-tools}
+    excludes += %w[rcS module-init-tools]
     # Prevent puppet failing on unsafe scripts from Yocto Linux
-    if Puppet.runtime[:facter].value(:osfamily) == "cisco-wrlinux"
-      excludes += %w{banner.sh bootmisc.sh checkroot.sh devpts.sh dmesg.sh
-                   hostname.sh mountall.sh mountnfs.sh populate-volatile.sh
-                   rmnologin.sh save-rtc.sh sendsigs sysfs.sh umountfs
-                   umountnfs.sh}
+    if Puppet.runtime[:facter].value('os.family') == "cisco-wrlinux"
+      excludes += %w[banner.sh bootmisc.sh checkroot.sh devpts.sh dmesg.sh
+                     hostname.sh mountall.sh mountnfs.sh populate-volatile.sh
+                     rmnologin.sh save-rtc.sh sendsigs sysfs.sh umountfs
+                     umountnfs.sh]
     end
     # Prevent puppet failing to get status of the new service introduced
     # by the fix for this (bug https://bugs.launchpad.net/ubuntu/+source/lightdm/+bug/982889)
     # due to puppet's inability to deal with upstart services with instances.
-    excludes += %w{plymouth-ready}
+    excludes += %w[plymouth-ready]
     # Prevent puppet failing to get status of these services, which need parameters
     # passed in (see https://bugs.launchpad.net/ubuntu/+source/puppet/+bug/1276766).
-    excludes += %w{idmapd-mounting startpar-bridge}
+    excludes += %w[idmapd-mounting startpar-bridge]
     # Prevent puppet failing to get status of these services, additional upstart
     # service with instances
-    excludes += %w{cryptdisks-udev}
-    excludes += %w{statd-mounting}
-    excludes += %w{gssd-mounting}
+    excludes += %w[cryptdisks-udev]
+    excludes += %w[statd-mounting]
+    excludes += %w[gssd-mounting]
     excludes
   end
 
   # List all services of this type.
   def self.instances
-    get_services(self.defpath)
+    get_services(defpath)
   end
 
-  def self.get_services(defpath, exclude = self.excludes)
+  def self.get_services(defpath, exclude = excludes)
     defpath = [defpath] unless defpath.is_a? Array
     instances = []
     defpath.each do |path|
-      unless FileTest.directory?(path)
+      unless Puppet::FileSystem.directory?(path)
         Puppet.debug "Service path #{path} does not exist"
         next
       end
@@ -97,8 +96,10 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
         fullpath = File.join(path, name)
         next if name =~ /^\./
         next if exclude.include? name
-        next if not FileTest.executable?(fullpath)
-        next if not is_init?(fullpath)
+        next if Puppet::FileSystem.directory?(fullpath)
+        next unless Puppet::FileSystem.executable?(fullpath)
+        next unless is_init?(fullpath)
+
         instances << new(:name => name, :path => path, :hasstatus => true)
       end
     end
@@ -117,18 +118,18 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
 
   # Where is our init script?
   def initscript
-    @initscript ||= self.search(@resource[:name])
+    @initscript ||= search(@resource[:name])
   end
 
   def paths
     @paths ||= @resource[:path].find_all do |path|
-      if File.directory?(path)
+      if Puppet::FileSystem.directory?(path)
         true
       else
         if Puppet::FileSystem.exist?(path)
-          self.debug "Search path #{path} is not a directory"
+          debug "Search path #{path} is not a directory"
         else
-          self.debug "Search path #{path} does not exist"
+          debug "Search path #{path} does not exist"
         end
         false
       end
@@ -137,20 +138,20 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
 
   def search(name)
     paths.each do |path|
-      fqname = File.join(path,name)
+      fqname = File.join(path, name)
       if Puppet::FileSystem.exist? fqname
         return fqname
       else
-        self.debug("Could not find #{name} in #{path}")
+        debug("Could not find #{name} in #{path}")
       end
     end
 
     paths.each do |path|
-      fqname_sh = File.join(path,"#{name}.sh")
+      fqname_sh = File.join(path, "#{name}.sh")
       if Puppet::FileSystem.exist? fqname_sh
         return fqname_sh
       else
-        self.debug("Could not find #{name}.sh in #{path}")
+        debug("Could not find #{name}.sh in #{path}")
       end
     end
     raise Puppet::Error, "Could not find init script for '#{name}'"
@@ -171,8 +172,8 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
   end
 
   def service_execute(type, command, fof = true, squelch = false, combine = true)
-    if type == :start && Puppet.runtime[:facter].value(:osfamily) == "Solaris"
-        command =  ["/usr/bin/ctrun -l child", command].flatten.join(" ")
+    if type == :start && Puppet.runtime[:facter].value('os.family') == "Solaris"
+      command = ["/usr/bin/ctrun -l child", command].flatten.join(" ")
     end
     super(type, command, fof, squelch, combine)
   end
@@ -184,11 +185,10 @@ Puppet::Type.type(:service).provide :init, :parent => :base do
     (@resource[:hasstatus] == :true) && [initscript, :status]
   end
 
-private
+  private
 
   def self.is_init?(script = initscript)
     file = Puppet::FileSystem.pathname(script)
     !Puppet::FileSystem.symlink?(file) || Puppet::FileSystem.readlink(file) != "/lib/init/upstart-job"
   end
 end
-

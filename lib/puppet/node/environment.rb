@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util'
 require 'monitor'
 require_relative '../../puppet/parser/parser_factory'
@@ -22,7 +24,6 @@ end
 # logging functions. Logging functions are attached to the 'root' environment
 # when {Puppet::Parser::Functions.reset} is called.
 class Puppet::Node::Environment
-
   NO_MANIFEST = :no_manifest
 
   # The create() factory method should be used instead.
@@ -86,7 +87,7 @@ class Puppet::Node::Environment
   #   parameters (:modulepath, :manifest, :config_version)
   # @return [Puppet::Node::Environment]
   def override_with(env_params)
-    return self.class.create(name,
+    self.class.create(name,
                       env_params[:modulepath] || modulepath,
                       env_params[:manifest] || manifest,
                       env_params[:config_version] || config_version)
@@ -117,7 +118,7 @@ class Puppet::Node::Environment
 
     overrides.empty? ?
       self :
-      self.override_with(overrides)
+      override_with(overrides)
   end
 
   # @param [String] name Environment name to check for valid syntax.
@@ -166,6 +167,44 @@ class Puppet::Node::Environment
   # @api private
   attr_reader :lock
 
+  # For use with versioned dirs
+  # our environment path may contain symlinks, while we want to resolve the
+  # path while reading the manifests we may want to report the resources as
+  # coming from the configured path.
+  attr_accessor :configured_path
+
+  # See :configured_path above
+  attr_accessor :resolved_path
+
+  # Ensure the path given is of the format we want in the catalog/report.
+  #
+  # Intended for use with versioned symlinked environments. If this
+  # environment is configured with "/etc/puppetlabs/code/environments/production"
+  # but the resolved path is
+  #
+  # "/opt/puppetlabs/server/puppetserver/filesync/client/puppet-code/production_abcdef1234"
+  #
+  # this changes the filepath
+  #
+  # "/opt/puppetlabs/server/puppetserver/filesync/client/puppet-code/production_abcdef1234/modules/foo/manifests/init.pp"
+  #
+  # to
+  #
+  # "/etc/puppetlabs/code/environments/production/modules/foo/manifests/init.pp"
+  def externalize_path(filepath)
+    paths_set        = configured_path && resolved_path
+    munging_possible = paths_set && configured_path != resolved_path
+    munging_desired  = munging_possible &&
+                       Puppet[:report_configured_environmentpath] &&
+                       filepath.to_s.start_with?(resolved_path)
+
+    if munging_desired
+      File.join(configured_path, filepath.delete_prefix(resolved_path))
+    else
+      filepath
+    end
+  end
+
   # Checks to make sure that this environment did not have a manifest set in
   # its original environment.conf if Puppet is configured with
   # +disable_per_environment_manifest+ set true.  If it did, the environment's
@@ -181,7 +220,8 @@ class Puppet::Node::Environment
   #   Puppet[:default_manifest].
   # @api private
   def conflicting_manifest_settings?
-    return false if !Puppet[:disable_per_environment_manifest]
+    return false unless Puppet[:disable_per_environment_manifest]
+
     original_manifest = configuration.raw_setting(:manifest)
     !original_manifest.nil? && !original_manifest.empty? && original_manifest != Puppet[:default_manifest]
   end
@@ -239,7 +279,7 @@ class Puppet::Node::Environment
   # @param param [String, Symbol] The environment setting to look up
   # @return [Object] The resolved setting value
   def [](param)
-    Puppet.settings.value(param, self.name)
+    Puppet.settings.value(param, name)
   end
 
   # @api public
@@ -316,29 +356,28 @@ class Puppet::Node::Environment
           Puppet::FileSystem.basename_string(p)
         end.each do |name|
           next unless Puppet::Module.is_module_directory?(name, path)
+
           warn_about_mistaken_path(path, name)
-          if not seen_modules[name]
-            module_references << {:name => name, :path => File.join(path, name)}
+          unless seen_modules[name]
+            module_references << { :name => name, :path => File.join(path, name) }
             seen_modules[name] = true
           end
         end
       end
 
-      @modules = module_references.collect do |reference|
-        begin
-          Puppet::Module.new(reference[:name], reference[:path], self)
-        rescue Puppet::Module::Error => e
-          Puppet.log_exception(e)
-          nil
-        end
-      end.compact
+      @modules = module_references.filter_map do |reference|
+        Puppet::Module.new(reference[:name], reference[:path], self)
+      rescue Puppet::Module::Error => e
+        Puppet.log_exception(e)
+        nil
+      end
     end
     @modules
   end
 
   # @api private
   def modules_by_name
-    @modules_by_name ||= Hash[modules.map { |mod| [mod.name, mod] }]
+    @modules_by_name ||= modules.to_h { |mod| [mod.name, mod] }
   end
   private :modules_by_name
 
@@ -414,13 +453,14 @@ class Puppet::Node::Environment
 
     modules.each do |mod|
       next unless mod.forge_name
+
       deps[mod.forge_name] ||= []
 
       mod.dependencies and mod.dependencies.each do |mod_dep|
         dep_name = mod_dep['name'].tr('-', '/')
         (deps[dep_name] ||= []) << {
-          'name'                => mod.forge_name,
-          'version'             => mod.version,
+          'name' => mod.forge_name,
+          'version' => mod.version,
           'version_requirement' => mod_dep['version_requirement']
         }
       end
@@ -457,7 +497,7 @@ class Puppet::Node::Environment
   #
   def check_for_reparse
     @lock.synchronize do
-      if (Puppet[:code] != @parsed_code || @known_resource_types.parse_failed?)
+      if Puppet[:code] != @parsed_code || @known_resource_types.parse_failed?
         @parsed_code = nil
         @known_resource_types = nil
       end
@@ -478,7 +518,7 @@ class Puppet::Node::Environment
 
   # @api public
   def inspect
-    %Q{<#{self.class}:#{self.object_id} @name="#{name}" @manifest="#{manifest}" @modulepath="#{full_modulepath.join(":")}" >}
+    %Q(<#{self.class}:#{object_id} @name="#{name}" @manifest="#{manifest}" @modulepath="#{full_modulepath.join(':')}" >)
   end
 
   # @return [Symbol] The `name` value, cast to a string, then cast to a symbol.
@@ -497,10 +537,10 @@ class Puppet::Node::Environment
   end
 
   def ==(other)
-    return true if other.kind_of?(Puppet::Node::Environment) &&
-      self.name == other.name &&
-      self.full_modulepath == other.full_modulepath &&
-      self.manifest == other.manifest
+    true if other.is_a?(Puppet::Node::Environment) &&
+            name == other.name &&
+            full_modulepath == other.full_modulepath &&
+            manifest == other.manifest
   end
 
   alias eql? ==
@@ -510,9 +550,9 @@ class Puppet::Node::Environment
   end
 
   # not private so it can be called in tests
-  def self.extralibs()
-    if Puppet::Util.get_env('PUPPETLIB')
-      split_path(Puppet::Util.get_env('PUPPETLIB'))
+  def self.extralibs
+    if ENV['PUPPETLIB']
+      split_path(ENV.fetch('PUPPETLIB', nil))
     else
       []
     end
@@ -547,16 +587,18 @@ class Puppet::Node::Environment
       parser.string = @parsed_code
       parser.parse
     else
-      file = self.manifest
+      file = manifest
       # if the manifest file is a reference to a directory, parse and combine
       # all .pp files in that directory
       if file == NO_MANIFEST
         empty_parse_result
       elsif File.directory?(file)
-        parse_results = Puppet::FileSystem::PathPattern.absolute(File.join(file, '**/*.pp')).glob.sort.map do | file_to_parse |
+        # JRuby does not properly perform Dir.glob operations with wildcards, (see PUP-11788 and https://github.com/jruby/jruby/issues/7836).
+        # We sort the results because Dir.glob order is inconsistent in Ruby < 3 (see PUP-10115).
+        parse_results = Puppet::FileSystem::PathPattern.absolute(File.join(file, '**/*')).glob.select { |globbed_file| globbed_file.end_with?('.pp') }.sort.map do |file_to_parse|
           parser.file = file_to_parse
           parser.parse
-          end
+        end
         # Use a parser type specific merger to concatenate the results
         Puppet::Parser::AST::Hostclass.new('', :code => Puppet::Parser::ParserFactory.code_merger.concatenate(parse_results))
       else
@@ -566,7 +608,7 @@ class Puppet::Node::Environment
     end
   rescue Puppet::ParseErrorWithIssue => detail
     @known_resource_types.parse_failed = true
-    detail.environment = self.name
+    detail.environment = name
     raise
   rescue => detail
     @known_resource_types.parse_failed = true
@@ -581,7 +623,7 @@ class Puppet::Node::Environment
   #
   # @return [Puppet::Parser::AST::Hostclass]
   def empty_parse_result
-    return Puppet::Parser::AST::Hostclass.new('')
+    Puppet::Parser::AST::Hostclass.new('')
   end
 
   # A None subclass to make it easier to trace the NONE environment when debugging.

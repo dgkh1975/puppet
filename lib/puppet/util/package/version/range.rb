@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'range/lt'
 require_relative 'range/lt_eq'
 require_relative 'range/gt'
@@ -29,20 +31,22 @@ module Puppet::Util::Package::Version
     # @api public
     def self.parse(range_string, version_class)
       raise ValidationFailure, "Unable to parse '#{range_string}' as a string" unless range_string.is_a?(String)
+
       simples = range_string.split(RANGE_SPLIT).map do |simple|
         match, operator, version = *simple.match(FULL_REGEX)
         raise ValidationFailure, "Unable to parse '#{simple}' as a version range identifier" unless match
+
         case operator
         when '>'
-          Gt.new(version_class::parse(version))
+          Gt.new(version_class.parse(version))
         when '>='
-          GtEq.new(version_class::parse(version))
+          GtEq.new(version_class.parse(version))
         when '<'
-          Lt.new(version_class::parse(version))
+          Lt.new(version_class.parse(version))
         when '<='
-          LtEq.new(version_class::parse(version))
+          LtEq.new(version_class.parse(version))
         when ''
-          Eq.new(version_class::parse(version))
+          Eq.new(version_class.parse(version))
         else
           raise ValidationFailure, "Operator '#{operator}' is not implemented"
         end

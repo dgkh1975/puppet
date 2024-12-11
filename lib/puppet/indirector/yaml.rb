@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/indirector/terminus'
 require_relative '../../puppet/util/yaml'
 
@@ -9,7 +11,7 @@ class Puppet::Indirector::Yaml < Puppet::Indirector::Terminus
     return nil unless Puppet::FileSystem.exist?(file)
 
     begin
-      return load_file(file)
+      load_file(file)
     rescue Puppet::Util::Yaml::YamlLoadError => detail
       raise Puppet::Error, _("Could not parse YAML data for %{indirection} %{request}: %{detail}") % { indirection: indirection.name, request: request.key, detail: detail }, detail.backtrace
     end
@@ -17,7 +19,7 @@ class Puppet::Indirector::Yaml < Puppet::Indirector::Terminus
 
   # Convert our object to YAML and store it to the disk.
   def save(request)
-    raise ArgumentError.new(_("You can only save objects that respond to :name")) unless request.instance.respond_to?(:name)
+    raise ArgumentError, _("You can only save objects that respond to :name") unless request.instance.respond_to?(:name)
 
     file = path(request.key)
 
@@ -29,12 +31,12 @@ class Puppet::Indirector::Yaml < Puppet::Indirector::Terminus
     begin
       Puppet::Util::Yaml.dump(request.instance, file)
     rescue TypeError => detail
-      Puppet.err _("Could not save %{indirection} %{request}: %{detail}") % { indirection: self.name, request: request.key, detail: detail }
+      Puppet.err _("Could not save %{indirection} %{request}: %{detail}") % { indirection: name, request: request.key, detail: detail }
     end
   end
 
   # Return the path to a given node's file.
-  def path(name,ext='.yaml')
+  def path(name, ext = '.yaml')
     if name =~ Puppet::Indirector::BadNameRegexp then
       Puppet.crit(_("directory traversal detected in %{indirection}: %{name}") % { indirection: self.class, name: name.inspect })
       raise ArgumentError, _("invalid key")
@@ -50,7 +52,7 @@ class Puppet::Indirector::Yaml < Puppet::Indirector::Terminus
   end
 
   def search(request)
-    Dir.glob(path(request.key,'')).collect do |file|
+    Dir.glob(path(request.key, '')).collect do |file|
       load_file(file)
     end
   end

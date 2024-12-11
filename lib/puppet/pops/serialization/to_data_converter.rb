@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Serialization
   # Class that can process an arbitrary object into a value that is assignable to `Data`.
@@ -14,8 +16,6 @@ module Serialization
     # @option options [Boolean] :local_reference use local references instead of duplicating complex entries
     # @option options [Boolean] :type_by_reference `true` if Object types are converted to references rather than embedded.
     # @option options [Boolean] :symbol_as_string `true` if Symbols should be converted to strings (with type loss)
-    # @option options [Boolean] :force_symbol `false` if Symbols should not be converted (rich_data and symbol_as_string must be false)
-    # @option options [Boolean] :silence_warnings `false` if warnings should be silenced
     # @option options [String] :message_prefix String to prepend to in warnings and errors
     # @return [Data] the processed result. An object assignable to `Data`.
     #
@@ -43,12 +43,6 @@ module Serialization
       @symbol_as_string = options[:symbol_as_string]
       @symbol_as_string = false if @symbol_as_string.nil?
 
-      @force_symbol = options[:force_symbol]
-      @force_symbol = false if @force_symbol.nil?
-
-      @silence_warnings = options[:silence_warnings]
-      @silence_warnings = false if @silence_warnings.nil?
-
       @rich_data = options[:rich_data]
       @rich_data = false if @rich_data.nil?
 
@@ -71,8 +65,8 @@ module Serialization
     private
 
     def path_to_s
-      s = @message_prefix || ''
-      s << JsonPath.to_json_path(@path)[1..-1]
+      s = String.new(@message_prefix || '')
+      s << JsonPath.to_json_path(@path)[1..]
       s
     end
 
@@ -100,11 +94,7 @@ module Serialization
         elsif @rich_data
           { PCORE_TYPE_KEY => PCORE_TYPE_SYMBOL, PCORE_VALUE_KEY => value.to_s }
         else
-          if @force_symbol
-            value
-          else
-            @silence_warnings ? unknown_to_string(value) : unknown_to_string_with_warning(value)
-          end
+          unknown_to_string_with_warning(value)
         end
       elsif value.instance_of?(Array)
         process(value) do
@@ -129,11 +119,7 @@ module Serialization
           { PCORE_TYPE_KEY => PCORE_TYPE_SENSITIVE, PCORE_VALUE_KEY => to_data(value.unwrap) }
         end
       else
-        if @rich_data
-          value_to_data_hash(value)
-        else
-          @silence_warnings ? unknown_to_string(value) : unknown_to_string_with_warning(value)
-        end
+        unknown_to_data(value)
       end
     end
 
@@ -205,6 +191,10 @@ module Serialization
       v = yield
       @recursive_lock.delete(id)
       v
+    end
+
+    def unknown_to_data(value)
+      @rich_data ? value_to_data_hash(value) : unknown_to_string_with_warning(value)
     end
 
     def unknown_key_to_string_with_warning(value)
@@ -281,7 +271,8 @@ module Serialization
 
             # Pop optional arguments that are default
             while args.size > required_count
-              break unless pcore_type[names[args.size-1]].default_value?(args.last)
+              break unless pcore_type[names[args.size - 1]].default_value?(args.last)
+
               args.pop
             end
             result = {
@@ -299,7 +290,7 @@ module Serialization
 
     def pcore_type_to_data(pcore_type)
       type_name = pcore_type.name
-      if @type_by_reference  || type_name.start_with?('Pcore::')
+      if @type_by_reference || type_name.start_with?('Pcore::')
         type_name
       else
         with(PCORE_TYPE_KEY) { to_data(pcore_type) }
@@ -315,10 +306,10 @@ module Serialization
           semantic = Puppet::Pops::SemanticError.new(issue, nil, EMPTY_HASH)
         else
           file, line = stacktrace
-          semantic = Puppet::Pops::SemanticError.new(issue, nil, {:file => file, :line => line})
+          semantic = Puppet::Pops::SemanticError.new(issue, nil, { :file => file, :line => line })
         end
       end
-      optionally_fail(issue,  semantic, options)
+      optionally_fail(issue, semantic, options)
     end
   end
 end

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative '../../puppet/util/tag_set'
 
 module Puppet::Util::Tagging
@@ -20,7 +21,7 @@ module Puppet::Util::Tagging
         # not seen before, so now we test if it is valid
         if valid_tag?(name)
           if split_qualified_tags?
-          # avoid adding twice by first testing if the string contains '::'
+            # avoid adding twice by first testing if the string contains '::'
             @tags.merge(name.split('::')) if name.include?('::')
           end
         else
@@ -33,7 +34,7 @@ module Puppet::Util::Tagging
 
   # Add a name to the current tag set. Silently ignore names that does not
   # represent valid tags.
-  # 
+  #
   # Use this method instead of doing this:
   #
   #  tag(name) if is_valid?(name)
@@ -58,7 +59,7 @@ module Puppet::Util::Tagging
   # @return [Boolean] true if this instance is tagged with at least one of the provided tags
   #
   def tagged?(*tags)
-    raw_tagged?(tags.collect {|t| t.to_s.downcase})
+    raw_tagged?(tags.collect { |t| t.to_s.downcase })
   end
 
   # Answers if this resource is tagged with at least one of the tags given in downcased string form.
@@ -70,7 +71,7 @@ module Puppet::Util::Tagging
   # @return [Boolean] true if this instance is tagged with at least one of the provided tags
   #
   def raw_tagged?(tag_array)
-    my_tags = self.tags
+    my_tags = tags
     !tag_array.index { |t| my_tags.include?(t) }.nil?
   end
 
@@ -108,16 +109,14 @@ module Puppet::Util::Tagging
   end
 
   def valid_tag?(maybe_tag)
-    begin
-      tag_enc = maybe_tag.encoding
-      if tag_enc == Encoding::UTF_8 || tag_enc == Encoding::ASCII
-        maybe_tag =~ ValidTagRegex
-      else
-        maybe_tag.encode(Encoding::UTF_8) =~ ValidTagRegex
-      end
-    rescue Encoding::UndefinedConversionError, Encoding::InvalidByteSequenceError
-      false
+    tag_enc = maybe_tag.encoding
+    if tag_enc == Encoding::UTF_8 || tag_enc == Encoding::ASCII
+      maybe_tag =~ ValidTagRegex
+    else
+      maybe_tag.encode(Encoding::UTF_8) =~ ValidTagRegex
     end
+  rescue Encoding::UndefinedConversionError, Encoding::InvalidByteSequenceError
+    false
   end
 
   private

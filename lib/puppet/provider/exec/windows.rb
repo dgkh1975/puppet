@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/exec'
 
 Puppet::Type.type(:exec).provide :windows, :parent => Puppet::Provider::Exec do
-
-  confine    :operatingsystem => :windows
-  defaultfor :operatingsystem => :windows
+  confine    'os.name' => :windows
+  defaultfor 'os.name' => :windows
 
   desc <<-'EOT'
     Execute external binaries on Windows systems. As with the `posix`
@@ -41,11 +42,12 @@ Puppet::Type.type(:exec).provide :windows, :parent => Puppet::Provider::Exec do
       elsif !File.file?(exe)
         raise ArgumentError, _("'%{exe}' is a %{klass}, not a file") % { exe: exe, klass: File.ftype(exe) }
       end
+
       return
     end
 
     if resource[:path]
-      Puppet::Util.withenv( {'PATH' => resource[:path].join(File::PATH_SEPARATOR)}, :windows) do
+      Puppet::Util.withenv('PATH' => resource[:path].join(File::PATH_SEPARATOR)) do
         return if which(exe)
       end
     end

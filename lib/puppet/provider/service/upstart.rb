@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   START_ON = /^\s*start\s+on/
   COMMENTED_START_ON = /^\s*#+\s*start\s+on/
-  MANUAL   = /^\s*manual\s*$/
+  MANUAL = /^\s*manual\s*$/
 
   desc "Ubuntu service management with `upstart`.
 
@@ -10,25 +12,25 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   "
 
   confine :any => [
-    Puppet.runtime[:facter].value(:operatingsystem) == 'Ubuntu',
-    (Puppet.runtime[:facter].value(:osfamily) == 'RedHat' and Puppet.runtime[:facter].value(:operatingsystemrelease) =~ /^6\./),
-    (Puppet.runtime[:facter].value(:operatingsystem) == 'Amazon' and Puppet.runtime[:facter].value(:operatingsystemmajrelease) =~ /\d{4}/),
-    Puppet.runtime[:facter].value(:operatingsystem) == 'LinuxMint',
+    Puppet.runtime[:facter].value('os.name') == 'Ubuntu',
+    (Puppet.runtime[:facter].value('os.family') == 'RedHat' and Puppet.runtime[:facter].value('os.release.full') =~ /^6\./),
+    (Puppet.runtime[:facter].value('os.name') == 'Amazon' and Puppet.runtime[:facter].value('os.release.major') =~ /\d{4}/),
+    Puppet.runtime[:facter].value('os.name') == 'LinuxMint'
   ]
 
-  defaultfor :operatingsystem => :ubuntu, :operatingsystemmajrelease => ["10.04", "12.04", "14.04", "14.10"]
-  defaultfor :operatingsystem => :LinuxMint, :operatingsystemmajrelease => ["10", "11", "12", "13", "14", "15", "16", "17"]
+  defaultfor 'os.name' => :ubuntu, 'os.release.major' => ["10.04", "12.04", "14.04", "14.10"]
+  defaultfor 'os.name' => :LinuxMint, 'os.release.major' => %w[10 11 12 13 14 15 16 17]
 
-  commands :start   => "/sbin/start",
-           :stop    => "/sbin/stop",
+  commands :start => "/sbin/start",
+           :stop => "/sbin/stop",
            :restart => "/sbin/restart",
-           :status_exec  => "/sbin/status",
+           :status_exec => "/sbin/status",
            :initctl => "/sbin/initctl"
 
   # We only want to use upstart as our provider if the upstart daemon is running.
   # This can be checked by running `initctl version --quiet` on a machine that has
   # upstart installed.
-  confine :true => lambda { has_initctl? }
+  confine :true => -> { has_initctl? }
 
   def self.has_initctl?
     # Puppet::Util::Execution.execute does not currently work on jRuby.
@@ -52,12 +54,12 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   has_feature :enableable
 
   def self.instances
-    self.get_services(self.excludes) # Take exclude list from init provider
+    get_services(excludes) # Take exclude list from init provider
   end
 
   def self.excludes
     excludes = super
-    if Puppet.runtime[:facter].value(:osfamily) == 'RedHat'
+    if Puppet.runtime[:facter].value('os.family') == 'RedHat'
       # Puppet cannot deal with services that have instances, so we have to
       # ignore these services using instances on redhat based systems.
       excludes += %w[serial tty]
@@ -66,8 +68,7 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
     excludes
   end
 
-
-  def self.get_services(exclude=[])
+  def self.get_services(exclude = [])
     instances = []
     execpipe("#{command(:initctl)} list") { |process|
       process.each_line { |line|
@@ -76,11 +77,11 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
         # network-interface (lo) start/running
         # network-interface (eth0) start/running
         # network-interface-security start/running
-        matcher = line.match(/^(network-interface)\s\(([^\)]+)\)/)
+        matcher = line.match(/^(network-interface)\s\(([^)]+)\)/)
         name = if matcher
                  "#{matcher[1]} INTERFACE=#{matcher[2]}"
                else
-                 matcher = line.match(/^(network-interface-security)\s\(([^\)]+)\)/)
+                 matcher = line.match(/^(network-interface-security)\s\(([^)]+)\)/)
                  if matcher
                    "#{matcher[1]} JOB=#{matcher[2]}"
                  else
@@ -98,12 +99,12 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   end
 
   def upstart_version
-    @upstart_version ||= initctl("--version").match(/initctl \(upstart ([^\)]*)\)/)[1]
+    @upstart_version ||= initctl("--version").match(/initctl \(upstart ([^)]*)\)/)[1]
   end
 
   # Where is our override script?
   def overscript
-    @overscript ||= initscript.gsub(/\.conf$/,".override")
+    @overscript ||= initscript.gsub(/\.conf$/, ".override")
   end
 
   def search(name)
@@ -116,7 +117,7 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
           return fqname
         end
 
-        self.debug("Could not find #{name}#{suffix} in #{path}")
+        debug("Could not find #{name}#{suffix} in #{path}")
       end
     end
 
@@ -124,7 +125,7 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   end
 
   def enabled?
-    return super if not is_upstart?
+    return super unless is_upstart?
 
     script_contents = read_script_from(initscript)
     if version_is_pre_0_6_7
@@ -137,7 +138,7 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   end
 
   def enable
-    return super if not is_upstart?
+    return super unless is_upstart?
 
     script_text = read_script_from(initscript)
     if version_is_pre_0_9_0
@@ -148,7 +149,7 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   end
 
   def disable
-    return super if not is_upstart?
+    return super unless is_upstart?
 
     script_text = read_script_from(initscript)
     if version_is_pre_0_6_7
@@ -173,27 +174,28 @@ Puppet::Type.type(:service).provide :upstart, :parent => :debian do
   end
 
   def statuscmd
-    is_upstart? ? nil : super #this is because upstart is broken with its return codes
+    is_upstart? ? nil : super # this is because upstart is broken with its return codes
   end
 
   def status
     if (@resource[:hasstatus] == :false) ||
-        @resource[:status] ||
-        ! is_upstart?
+       @resource[:status] ||
+       !is_upstart?
       return super
     end
 
     output = status_exec(@resource[:name].split)
-    if output =~ /start\//
-      return :running
+    if output =~ %r{start/}
+      :running
     else
-      return :stopped
+      :stopped
     end
   end
 
-private
+  private
+
   def is_upstart?(script = initscript)
-    Puppet::FileSystem.exist?(script) && script.match(/\/etc\/init\/\S+\.conf/)
+    Puppet::FileSystem.exist?(script) && script.match(%r{/etc/init/\S+\.conf})
   end
 
   def version_is_pre_0_6_7
@@ -211,9 +213,9 @@ private
   def enabled_pre_0_6_7?(script_text)
     # Upstart version < 0.6.7 means no manual stanza.
     if script_text.match(START_ON)
-      return :true
+      :true
     else
-      return :false
+      :false
     end
   end
 
@@ -372,13 +374,11 @@ private
   end
 
   def read_script_from(filename)
-    File.open(filename) do |file|
-      file.read
-    end
+    File.read(filename)
   end
 
   def write_script_to(file, text)
-    Puppet::Util.replace_file(file, 0644) do |f|
+    Puppet::Util.replace_file(file, 0o644) do |f|
       f.write(text)
     end
   end

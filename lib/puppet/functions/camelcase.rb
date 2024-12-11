@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Creates a Camel Case version of a String
 #
 # This function is compatible with the stdlib function with the same name.
@@ -29,7 +31,6 @@
 # Would both result in `['AbcDef', 'BcdXyz']`
 #
 Puppet::Functions.create_function(:camelcase) do
-
   dispatch :on_numeric do
     param 'Numeric', :arg
   end
@@ -48,11 +49,11 @@ Puppet::Functions.create_function(:camelcase) do
   end
 
   def on_string(s)
-    s.split('_').map {|x| x.capitalize }.join('')
+    s.split('_').map(&:capitalize).join('')
   end
 
   def on_iterable(a)
-    a.map {|x| do_camelcase(x) }
+    a.map { |x| do_camelcase(x) }
   end
 
   def do_camelcase(x)

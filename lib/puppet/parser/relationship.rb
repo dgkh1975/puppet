@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 class Puppet::Parser::Relationship
   attr_accessor :source, :target, :type
 
-  PARAM_MAP = {:relationship => :before, :subscription => :notify}
+  PARAM_MAP = { :relationship => :before, :subscription => :notify }
 
   def arrayify(resources, left)
     case resources
@@ -24,7 +26,9 @@ class Puppet::Parser::Relationship
   end
 
   def initialize(source, target, type)
-    @source, @target, @type = source, target, type
+    @source = source
+    @target = target
+    @type = type
   end
 
   def param_name
@@ -43,7 +47,8 @@ class Puppet::Parser::Relationship
     unless catalog.resource(*target_ref)
       raise ArgumentError, _("Could not find resource '%{target}' for relationship from '%{source}'") % { target: target.to_s, source: source.to_s }
     end
-    Puppet.debug {"Adding relationship from #{source} to #{target} with '#{param_name}'"}
+
+    Puppet.debug { "Adding relationship from #{source} to #{target} with '#{param_name}'" }
     if source_resource[rel_param].class != Array
       source_resource[rel_param] = [source_resource[rel_param]].compact
     end
@@ -59,6 +64,7 @@ class Puppet::Parser::Relationship
     if x.is_a?(Puppet::Pops::Evaluator::Collectors::AbstractCollector)
       collected = x.collected
       return collected.values unless collected.empty?
+
       adapter = Puppet::Pops::Adapters::EmptyAlternativeAdapter.get(x)
       adapter.nil? ? [] : leftmost_alternative(adapter.empty_alternative)
     elsif x.is_a?(Array) && x.size == 1 && x[0].is_a?(Puppet::Pops::Evaluator::Collectors::AbstractCollector)

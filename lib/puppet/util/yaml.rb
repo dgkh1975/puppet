@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'yaml'
 
 module Puppet::Util::Yaml
@@ -24,7 +26,11 @@ module Puppet::Util::Yaml
   # @raise [YamlLoadException] If deserialization fails.
   # @return The parsed YAML, which can be Hash, Array or scalar types.
   def self.safe_load(yaml, allowed_classes = [], filename = nil)
-    data = YAML.safe_load(yaml, allowed_classes, [], true, filename)
+    if Gem::Version.new(Psych::VERSION) >= Gem::Version.new('3.1.0')
+      data = YAML.safe_load(yaml, permitted_classes: allowed_classes, aliases: true, filename: filename)
+    else
+      data = YAML.safe_load(yaml, allowed_classes, [], true, filename)
+    end
     data = false if data.nil?
     data
   rescue ::Psych::DisallowedClass => detail
@@ -42,8 +48,19 @@ module Puppet::Util::Yaml
     safe_load(yaml, allowed_classes, filename)
   end
 
+  # Safely load the content from a file as YAML if
+  # contents are in valid format. This method does not
+  # raise error but returns `nil` when invalid file is
+  # given.
+  def self.safe_load_file_if_valid(filename, allowed_classes = [])
+    safe_load_file(filename, allowed_classes)
+  rescue YamlLoadError, ArgumentError, Errno::ENOENT => detail
+    Puppet.debug("Could not retrieve YAML content from '#{filename}': #{detail.message}")
+    nil
+  end
+
   def self.dump(structure, filename)
-    Puppet::FileSystem.replace_file(filename, 0660) do |fh|
+    Puppet::FileSystem.replace_file(filename, 0o660) do |fh|
       YAML.dump(structure, fh)
     end
   end

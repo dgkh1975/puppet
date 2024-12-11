@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/face'
 require_relative '../../puppet/parser'
 
@@ -40,7 +42,7 @@ Puppet::Face.define(:parser, '0.0.1') do
       parse_errors = {}
 
       if files.empty?
-        if not STDIN.tty?
+        if !STDIN.tty?
           Puppet[:code] = STDIN.read
           error = validate_manifest(nil)
           parse_errors['STDIN'] = error if error
@@ -63,7 +65,7 @@ Puppet::Face.define(:parser, '0.0.1') do
       end
 
       unless missing_files.empty?
-        raise Puppet::Error, _("One or more file(s) specified did not exist:\n%{files}") % { files: missing_files.collect {|f| " " * 3 + f + "\n"} }
+        raise Puppet::Error, _("One or more file(s) specified did not exist:\n%{files}") % { files: missing_files.collect { |f| " " * 3 + f + "\n" } }
       end
 
       parse_errors
@@ -82,12 +84,12 @@ Puppet::Face.define(:parser, '0.0.1') do
 
     when_rendering :json do |errors|
       unless errors.empty?
-        ignore_error_keys = [ :arguments, :environment, :node ]
+        ignore_error_keys = [:arguments, :environment, :node]
 
-        data = errors.map do |file, error|
+        data = errors.to_h do |file, error|
           file_errors = error.to_h.reject { |k, _| ignore_error_keys.include?(k) }
           [file, file_errors]
-        end.to_h
+        end
 
         puts Puppet::Util::Json.dump(Puppet::Pops::Serialization::ToDataConverter.convert(data, rich_data: false, symbol_as_string: true), :pretty => true)
 
@@ -99,8 +101,7 @@ Puppet::Face.define(:parser, '0.0.1') do
     end
   end
 
-
-  action (:dump) do
+  action(:dump) do
     summary _("Outputs a dump of the internal parse tree for debugging")
     arguments "[--format <old|pn|json>] [--pretty] { -e <source> | [<templates> ...] } "
     returns _("A dump of the resulting AST model unless there are syntax or validation errors.")
@@ -147,7 +148,7 @@ Puppet::Face.define(:parser, '0.0.1') do
       if options[:e]
         dump_parse(options[:e], 'command-line-string', options, false)
       elsif args.empty?
-        if ! STDIN.tty?
+        if !STDIN.tty?
           dump_parse(STDIN.read, 'stdin', options, false)
         else
           raise Puppet::Error, _("No input to parse given on command line or stdin")
@@ -173,7 +174,7 @@ Puppet::Face.define(:parser, '0.0.1') do
   end
 
   def dump_parse(source, filename, options, show_filename = true)
-    output = ""
+    output = ''.dup
     evaluating_parser = Puppet::Pops::Parser::EvaluatingParser.new
     begin
       if options[:validate]
@@ -212,14 +213,12 @@ Puppet::Face.define(:parser, '0.0.1') do
     env = Puppet.lookup(:current_environment)
     loaders = Puppet::Pops::Loaders.new(env)
 
-    Puppet.override( {:loaders => loaders } , _('For puppet parser validate')) do
-      begin
-        validation_environment = manifest ? env.override_with(:manifest => manifest) : env
-        validation_environment.check_for_reparse
-        validation_environment.known_resource_types.clear
-      rescue Puppet::ParseError => parse_error
-        return parse_error
-      end
+    Puppet.override({ :loaders => loaders }, _('For puppet parser validate')) do
+      validation_environment = manifest ? env.override_with(:manifest => manifest) : env
+      validation_environment.check_for_reparse
+      validation_environment.known_resource_types.clear
+    rescue Puppet::ParseError => parse_error
+      return parse_error
     end
 
     nil

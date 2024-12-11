@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'pathname'
 require 'tmpdir'
 require_relative '../../../puppet/util/json'
@@ -7,7 +9,7 @@ module Puppet::ModuleTool
   module Applications
     class Unpacker < Application
       def self.unpack(filename, target)
-        app = self.new(filename, :target_dir => target)
+        app = new(filename, :target_dir => target)
         app.unpack
         app.sanity_check
         app.move_into(target)
@@ -36,13 +38,13 @@ module Puppet::ModuleTool
 
         # Return the Pathname object representing the directory where the
         # module release archive was unpacked the to.
-        return module_dir
+        module_dir
       end
 
       # @api private
       # Error on symlinks and other junk
       def sanity_check
-        symlinks = Dir.glob("#{tmpdir}/**/*", File::FNM_DOTMATCH).map { |f| Pathname.new(f) }.select {|p| Puppet::FileSystem.symlink? p}
+        symlinks = Dir.glob("#{tmpdir}/**/*", File::FNM_DOTMATCH).map { |f| Pathname.new(f) }.select { |p| Puppet::FileSystem.symlink? p }
         tmpdirpath = Pathname.new tmpdir
 
         symlinks.each do |s|
@@ -52,11 +54,9 @@ module Puppet::ModuleTool
 
       # @api private
       def unpack
-        begin
-          Puppet::ModuleTool::Tar.instance.unpack(@filename.to_s, tmpdir, [@module_path.stat.uid, @module_path.stat.gid].join(':'))
-        rescue Puppet::ExecutionFailure => e
-          raise RuntimeError, _("Could not extract contents of module archive: %{message}") % { message: e.message }
-        end
+        Puppet::ModuleTool::Tar.instance.unpack(@filename.to_s, tmpdir, [@module_path.stat.uid, @module_path.stat.gid].join(':'))
+      rescue Puppet::ExecutionFailure => e
+        raise RuntimeError, _("Could not extract contents of module archive: %{message}") % { message: e.message }
       end
 
       # @api private
@@ -64,7 +64,7 @@ module Puppet::ModuleTool
         return @root_dir if @root_dir
 
         # Grab the first directory containing a metadata.json file
-        metadata_file = Dir["#{tmpdir}/**/metadata.json"].sort_by(&:length)[0]
+        metadata_file = Dir["#{tmpdir}/**/metadata.json"].min_by(&:length)
 
         if metadata_file
           @root_dir = Pathname.new(metadata_file).dirname
@@ -92,9 +92,11 @@ module Puppet::ModuleTool
       #
       # @api private
       # @return [String] path to temporary unpacking location
+      # rubocop:disable Naming/MemoizedInstanceVariableName
       def tmpdir
         @dir ||= Dir.mktmpdir('tmp', Puppet::Forge::Cache.base_path)
       end
+      # rubocop:enable Naming/MemoizedInstanceVariableName
     end
   end
 end

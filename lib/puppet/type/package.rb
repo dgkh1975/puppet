@@ -1,4 +1,6 @@
 # coding: utf-8
+# frozen_string_literal: true
+
 # Define the different packaging systems.  Each package system is implemented
 # in a module, which then gets used to individually extend each package object.
 # This allows packages to exist on the same machine using different packaging
@@ -33,20 +35,20 @@ module Puppet
       resource will autorequire those files."
 
     feature :reinstallable, "The provider can reinstall packages.",
-      :methods => [:reinstall]
+            :methods => [:reinstall]
     feature :installable, "The provider can install packages.",
-      :methods => [:install]
+            :methods => [:install]
     feature :uninstallable, "The provider can uninstall packages.",
-      :methods => [:uninstall]
+            :methods => [:uninstall]
     feature :upgradeable, "The provider can upgrade to the latest version of a
         package.  This feature is used by specifying `latest` as the
         desired value for the package.",
-      :methods => [:update, :latest]
+            :methods => [:update, :latest]
     feature :purgeable, "The provider can purge packages.  This generally means
         that all traces of the package are removed, including
         existing configuration files.  This feature is thus destructive
         and should be used with the utmost care.",
-      :methods => [:purge]
+            :methods => [:purge]
     feature :versionable, "The provider is capable of interrogating the
         package database for installed version(s), and can select
         which out of a set of available versions of a package to
@@ -56,7 +58,7 @@ module Puppet
         such that they are not automatically upgraded as a result of
         other package dependencies unless explicit action is taken by
         a user or another package.",
-      :methods => [:hold, :unhold]
+            :methods => [:hold, :unhold]
     feature :install_only, "The provider accepts options to only install packages never update (kernels, etc.)"
     feature :install_options, "The provider accepts options to be
       passed to the installer command."
@@ -64,12 +66,12 @@ module Puppet
       passed to the uninstaller command."
     feature :disableable, "The provider can disable packages. This feature is used by specifying `disabled` as the
       desired value for the package.",
-      :methods => [:disable]
+            :methods => [:disable]
     feature :supports_flavors, "The provider accepts flavors, which are specific variants of packages."
     feature :package_settings, "The provider accepts package_settings to be
       ensured for the given package. The meaning and format of these settings is
       provider-specific.",
-      :methods => [:package_settings_insync?, :package_settings, :package_settings=]
+            :methods => [:package_settings_insync?, :package_settings, :package_settings=]
     feature :virtual_packages, "The provider accepts virtual package names for install and uninstall."
 
     feature :targetable, "The provider accepts a targeted package management command."
@@ -117,7 +119,7 @@ module Puppet
         # Because yum always exits with a 0 exit code, there's a retrieve
         # in the "install" method.  So, check the current state now,
         # to compare against later.
-        current = self.retrieve
+        current = retrieve
         begin
           provider.update
         rescue => detail
@@ -138,7 +140,7 @@ module Puppet
           self.fail Puppet::Error, _("Could not update: %{detail}") % { detail: detail }, detail
         end
 
-        if self.retrieve == :absent
+        if retrieve == :absent
           :package_installed
         else
           :package_changed
@@ -164,7 +166,7 @@ module Puppet
 
             # Don't run 'latest' more than about every 5 minutes
             if @latest and ((Time.now.to_i - @lateststamp) / 60) < 5
-              #self.debug "Skipping latest check"
+              # self.debug "Skipping latest check"
             else
               begin
                 @latest = provider.latest
@@ -177,18 +179,17 @@ module Puppet
             end
 
             case
-              when is.is_a?(Array) && is.include?(@latest)
-                return true
-              when is == @latest
-                return true
-              when is == :present
-                # This will only happen on packaging systems
-                # that can't query versions.
-                return true
-              else
-                self.debug "#{@resource.name} #{is.inspect} is installed, latest is #{@latest.inspect}"
+            when is.is_a?(Array) && is.include?(@latest)
+              return true
+            when is == @latest
+              return true
+            when is == :present
+              # This will only happen on packaging systems
+              # that can't query versions.
+              return true
+            else
+              debug "#{@resource.name} #{is.inspect} is installed, latest is #{@latest.inspect}"
             end
-
 
           when :absent
             return true if is == :absent || is == :purged
@@ -242,7 +243,7 @@ module Puppet
       conditionally:
 
           # In the 'openssl' class
-          $ssl = $operatingsystem ? {
+          $ssl = $os['name'] ? {
             solaris => SMCossl,
             default => openssl
           }
@@ -254,7 +255,7 @@ module Puppet
 
           ...
 
-          $ssh = $operatingsystem ? {
+          $ssh = $os['name'] ? {
             solaris => SMCossh,
             default => openssh
           }
@@ -269,7 +270,7 @@ module Puppet
       isnamevar
 
       validate do |value|
-        if !value.is_a?(String)
+        unless value.is_a?(String)
           raise ArgumentError, _("Name must be a String not %{klass}") % { klass: value.class }
         end
       end
@@ -300,12 +301,13 @@ module Puppet
             command  => '/opt/ruby/bin/gem',
           }
 
-        Each provider defines a package management command; and uses the first
+        Each provider defines a package management command and uses the first
         instance of the command found in the PATH.
 
         Providers supporting the targetable feature allow you to specify the
-        absolute path of the package management command; useful when multiple
-        instances of the command are installed, or the command is not in the PATH.
+        absolute path of the package management command. Specifying the absolute
+        path is useful when multiple instances of the command are installed, or
+        the command is not in the PATH.
       EOT
 
       isnamevar
@@ -342,10 +344,10 @@ module Puppet
     def self.title_patterns
       # This is the default title pattern for all types, except hard-wired to
       # set only name.
-      [ [ /(.*)/m, [ [:name] ] ] ]
+      [[/(.*)/m, [[:name]]]]
     end
 
-    newproperty(:package_settings, :required_features=>:package_settings) do
+    newproperty(:package_settings, :required_features => :package_settings) do
       desc "Settings that can change the contents or configuration of a package.
 
         The formatting and effects of package_settings are provider-specific; any
@@ -394,7 +396,7 @@ module Puppet
         end
       end
 
-      def is_to_s(currentvalue)
+      def is_to_s(currentvalue) # rubocop:disable Naming/PredicateName
         if provider.respond_to?(:package_settings_is_to_s)
           provider.package_settings_is_to_s(should, currentvalue)
         else
@@ -406,7 +408,7 @@ module Puppet
         if provider.respond_to?(:package_settings_change_to_s)
           provider.package_settings_change_to_s(currentvalue, newvalue)
         else
-          super(currentvalue,newvalue)
+          super(currentvalue, newvalue)
         end
       end
     end
@@ -651,16 +653,16 @@ module Puppet
     # that support the reinstall_on_refresh parameter.
     def refresh
       if provider.reinstallable? &&
-        @parameters[:reinstall_on_refresh].value == :true &&
-        @parameters[:ensure].value != :purged &&
-        @parameters[:ensure].value != :absent
+         @parameters[:reinstall_on_refresh].value == :true &&
+         @parameters[:ensure].value != :purged &&
+         @parameters[:ensure].value != :absent
 
         provider.reinstall
       end
     end
 
     newproperty(:mark, :required_features => :holdable) do
-      mark_doc='Valid values are: hold/none'
+      mark_doc = 'Valid values are: hold/none'
       desc <<-EOT
         Set to hold to tell Debian apt/Solaris pkg to hold the package version
 
@@ -679,7 +681,7 @@ module Puppet
         when "none", :none
           :none
         else
-          raise ArgumentError, _('Invalid hold value %{value}. %{doc}') % { value: value.inspect, doc: mark_doc}
+          raise ArgumentError, _('Invalid hold value %{value}. %{doc}') % { value: value.inspect, doc: mark_doc }
         end
       end
 

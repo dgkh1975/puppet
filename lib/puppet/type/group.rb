@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'etc'
 require_relative '../../puppet/property/keyvalue'
 require_relative '../../puppet/parameter/boolean'
@@ -13,16 +15,16 @@ module Puppet
       a group record."
 
     feature :manages_members,
-      "For directories where membership is an attribute of groups not users."
+            "For directories where membership is an attribute of groups not users."
 
     feature :manages_aix_lam,
-      "The provider can manage AIX Loadable Authentication Module (LAM) system."
+            "The provider can manage AIX Loadable Authentication Module (LAM) system."
 
     feature :system_groups,
-      "The provider allows you to create system groups with lower GIDs."
+            "The provider allows you to create system groups with lower GIDs."
 
     feature :manages_local_users_and_groups,
-      "Allows local groups to be managed on systems that also use some other
+            "Allows local groups to be managed on systems that also use some other
        remote Name Switch Service (NSS) method of managing accounts."
 
     ensurable do
@@ -37,7 +39,6 @@ module Puppet
       end
 
       defaultto :present
-
     end
 
     newproperty(:gid) do
@@ -55,10 +56,10 @@ module Puppet
       end
 
       def sync
-        if self.should == :absent
+        if should == :absent
           raise Puppet::DevError, _("GID cannot be deleted")
         else
-          provider.gid = self.should
+          provider.gid = should
         end
       end
 
@@ -72,7 +73,7 @@ module Puppet
           end
         when Symbol
           unless gid == :absent
-            self.devfail "Invalid GID #{gid}"
+            devfail "Invalid GID #{gid}"
           end
         end
 
@@ -101,7 +102,7 @@ module Puppet
         super(current)
       end
 
-      def is_to_s(currentvalue)
+      def is_to_s(currentvalue) # rubocop:disable Naming/PredicateName
         if provider.respond_to?(:members_to_s)
           currentvalue = '' if currentvalue.nil?
           currentvalue = currentvalue.is_a?(Array) ? currentvalue : currentvalue.split(',')
@@ -124,7 +125,7 @@ module Puppet
         newvalue = munge_members_value(newvalue)
 
         if @resource[:auth_membership]
-          newvalue.uniq.sort 
+          newvalue.uniq.sort
         else
           (currentvalue + newvalue).uniq.sort
         end
@@ -213,11 +214,11 @@ module Puppet
     end
 
     newparam(:forcelocal, :boolean => true,
-             :required_features => :manages_local_users_and_groups,
-             :parent => Puppet::Parameter::Boolean) do
+                          :required_features => :manages_local_users_and_groups,
+                          :parent => Puppet::Parameter::Boolean) do
       desc "Forces the management of local accounts when accounts are also
             being managed by some other Name Switch Service (NSS). For AIX, refer to the `ia_load_module` parameter.
-            
+
             This option relies on your operating system's implementation of `luser*` commands, such as `luseradd` , `lgroupadd`, and `lusermod`. The `forcelocal` option could behave unpredictably in some circumstances. If the tools it depends on are not available, it might have no effect at all."
       defaultto false
     end

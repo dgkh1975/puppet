@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Network::HTTP
 end
 
@@ -11,15 +13,15 @@ module Puppet::Network::HTTP::Handler
 
   # These shouldn't be allowed to be set by clients
   # in the query string, for security reasons.
-  DISALLOWED_KEYS = ["node", "ip"]
+  DISALLOWED_KEYS = %w[node ip]
 
   def register(routes)
     # There's got to be a simpler way to do this, right?
     dupes = {}
     routes.each { |r| dupes[r.path_matcher] = (dupes[r.path_matcher] || 0) + 1 }
-    dupes = dupes.collect { |pm, count| pm if count > 1 }.compact
+    dupes = dupes.filter_map { |pm, count| pm if count > 1 }
     if dupes.count > 0
-      raise ArgumentError, _("Given multiple routes with identical path regexes: %{regexes}") % { regexes: dupes.map{ |rgx| rgx.inspect }.join(', ') }
+      raise ArgumentError, _("Given multiple routes with identical path regexes: %{regexes}") % { regexes: dupes.map(&:inspect).join(', ') }
     end
 
     @routes = routes
@@ -105,13 +107,10 @@ module Puppet::Network::HTTP::Handler
 
   def find_route_or_raise(request)
     route = @routes.find { |r| r.matches?(request) }
-    if route
-      return route
-    else
-      raise Puppet::Network::HTTP::Error::HTTPNotFoundError.new(
-              _("No route for %{request} %{path}") % { request: request.method, path: request.path },
-              HANDLER_NOT_FOUND)
-    end
+    route || raise(Puppet::Network::HTTP::Error::HTTPNotFoundError.new(
+                     _("No route for %{request} %{path}") % { request: request.method, path: request.path },
+                     HANDLER_NOT_FOUND
+                   ))
   end
 
   def set_puppet_version_header(response)
@@ -168,15 +167,14 @@ module Puppet::Network::HTTP::Handler
   end
 
   def decode_params(params)
-    params.select { |key, _| allowed_parameter?(key) }.inject({}) do |result, ary|
+    params.select { |key, _| allowed_parameter?(key) }.each_with_object({}) do |ary, result|
       param, value = ary
       result[param.to_sym] = parse_parameter_value(param, value)
-      result
     end
   end
 
   def allowed_parameter?(name)
-    not (name.nil? || name.empty? || DISALLOWED_KEYS.include?(name))
+    !(name.nil? || name.empty? || DISALLOWED_KEYS.include?(name))
   end
 
   def parse_parameter_value(param, value)
@@ -203,7 +201,7 @@ module Puppet::Network::HTTP::Handler
   end
 
   def configure_profiler(request_headers, request_params)
-    if (request_headers.has_key?(Puppet::Network::HTTP::HEADER_ENABLE_PROFILING.downcase) or Puppet[:profile])
+    if request_headers.has_key?(Puppet::Network::HTTP::HEADER_ENABLE_PROFILING.downcase) or Puppet[:profile]
       Puppet::Util::Profiler.add_profiler(Puppet::Util::Profiler::Aggregate.new(Puppet.method(:info), request_params.object_id))
     end
   end

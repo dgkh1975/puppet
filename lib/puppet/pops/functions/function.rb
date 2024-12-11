@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # @note WARNING: This new function API is still under development and may change at
 #   any time
 #
@@ -11,9 +13,6 @@
 #
 # @api public
 class Puppet::Pops::Functions::Function
-  # The scope where the function was defined
-  attr_reader :closure_scope
-
   # The loader that loaded this function.
   # Should be used if function wants to load other things.
   #
@@ -41,23 +40,21 @@ class Puppet::Pops::Functions::Function
   #
   # @api public
   def call(scope, *args, &block)
+    result = catch(:return) do
+      return self.class.dispatcher.dispatch(self, scope, args, &block)
+    end
+    result.value
+  rescue Puppet::Pops::Evaluator::Next => jumper
     begin
-      result = catch(:return) do
-        return self.class.dispatcher.dispatch(self, scope, args, &block)
-      end
-      return result.value
-    rescue Puppet::Pops::Evaluator::Next => jumper
-      begin
-        throw :next, jumper.value
-      rescue Puppet::Parser::Scope::UNCAUGHT_THROW_EXCEPTION
-        raise Puppet::ParseError.new("next() from context where this is illegal", jumper.file, jumper.line)
-      end
-    rescue Puppet::Pops::Evaluator::Return => jumper
-      begin
-        throw :return, jumper
-      rescue Puppet::Parser::Scope::UNCAUGHT_THROW_EXCEPTION
-        raise Puppet::ParseError.new("return() from context where this is illegal", jumper.file, jumper.line)
-      end
+      throw :next, jumper.value
+    rescue Puppet::Parser::Scope::UNCAUGHT_THROW_EXCEPTION
+      raise Puppet::ParseError.new("next() from context where this is illegal", jumper.file, jumper.line)
+    end
+  rescue Puppet::Pops::Evaluator::Return => jumper
+    begin
+      throw :return, jumper
+    rescue Puppet::Parser::Scope::UNCAUGHT_THROW_EXCEPTION
+      raise Puppet::ParseError.new("return() from context where this is illegal", jumper.file, jumper.line)
     end
   end
 
@@ -74,6 +71,7 @@ class Puppet::Pops::Functions::Function
     internal_call_function(closure_scope, function_name, args, &block)
   end
 
+  # The scope where the function was defined
   def closure_scope
     # If closure scope is explicitly set to not nil, if there is a global scope, otherwise an empty hash
     @closure_scope || Puppet.lookup(:global_scope) { {} }
@@ -106,11 +104,10 @@ class Puppet::Pops::Functions::Function
   #
   # @api public
   def internal_call_function(scope, function_name, args, &block)
-
     the_loader = loader
     unless the_loader
       raise ArgumentError, _("Function %{class_name}(): cannot call function '%{function_name}' - no loader specified") %
-          { class_name: self.class.name, function_name: function_name }
+                           { class_name: self.class.name, function_name: function_name }
     end
 
     func = the_loader.load(:function, function_name)
@@ -126,7 +123,7 @@ class Puppet::Pops::Functions::Function
     func_3x = Puppet::Parser::Functions.function(function_name, loader_scope.environment) if loader_scope.is_a?(Puppet::Parser::Scope)
     unless func_3x
       raise ArgumentError, _("Function %{class_name}(): Unknown function: '%{function_name}'") %
-          { class_name: self.class.name, function_name: function_name }
+                           { class_name: self.class.name, function_name: function_name }
     end
 
     # Call via 3x API
@@ -137,5 +134,4 @@ class Puppet::Pops::Functions::Function
     # Prevent non r-value functions from leaking their result (they are not written to care about this)
     Puppet::Parser::Functions.rvalue?(function_name) ? result : nil
   end
-
 end

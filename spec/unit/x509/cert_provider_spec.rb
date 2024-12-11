@@ -135,7 +135,7 @@ describe Puppet::X509::CertProvider do
 
           expect {
             create_provider(crlpath: crl_path).load_crls
-          }.to raise_error(OpenSSL::X509::CRLError, 'nested asn1 error')
+          }.to raise_error(OpenSSL::X509::CRLError, /(PEM_read_bio_X509_CRL: bad base64 decode|nested asn1 error)/)
         end
 
         it 'raises if the input is empty' do
@@ -280,7 +280,7 @@ describe Puppet::X509::CertProvider do
           # password is 74695716c8b6
           expect {
             provider.load_private_key('encrypted-key')
-          }.to raise_error(OpenSSL::PKey::PKeyError, /Could not parse PKey: no start line/)
+          }.to raise_error(OpenSSL::PKey::PKeyError, /Could not parse PKey/)
         end
 
         it 'decrypts an RSA key previously saved using 3DES' do
@@ -315,7 +315,7 @@ describe Puppet::X509::CertProvider do
           # password is 74695716c8b6
           expect {
             provider.load_private_key('encrypted-ec-key')
-          }.to raise_error(OpenSSL::PKey::PKeyError, /(unknown|invalid) curve name|Could not parse PKey: no start line/)
+          }.to raise_error(OpenSSL::PKey::PKeyError, /(unknown|invalid) curve name|Could not parse PKey/)
         end
       end
     end
@@ -583,6 +583,55 @@ describe Puppet::X509::CertProvider do
           provider.delete_request(name)
         }.to raise_error(Puppet::Error, "Failed to delete certificate request for '#{name}'")
       end
+    end
+  end
+
+  context 'when creating', :unless => RUBY_PLATFORM == 'java' do
+    context 'requests' do
+      let(:name) { 'tom' }
+      let(:requestdir) { tmpdir('cert_provider') }
+      let(:provider) { create_provider(requestdir: requestdir) }
+      let(:key) { OpenSSL::PKey::RSA.new(Puppet[:keylength]) }
+
+      it 'has the auto-renew attribute by default for agents that support automatic renewal' do
+        csr = provider.create_request(name, key)
+        # need to create CertificateRequest instance from csr in order to view CSR attributes
+        wrapped_csr = Puppet::SSL::CertificateRequest.from_instance csr
+        expect(wrapped_csr.custom_attributes).to include('oid' => 'pp_auth_auto_renew', 'value' => 'true')
+      end
+
+      it 'does not have the auto-renew attribute for agents that do not support automatic renewal' do
+        Puppet[:hostcert_renewal_interval] = 0
+        csr = provider.create_request(name, key)
+        wrapped_csr = Puppet::SSL::CertificateRequest.from_instance csr
+        expect(wrapped_csr.custom_attributes.length).to eq(0)
+      end
+    end
+  end
+
+  context 'CA last update time' do
+    let(:ca_path) { tmpfile('pem_ca') }
+
+    it 'returns nil if the CA does not exist' do
+      provider = create_provider(capath: '/does/not/exist')
+
+      expect(provider.ca_last_update).to be_nil
+    end
+
+    it 'returns the last update time' do
+      time = Time.now - 30
+      Puppet::FileSystem.touch(ca_path, mtime: time)
+      provider = create_provider(capath: ca_path)
+
+      expect(provider.ca_last_update).to be_within(1).of(time)
+    end
+
+    it 'sets the last update time' do
+      time = Time.now - 30
+      provider = create_provider(capath: ca_path)
+      provider.ca_last_update = time
+
+      expect(Puppet::FileSystem.stat(ca_path).mtime).to be_within(1).of(time)
     end
   end
 

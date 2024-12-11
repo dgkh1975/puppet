@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/autoload'
 require_relative '../../puppet/parser/scope'
 require_relative '../../puppet/pops/adaptable'
@@ -48,7 +50,7 @@ module Puppet::Parser::Functions
 
     def load(name, env = Puppet.lookup(:current_environment))
       if Puppet[:strict] != :off
-        Puppet.warn_once('deprecations', "Puppet::Parser::Functions#load('#{name}')", _("The method 'Puppet::Parser::Functions.autoloader#load(\"%{name}\")' is deprecated in favor of using 'Scope#call_function'.") % {name: name})
+        Puppet.warn_once('deprecations', "Puppet::Parser::Functions#load('#{name}')", _("The method 'Puppet::Parser::Functions.autoloader#load(\"%{name}\")' is deprecated in favor of using 'Scope#call_function'.") % { name: name })
       end
 
       @delegatee.load(name, env)
@@ -56,7 +58,7 @@ module Puppet::Parser::Functions
 
     def loaded?(name)
       if Puppet[:strict] != :off
-        Puppet.warn_once('deprecations', "Puppet::Parser::Functions.loaded?('#{name}')", _("The method 'Puppet::Parser::Functions.autoloader#loaded?(\"%{name}\")' is deprecated in favor of using 'Scope#call_function'.") % {name: name})
+        Puppet.warn_once('deprecations', "Puppet::Parser::Functions.loaded?('#{name}')", _("The method 'Puppet::Parser::Functions.autoloader#loaded?(\"%{name}\")' is deprecated in favor of using 'Scope#call_function'.") % { name: name })
       end
 
       @delegatee.loaded?(name)
@@ -209,10 +211,11 @@ module Puppet::Parser::Functions
         if args[0].is_a? Array
           if arity >= 0 and args[0].size != arity
             raise ArgumentError, _("%{name}(): Wrong number of arguments given (%{arg_count} for %{arity})") % { name: name, arg_count: args[0].size, arity: arity }
-          elsif arity < 0 and args[0].size < (arity+1).abs
-            raise ArgumentError, _("%{name}(): Wrong number of arguments given (%{arg_count} for minimum %{min_arg_count})") % { name: name, arg_count: args[0].size, min_arg_count: (arity+1).abs }
+          elsif arity < 0 and args[0].size < (arity + 1).abs
+            raise ArgumentError, _("%{name}(): Wrong number of arguments given (%{arg_count} for minimum %{min_arg_count})") % { name: name, arg_count: args[0].size, min_arg_count: (arity + 1).abs }
           end
-          r = Puppet::Pops::Evaluator::Runtime3FunctionArgumentConverter.convert_return(self.send(real_fname, args[0]))
+
+          r = Puppet::Pops::Evaluator::Runtime3FunctionArgumentConverter.convert_return(send(real_fname, args[0]))
           # avoid leaking aribtrary value if not being an rvalue function
           options[:type] == :rvalue ? r : nil
         else
@@ -221,7 +224,7 @@ module Puppet::Parser::Functions
       end
     end
 
-    func = {:arity => arity, :type => ftype, :name => fname}
+    func = { :arity => arity, :type => ftype, :name => fname }
     func[:doc] = options[:doc] if options[:doc]
 
     env_module.add_function_info(name, func)
@@ -257,10 +260,10 @@ module Puppet::Parser::Functions
   def self.functiondocs(environment = Puppet.lookup(:current_environment))
     autoloader.delegatee.loadall(environment)
 
-    ret = ""
+    ret = ''.dup
 
-    merged_functions(environment).sort { |a,b| a[0].to_s <=> b[0].to_s }.each do |name, hash|
-      ret << "#{name}\n#{"-" * name.to_s.length}\n"
+    merged_functions(environment).sort { |a, b| a[0].to_s <=> b[0].to_s }.each do |name, hash|
+      ret << "#{name}\n#{'-' * name.to_s.length}\n"
       if hash[:doc]
         ret << Puppet::Util::Docs.scrub(hash[:doc])
       else

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # CallableSignature
 # ===
 # A CallableSignature describes how something callable expects to be called.
@@ -6,7 +8,6 @@
 # @api public
 #
 class Puppet::Pops::Evaluator::CallableSignature
-
   # Returns the names of the parameters as an array of strings. This does not include the name
   # of an optional block parameter.
   #
@@ -21,7 +22,7 @@ class Puppet::Pops::Evaluator::CallableSignature
   # @api public
   #
   def parameter_names
-    raise NotImplementedError.new
+    raise NotImplementedError
   end
 
   # Returns a PCallableType with the type information, required and optional count, and type information about
@@ -33,7 +34,7 @@ class Puppet::Pops::Evaluator::CallableSignature
   # @api public
   #
   def type
-    raise NotImplementedError.new
+    raise NotImplementedError
   end
 
   # Returns the expected type for an optional block. The type may be nil, which means that the callable does
@@ -55,7 +56,7 @@ class Puppet::Pops::Evaluator::CallableSignature
   # @api public
   #
   def block_name
-    raise NotImplementedError.new
+    raise NotImplementedError
   end
 
   # Returns a range indicating the optionality of a block. One of [0,0] (does not accept block), [0,1] (optional
@@ -86,7 +87,7 @@ class Puppet::Pops::Evaluator::CallableSignature
   # @api public
   #
   def last_captures_rest?
-    raise NotImplementedError.new
+    raise NotImplementedError
   end
 
   # Returns true if the given x is infinity

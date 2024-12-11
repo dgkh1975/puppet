@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/checksums'
 require_relative '../../../puppet/util/diff'
 require 'date'
@@ -27,13 +29,13 @@ module Puppet
         return false if is == :absent
       else
         if resource[:ensure] == :present && has_contents && (s = resource.stat)
-          #TRANSLATORS 'Ensure' is an attribute and ':present' is a value and should not be translated
-          resource.warning _("Ensure set to :present but file type is %{file_type} so no content will be synced") % { file_type: s.ftype}
+          # TRANSLATORS 'Ensure' is an attribute and ':present' is a value and should not be translated
+          resource.warning _("Ensure set to :present but file type is %{file_type} so no content will be synced") % { file_type: s.ftype }
         end
         return true
       end
 
-      return true if ! resource.replace?
+      return true unless resource.replace?
 
       is_insync = yield(is)
 
@@ -59,12 +61,13 @@ module Puppet
 
     def date_matches?(checksum_type, current, desired)
       time_types = [:mtime, :ctime]
-      return false if !time_types.include?(checksum_type)
+      return false unless time_types.include?(checksum_type)
       return false unless current && desired
 
       begin
         if checksum?(current) || checksum?(desired)
           raise if !time_types.include?(sumtype(current).to_sym) || !time_types.include?(sumtype(desired).to_sym)
+
           current = sumdata(current)
           desired = sumdata(desired)
         end
@@ -77,9 +80,10 @@ module Puppet
     def retrieve_checksum(resource)
       stat = resource.stat
       return :absent unless stat
+
       ftype = stat.ftype
       # Don't even try to manage the content on directories or links
-      return nil if ["directory","link"].include?(ftype)
+      return nil if %w[directory link fifo socket].include?(ftype)
 
       begin
         resource.parameter(:checksum).sum_file(resource[:path])
@@ -93,6 +97,5 @@ module Puppet
       resource.write(param)
       return_event
     end
-
   end
 end

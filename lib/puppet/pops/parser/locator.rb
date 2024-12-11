@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Pops
 module Parser
 # Helper class that keeps track of where line breaks are located and can answer questions about positions.
@@ -57,6 +59,7 @@ class Locator
     last = first + ast.length
     ast._pcore_all_contents([]) do |m|
       next unless m.is_a?(Model::Positioned)
+
       m_offset = m.offset
       m_last = m_offset + m.length
       first = m_offset if m_offset < first
@@ -68,7 +71,7 @@ class Locator
   # Returns the line index - an array of line offsets for the start position of each line, starting at 0 for
   # the first line.
   #
-  def line_index()
+  def line_index
   end
 
   # Common byte based impl that works for all rubies (stringscanner is byte based
@@ -111,7 +114,7 @@ class Locator
 
     # Returns the position on line (first position on a line is 1)
     def pos_on_line(offset)
-      offset_on_line(offset) +1
+      offset_on_line(offset) + 1
     end
 
     def to_location_hash(reported_offset, end_offset)
@@ -119,7 +122,7 @@ class Locator
       offset     = char_offset(reported_offset)
       length     = char_length(reported_offset, end_offset)
       start_line = line_for_offset(reported_offset)
-      { :line => start_line, :pos => pos, :offset => offset, :length => length}
+      { :line => start_line, :pos => pos, :offset => offset, :length => length }
     end
 
     # Returns the index of the smallest item for which the item > the given value
@@ -138,28 +141,29 @@ class Locator
       satisfied = false
       v = nil
 
-      while low < high do
-          mid = low + ((high - low) / 2)
-          v = (ary[mid] > value)
-          if v == true
-            satisfied = true
-            smaller = true
-          elsif !v
-            smaller = false
-          else
-            raise TypeError, "wrong argument, must be boolean or nil, got '#{v.class}'"
-          end
+      while low < high
+        mid = low + ((high - low) / 2)
+        v = (ary[mid] > value)
+        if v == true
+          satisfied = true
+          smaller = true
+        elsif !v
+          smaller = false
+        else
+          raise TypeError, "wrong argument, must be boolean or nil, got '#{v.class}'"
+        end
 
-          if smaller
-            high = mid
-          else
-            low = mid + 1;
-          end
+        if smaller
+          high = mid
+        else
+          low = mid + 1;
+        end
       end
 
       return nil if low == ary.length
-      return nil if !satisfied
-      return low
+      return nil unless satisfied
+
+      low
     end
 
     def hash
@@ -177,6 +181,7 @@ class Locator
         # use cache
         return @prev_line
       end
+
       line_nbr = ary_bsearch_i(line_index, offset)
       if line_nbr
         # cache
@@ -187,7 +192,7 @@ class Locator
       # If not found it is after last
       # clear cache
       @prev_offset = @prev_line = nil
-      return line_index.size
+      line_index.size
     end
   end
 
@@ -235,7 +240,7 @@ class Locator
       # The last entry is duplicated since there will be  the line "after last line" that would otherwise require
       # conditional logic.
       #
-      @accumulated_margin = margin_per_line.reduce([0]) {|memo, val| memo << memo[-1] + val; memo }
+      @accumulated_margin = margin_per_line.each_with_object([0]) { |val, memo| memo << memo[-1] + val; }
       @accumulated_margin << @accumulated_margin[-1]
     end
 
@@ -245,7 +250,7 @@ class Locator
 
     # Returns array with transposed (local) offset and (local) length. The transposed values
     # take the margin into account such that it is added to the content to the right
-    # 
+    #
     # Using X to denote margin and where end of line is explicitly shown as \n:
     # ```
     # XXXXabc\n
@@ -263,13 +268,13 @@ class Locator
 
       # compute local start and end line
       start_line = line_for_offset(offset)
-      end_line = line_for_offset(offset+length)
+      end_line = line_for_offset(offset + length)
 
       # complex case when there is a margin
       transposed_offset = offset == 0 ? @leading_offset : offset + @leading_offset + @accumulated_margin[start_line]
       transposed_length = length +
-        @accumulated_margin[end_line] - @accumulated_margin[start_line] +    # the margins between start and end (0 is line 1)
-        (offset_on_line(offset) == 0 ? margin_per_line[start_line - 1] : 0)  # include start's margin in position 0
+                          @accumulated_margin[end_line] - @accumulated_margin[start_line] +    # the margins between start and end (0 is line 1)
+                          (offset_on_line(offset) == 0 ? margin_per_line[start_line - 1] : 0)  # include start's margin in position 0
       [transposed_offset, transposed_length]
     end
 
@@ -282,13 +287,11 @@ class Locator
     def char_length(offset, end_offset)
       raise "Should not be called"
     end
-
   end
 
   class LocatorForChars < AbstractLocator
-
     def offset_on_line(offset)
-      line_offset = line_index[ line_for_offset(offset)-1 ]
+      line_offset = line_index[line_for_offset(offset) - 1]
       offset - line_offset
     end
 
@@ -305,7 +308,6 @@ class Locator
     def extract_text(offset, length)
       string.slice(offset, length)
     end
-
   end
 
   # This implementation is for Ruby19 and Ruby20. It uses byteslice to get strings from byte based offsets.
@@ -315,24 +317,26 @@ class Locator
   class Locator19 < AbstractLocator
     include Types::PuppetObject
 
+    # rubocop:disable Naming/MemoizedInstanceVariableName
     def self._pcore_type
       @type ||= Types::PObjectType.new('Puppet::AST::Locator', {
-        'attributes' => {
-          'string' => Types::PStringType::DEFAULT,
-          'file' => Types::PStringType::DEFAULT,
-          'line_index' => {
-            Types::KEY_TYPE => Types::POptionalType.new(Types::PArrayType.new(Types::PIntegerType::DEFAULT)),
-            Types::KEY_VALUE => nil
-          }
-        }
-      })
+                                         'attributes' => {
+                                           'string' => Types::PStringType::DEFAULT,
+                                           'file' => Types::PStringType::DEFAULT,
+                                           'line_index' => {
+                                             Types::KEY_TYPE => Types::POptionalType.new(Types::PArrayType.new(Types::PIntegerType::DEFAULT)),
+                                             Types::KEY_VALUE => nil
+                                           }
+                                         }
+                                       })
     end
+    # rubocop:enable Naming/MemoizedInstanceVariableName
 
     # Returns the offset on line (first offset on a line is 0).
     # Ruby 19 is multibyte but has no character position methods, must use byteslice
     def offset_on_line(offset)
-      line_offset = line_index[ line_for_offset(offset)-1 ]
-      @string.byteslice(line_offset, offset-line_offset).length
+      line_offset = line_index[line_for_offset(offset) - 1]
+      @string.byteslice(line_offset, offset - line_offset).length
     end
 
     # Returns the character offset for a given byte offset

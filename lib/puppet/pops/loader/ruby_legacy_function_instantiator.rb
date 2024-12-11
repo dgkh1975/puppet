@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 # The RubyLegacyFunctionInstantiator instantiates a Puppet::Functions::Function given the ruby source
 # that calls Puppet::Functions.create_function.
 #
 require 'ripper'
 class Puppet::Pops::Loader::RubyLegacyFunctionInstantiator
-  UNKNOWN = '<unknown>'.freeze
+  UNKNOWN = '<unknown>'
 
   # Produces an instance of the Function class with the given typed_name, or fails with an error if the
   # given ruby source does not produce this instance when evaluated.
@@ -18,7 +20,7 @@ class Puppet::Pops::Loader::RubyLegacyFunctionInstantiator
   def self.create(loader, typed_name, source_ref, ruby_code_string)
     # Assert content of 3x function by parsing
     assertion_result = []
-    if assert_code(ruby_code_string, assertion_result)
+    if assert_code(ruby_code_string, source_ref, assertion_result)
       unless ruby_code_string.is_a?(String) && assertion_result.include?(:found_newfunction)
         raise ArgumentError, _("The code loaded from %{source_ref} does not seem to be a Puppet 3x API function - no 'newfunction' call.") % { source_ref: source_ref }
       end
@@ -37,16 +39,18 @@ class Puppet::Pops::Loader::RubyLegacyFunctionInstantiator
       # This will do the 3x loading and define the "function_<name>" and "real_function_<name>" methods
       # in the anonymous module used to hold function definitions.
       #
-      func_info = eval(ruby_code_string, here, source_ref, 1)
+      func_info = eval(ruby_code_string, here, source_ref, 1) # rubocop:disable Security/Eval
 
       # Validate what was loaded
       unless func_info.is_a?(Hash)
         # TRANSLATORS - the word 'newfunction' should not be translated as it is a method name.
         raise ArgumentError, _("Illegal legacy function definition! The code loaded from %{source_ref} did not return the result of calling 'newfunction'. Got '%{klass}'") % { source_ref: source_ref, klass: func_info.class }
       end
+
       unless func_info[:name] == "function_#{typed_name.name()}"
-        raise ArgumentError, _("The code loaded from %{source_ref} produced mis-matched name, expected 'function_%{type_name}', got '%{created_name}'") % { 
-          source_ref: source_ref, type_name: typed_name.name, created_name: func_info[:name] }
+        raise ArgumentError, _("The code loaded from %{source_ref} produced mis-matched name, expected 'function_%{type_name}', got '%{created_name}'") % {
+          source_ref: source_ref, type_name: typed_name.name, created_name: func_info[:name]
+        }
       end
     end
 
@@ -69,16 +73,18 @@ class Puppet::Pops::Loader::RubyLegacyFunctionInstantiator
   end
   private_class_method :get_binding
 
-  def self.assert_code(code_string, result)
+  def self.assert_code(code_string, source_ref, result)
     ripped = Ripper.sexp(code_string)
-    return false if ripped.nil?  # Let the next real parse crash and tell where and what is wrong
-    ripped.each {|x| walk(x, result) }
+    return false if ripped.nil? # Let the next real parse crash and tell where and what is wrong
+
+    ripped.each { |x| walk(x, source_ref, result) }
     true
   end
   private_class_method :assert_code
 
-  def self.walk(x, result)
+  def self.walk(x, source_ref, result)
     return unless x.is_a?(Array)
+
     first = x[0]
     case first
     when :fcall, :call
@@ -89,18 +95,19 @@ class Puppet::Pops::Loader::RubyLegacyFunctionInstantiator
     when :def, :defs
       # There should not be any calls to def in a 3x function
       mname, mline = extract_name_line(find_identity(x))
-      raise SecurityError, _("Illegal method definition of method '%{method_name}' on line %{line} in legacy function. See %{url} for more information") % { 
+      raise SecurityError, _("Illegal method definition of method '%{method_name}' in source %{source_ref} on line %{line} in legacy function. See %{url} for more information") % {
         method_name: mname,
+        source_ref: source_ref,
         line: mline,
         url: "https://puppet.com/docs/puppet/latest/functions_refactor_legacy.html"
       }
     end
-    x.each {|v| walk(v, result) }
+    x.each { |v| walk(v, source_ref, result) }
   end
   private_class_method :walk
 
   def self.find_identity(rast)
-    rast.find{|x| x.is_a?(Array) && x[0] == :@ident }
+    rast.find { |x| x.is_a?(Array) && x[0] == :@ident }
   end
   private_class_method :find_identity
 
@@ -113,7 +120,11 @@ class Puppet::Pops::Loader::RubyLegacyFunctionInstantiator
   # Returns an Array; a tuple with method name and line number or "<unknown>" if either is missing, or format is not the expected
   #
   def self.extract_name_line(x)
-    (x.is_a?(Array) ? [ x[1], x[2].is_a?(Array) ? x[2][1] : nil] : [nil, nil]).map {|v| v.nil? ? UNKNOWN : v }
+    (if x.is_a?(Array)
+       [x[1], x[2].is_a?(Array) ? x[2][1] : nil]
+     else
+       [nil, nil]
+     end).map { |v| v.nil? ? UNKNOWN : v }
   end
   private_class_method :extract_name_line
 end

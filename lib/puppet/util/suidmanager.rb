@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/util/warnings'
 require 'forwardable'
 require 'etc'
@@ -8,7 +10,7 @@ module Puppet::Util::SUIDManager
 
   # Note groups= is handled specially due to a bug in OS X 10.6, 10.7,
   # and probably upcoming releases...
-  to_delegate_to_process = [ :euid=, :euid, :egid=, :egid, :uid=, :uid, :gid=, :gid, :groups ]
+  to_delegate_to_process = [:euid=, :euid, :egid=, :egid, :uid=, :uid, :gid=, :gid, :groups]
 
   to_delegate_to_process.each do |method|
     def_delegator Process, method
@@ -17,30 +19,27 @@ module Puppet::Util::SUIDManager
 
   def osx_maj_ver
     return @osx_maj_ver unless @osx_maj_ver.nil?
-    @osx_maj_ver = Puppet.runtime[:facter].value('macosx_productversion_major') || false
+
+    @osx_maj_ver = Puppet.runtime[:facter].value('os.macosx.version.major') || false
   end
   module_function :osx_maj_ver
 
   def groups=(grouplist)
-    begin
-      return Process.groups = grouplist
-    rescue Errno::EINVAL => e
-      #We catch Errno::EINVAL as some operating systems (OS X in particular) can
-      # cause troubles when using Process#groups= to change *this* user / process
-      # list of supplementary groups membership.  This is done via Ruby's function
-      # "static VALUE proc_setgroups(VALUE obj, VALUE ary)" which is effectively
-      # a wrapper for "int setgroups(size_t size, const gid_t *list)" (part of SVr4
-      # and 4.3BSD but not in POSIX.1-2001) that fails and sets errno to EINVAL.
-      #
-      # This does not appear to be a problem with Ruby but rather an issue on the
-      # operating system side.  Therefore we catch the exception and look whether
-      # we run under OS X or not -- if so, then we acknowledge the problem and
-      # re-throw the exception otherwise.
-      if osx_maj_ver and not osx_maj_ver.empty?
-        return true
-      else
-        raise e
-      end
+    Process.groups = grouplist
+  rescue Errno::EINVAL => e
+    # We catch Errno::EINVAL as some operating systems (OS X in particular) can
+    # cause troubles when using Process#groups= to change *this* user / process
+    # list of supplementary groups membership.  This is done via Ruby's function
+    # "static VALUE proc_setgroups(VALUE obj, VALUE ary)" which is effectively
+    # a wrapper for "int setgroups(size_t size, const gid_t *list)" (part of SVr4
+    # and 4.3BSD but not in POSIX.1-2001) that fails and sets errno to EINVAL.
+    #
+    # This does not appear to be a problem with Ruby but rather an issue on the
+    # operating system side.  Therefore we catch the exception and look whether
+    # we run under OS X or not -- if so, then we acknowledge the problem and
+    # re-throw the exception otherwise.
+    if !osx_maj_ver || osx_maj_ver.empty?
+      raise e
     end
   end
   module_function :groups=
@@ -61,12 +60,13 @@ module Puppet::Util::SUIDManager
   # Runs block setting euid and egid if provided then restoring original ids.
   # If running on Windows or without root, the block will be run with the
   # current euid/egid.
-  def asuser(new_uid=nil, new_gid=nil)
+  def asuser(new_uid = nil, new_gid = nil)
     return yield if Puppet::Util::Platform.windows?
     return yield unless root?
     return yield unless new_uid or new_gid
 
-    old_euid, old_egid = self.euid, self.egid
+    old_euid = euid
+    old_egid = egid
     begin
       change_privileges(new_uid, new_gid, false)
 
@@ -82,7 +82,7 @@ module Puppet::Util::SUIDManager
   # the primary group of the supplied gid will be used. If only gid is
   # supplied, only gid will be changed. This method will fail if used on
   # Windows.
-  def change_privileges(uid=nil, gid=nil, permanently=false)
+  def change_privileges(uid = nil, gid = nil, permanently = false)
     return unless uid or gid
 
     unless gid
@@ -98,7 +98,7 @@ module Puppet::Util::SUIDManager
   # Changes the egid of the process if `permanently` is not set, otherwise
   # changes gid. This method will fail if used on Windows, or attempting to
   # change to a different gid without root.
-  def change_group(group, permanently=false)
+  def change_group(group, permanently = false)
     gid = convert_xid(:gid, group)
     raise Puppet::Error, _("No such group %{group}") % { group: group } unless gid
 
@@ -114,7 +114,7 @@ module Puppet::Util::SUIDManager
 
   # As change_group, but operates on uids. If changing user permanently,
   # supplementary groups will be set the to default groups for the new uid.
-  def change_user(user, permanently=false)
+  def change_user(user, permanently = false)
     uid = convert_xid(:uid, user)
     raise Puppet::Error, _("No such user %{user}") % { user: user } unless uid
 
@@ -125,30 +125,31 @@ module Puppet::Util::SUIDManager
       initgroups(uid)
 
       Process::UID.change_privilege(uid)
-    else
+    elsif Process.euid == 0
       # We must be root to initgroups, so initgroups before dropping euid if
       # we're root, otherwise elevate euid before initgroups.
       # change euid (to root) first.
-      if Process.euid == 0
-        initgroups(uid)
-        Process.euid = uid
-      else
-        Process.euid = uid
-        initgroups(uid)
-      end
+      initgroups(uid)
+      Process.euid = uid
+    else
+      Process.euid = uid
+      initgroups(uid)
     end
   end
   module_function :change_user
 
   # Make sure the passed argument is a number.
   def convert_xid(type, id)
-    return id if id.kind_of? Integer
-    map = {:gid => :group, :uid => :user}
+    return id if id.is_a? Integer
+
+    map = { :gid => :group, :uid => :user }
     raise ArgumentError, _("Invalid id type %{type}") % { type: type } unless map.include?(type)
+
     ret = Puppet::Util.send(type, id)
-    if ret == nil
+    if ret.nil?
       raise Puppet::Error, _("Invalid %{klass}: %{id}") % { klass: map[type], id: id }
     end
+
     ret
   end
   module_function :convert_xid

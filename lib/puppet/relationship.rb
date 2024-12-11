@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # subscriptions are permanent associations determining how different
 # objects react to an event
 
@@ -5,7 +7,6 @@
 # It used to be a subclass of GRATR::Edge, but that class has weird hash
 # overrides that dramatically slow down the graphing.
 class Puppet::Relationship
-
   # FormatSupport for serialization methods
   include Puppet::Network::FormatSupport
   include Puppet::Util::PsychSupport
@@ -26,15 +27,17 @@ class Puppet::Relationship
   end
 
   def event=(event)
-    #TRANSLATORS 'NONE' should not be translated
-    raise ArgumentError, _("You must pass a callback for non-NONE events") if event != :NONE and ! callback
+    # TRANSLATORS 'NONE' should not be translated
+    raise ArgumentError, _("You must pass a callback for non-NONE events") if event != :NONE and !callback
+
     @event = event
   end
 
   def initialize(source, target, options = {})
-    @source, @target = source, target
+    @source = source
+    @target = target
 
-    options = (options || {}).inject({}) { |h,a| h[a[0].to_sym] = a[1]; h }
+    options = (options || {}).each_with_object({}) { |a, h| h[a[0].to_sym] = a[1]; }
     [:callback, :event].each do |option|
       value = options[option]
       send(option.to_s + "=", value) if value
@@ -45,11 +48,9 @@ class Puppet::Relationship
   # of :NONE comes from.
   def match?(event)
     if self.event.nil? or event == :NONE or self.event == :NONE
-      return false
-    elsif self.event == :ALL_EVENTS or event == self.event
-      return true
+      false
     else
-      return false
+      self.event == :ALL_EVENTS or event == self.event
     end
   end
 

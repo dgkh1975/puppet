@@ -1,8 +1,13 @@
+inherit_from: .rubocop_todo.yml
+
 require:
-  rubocop-i18n
+  - rubocop-i18n
+  - rubocop-performance
+  - rubocop-rake
+  - rubocop-rspec
 
 AllCops:
-  TargetRubyVersion: 2.4
+  TargetRubyVersion: 3.1
   Include:
     - 'lib/**/*.rb'
     - 'ext/**/*.rb'
@@ -13,674 +18,371 @@ AllCops:
     - 'tasks/**/*'
     - 'ext/suse/puppet.spec'
     - 'lib/puppet/vendor/**/*'
+    - 'lib/puppet/pops/model/ast.rb'
     - 'lib/puppet/pops/parser/eparser.rb'
 
-# MAYBE useful - no return inside ensure block.
-Lint/EnsureReturn:
-  Enabled: false
-
-# MAYBE useful - errors when rescue {} happens.
-Lint/HandleExceptions:
-  Enabled: false
-
-# DISABLED really useless. Detects return as last statement.
-Style/RedundantReturn:
-  Enabled: false
-
-# Disabled. Throws an error trying to run.
-Style/RedundantParentheses:
-  Enabled: false
-
-# DISABLED since the instances do not seem to indicate any specific errors.
-Lint/AmbiguousOperator:
-  Enabled: false
-
-# DISABLED - not useful
-Layout/SpaceBeforeComment:
-  Enabled: false
-
-# DISABLED - not useful
-Style/HashSyntax:
-  Enabled: false
-
-# USES: as shortcut for non nil&valid checking a = x() and a.empty?
-# DISABLED - not useful
-Style/AndOr:
-  Enabled: false
-
-# DISABLED - not useful
-Style/RedundantSelf:
-  Enabled: false
-
-# DISABLED - not useful
-Metrics/MethodLength:
-  Enabled: false
-
-# DISABLED - not useful
-Style/WhileUntilModifier:
-  Enabled: false
-
-# DISABLED - the offender is just haskell envy
-Lint/AmbiguousRegexpLiteral:
-  Enabled: false
-
-# DISABLED
-Security/Eval:
-  Enabled: false
-# DISABLED
-Lint/BlockAlignment:
-  Enabled: false
-
-# DISABLED
-Lint/DefEndAlignment:
-  Enabled: false
-
-# DISABLED
-Lint/EndAlignment:
-  Enabled: false
-
-# DISABLED
-Lint/ParenthesesAsGroupedExpression:
-  Enabled: false
-
-Lint/RescueException:
-  Enabled: false
-
-Lint/UnusedBlockArgument:
-  Enabled: false
-
-Lint/UnusedMethodArgument:
-  Enabled: false
-
-Layout/AccessModifierIndentation:
-  Enabled: false
-
-Style/AccessorMethodName:
-  Enabled: false
-
-Style/Alias:
-  Enabled: false
-
-Layout/AlignArray:
-  Enabled: false
-
-Layout/AlignHash:
-  Enabled: false
-
-Layout/AlignParameters:
-  Enabled: false
-
-Metrics/BlockNesting:
-  Enabled: false
-
-Style/AsciiComments:
-  Enabled: false
-
-Style/Attr:
-  Enabled: false
-
-Style/BracesAroundHashParameters:
-  Enabled: false
-
-Style/CaseEquality:
-  Enabled: false
-
-Layout/CaseIndentation:
-  Enabled: false
-
-Style/CharacterLiteral:
-  Enabled: false
-
-Style/ClassAndModuleCamelCase:
-  Enabled: false
-
-Style/ClassAndModuleChildren:
-  Enabled: false
-
-Style/ClassCheck:
-  Enabled: false
-
-Metrics/ClassLength:
-  Enabled: false
-
-Style/ClassMethods:
-  Enabled: false
-
-Style/ClassVars:
-  Enabled: false
-
-Style/WhenThen:
-  Enabled: false
-
-
-# DISABLED - not useful
-Style/WordArray:
-  Enabled: false
-
-Style/UnneededPercentQ:
-  Enabled: false
-
-Layout/Tab:
-  Enabled: false
-
-Layout/SpaceBeforeSemicolon:
-  Enabled: false
-
-Layout/TrailingBlankLines:
-  Enabled: false
-
-Layout/SpaceInsideBlockBraces:
-  Enabled: false
-
-Layout/SpaceInsideBrackets:
-  Enabled: false
-
-Layout/SpaceInsideHashLiteralBraces:
-  Enabled: false
-
-Layout/SpaceInsideParens:
-  Enabled: false
-
-Layout/LeadingCommentSpace:
-  Enabled: false
-
-Layout/SpaceAfterColon:
-  Enabled: false
-
-Layout/SpaceAfterComma:
-  Enabled: false
-
-Layout/SpaceAroundKeyword:
-  Enabled: false
-
-Layout/SpaceAfterMethodName:
-  Enabled: false
-
-Layout/SpaceAfterNot:
-  Enabled: false
-
-Layout/SpaceAfterSemicolon:
-  Enabled: false
-
-Layout/SpaceAroundEqualsInParameterDefault:
-  Enabled: false
-
-Layout/SpaceAroundOperators:
-  Enabled: false
-
-Layout/SpaceBeforeBlockBraces:
-  Enabled: false
-
-Layout/SpaceBeforeComma:
-  Enabled: false
-
-
-Style/CollectionMethods:
-  Enabled: false
-
-Layout/CommentIndentation:
-  Enabled: false
-
-Style/ColonMethodCall:
-  Enabled: false
-
-Style/CommentAnnotation:
-  Enabled: false
-
-Metrics/CyclomaticComplexity:
-  Enabled: false
-
-Style/ConstantName:
-  Enabled: false
-
-Style/Documentation:
-  Enabled: false
-
-Style/DefWithParentheses:
-  Enabled: false
-
+# The formatting of defaults is unusual, so let's skip layout cops.
+Layout:
+  Exclude:
+    - 'lib/puppet/defaults.rb'
+
+# We don't mind when module and class keywords are aligned.
+Layout/IndentationWidth:
+  AllowedPatterns: ['^\s*module']
+
+Layout/LineEndStringConcatenationIndentation:
+  Enabled: true
+
+# Enabling this cop will remove raising RuntimeErrors and cause spec test
+# failures
+Style/RedundantException:
+  Exclude:
+    - 'lib/puppet/file_bucket/dipper.rb'
+    - 'lib/puppet/forge.rb'
+    - 'lib/puppet/module_tool/applications/unpacker.rb'
+    - 'lib/puppet/module_tool/local_tarball.rb'
+    - 'lib/puppet/module_tool/tar.rb'
+    - 'lib/puppet/pops/types/class_loader.rb'
+
+# Enabling this cop causes a plethora of failed rspec tests, mostly
+# Errno::ENAMETOOLONG and Puppet::Context::UndefinedBindingError: Unable to
+# lookup 'environments' errors
+Style/RedundantSelfAssignment:
+  Exclude:
+    - 'lib/puppet/context.rb'
+
+# Enabling this cop causes failures in rb_tree_map_spec relating to important
+# function slike being unable to delete nodes and returning nil when the key
+# cannot be found
 Style/PreferredHashMethods:
   Enabled: false
 
-Layout/DotPosition:
-  Enabled: false
-
-# DISABLED - used for converting to bool
-Style/DoubleNegation:
-  Enabled: false
-
-Style/EachWithObject:
-  Enabled: false
-
-Layout/EmptyLineBetweenDefs:
-  Enabled: false
-
-Layout/IndentArray:
-  Enabled: false
-
-Layout/IndentHash:
-  Enabled: false
-
-Layout/IndentationConsistency:
-  Enabled: false
-
-Layout/IndentationWidth:
-  Enabled: false
-
-Layout/EmptyLines:
-  Enabled: false
-
-Layout/EmptyLinesAroundAccessModifier:
-  Enabled: false
-
-Style/EmptyLiteral:
-  Enabled: false
-
-Metrics/LineLength:
-  Enabled: false
-
-Style/MethodCallWithoutArgsParentheses:
-  Enabled: false
-
-Style/MethodDefParentheses:
-  Enabled: false
-
-Style/LineEndConcatenation:
-  Enabled: false
-
-Layout/TrailingWhitespace:
-  Enabled: false
-
-Style/StringLiterals:
-  Enabled: false
-
-Style/TrailingCommaInLiteral:
-  Enabled: false
-
-Style/TrailingCommaInArguments:
-  Enabled: false
-
-Style/GlobalVars:
-  Enabled: false
-
-Style/GuardClause:
-  Enabled: false
-
-Style/IfUnlessModifier:
-  Enabled: false
-
-Style/MultilineIfThen:
-  Enabled: false
-
-Style/NegatedIf:
-  Enabled: false
-
-Style/NegatedWhile:
-  Enabled: false
-
-Style/Next:
-  Enabled: false
-
-Style/SingleLineBlockParams:
-  Enabled: false
-
-Style/SingleLineMethods:
-  Enabled: false
-
-Style/SpecialGlobalVars:
-  Enabled: false
-
-
-Style/TrivialAccessors:
-  Enabled: false
-
-Style/UnlessElse:
-  Enabled: false
-
-Style/VariableInterpolation:
-  Enabled: false
-
-Style/VariableName:
-  Enabled: false
-
-Style/WhileUntilDo:
-  Enabled: false
-
-Style/EvenOdd:
-  Enabled: false
-
-Style/FileName:
-  Enabled: false
-
-Style/For:
-  Enabled: false
-
-Style/Lambda:
-  Enabled: false
-
-Style/MethodName:
-  Enabled: false
-
-Style/MultilineTernaryOperator:
-  Enabled: false
-
-Style/NestedTernaryOperator:
-  Enabled: false
-
-Style/NilComparison:
-  Enabled: false
-
-Style/FormatString:
-  Enabled: false
-
-Style/MultilineBlockChain:
-  Enabled: false
-
-Style/Semicolon:
-  Enabled: false
-
-Style/SignalException:
-  Enabled: false
-
-Style/NonNilCheck:
-  Enabled: false
-
-Style/Not:
-  Enabled: false
-
-Style/NumericLiterals:
-  Enabled: false
-
-Style/OneLineConditional:
-  Enabled: false
-
-Style/OpMethod:
-  Enabled: false
-
-Style/ParenthesesAroundCondition:
-  Enabled: false
-
-Style/PercentLiteralDelimiters:
-  Enabled: false
-
-Style/PerlBackrefs:
-  Enabled: false
-
-Style/PredicateName:
-  Enabled: false
-
-Style/RedundantException:
-  Enabled: false
-
-Style/SelfAssignment:
-  Enabled: false
-
-Style/Proc:
-  Enabled: false
-
-Style/RaiseArgs:
-  Enabled: false
-
-Style/RedundantBegin:
-  Enabled: false
-
-Style/RescueModifier:
-  Enabled: false
-
-Style/RegexpLiteral:
-  Enabled: false
-
-Lint/UnderscorePrefixedVariableName:
-  Enabled: false
-
-Metrics/ParameterLists:
-  Enabled: false
-
-Lint/RequireParentheses:
-  Enabled: false
-
-Layout/SpaceBeforeFirstArg:
-  Enabled: false
-
-Style/ModuleFunction:
-  Enabled: false
-
-Style/IfWithSemicolon:
-  Enabled: false
-
-Style/Encoding:
-  Enabled: false
-
-Metrics/PerceivedComplexity:
-  Enabled: false
-
-Style/SymbolProc:
-  Enabled: false
-
-Layout/SpaceInsideRangeLiteral:
-  Enabled: false
-
-Style/InfiniteLoop:
-  Enabled: false
-
-Style/BarePercentLiterals:
-  Enabled: false
-
-Style/PercentQLiterals:
-  Enabled: false
-
-Layout/MultilineBlockLayout:
-  Enabled: false
+# Explicitly enables this cop new in 1.7
+Layout/SpaceBeforeBrackets:
+  Enabled: true
+
+# puppet uses symbol booleans in types and providers to work around long standing
+# bugs when trying to manage falsey pararameters and properties
+Lint/BooleanSymbol:
+  Enabled: true
+  Exclude:
+    - 'lib/puppet/type.rb'
+    - 'lib/puppet/type/**/*.rb'
+    - 'lib/puppet/provider/**/*.rb'
+    - 'lib/puppet/reference/providers.rb'
+    - 'lib/puppet/parameter/value.rb'
 
 Metrics/AbcSize:
-  Enabled: false
-
-Style/MutableConstant:
-  Enabled: false
-
-Style/BlockDelimiters:
-  Enabled: false
-
-Layout/EmptyLinesAroundClassBody:
-  Enabled: false
-
-Style/ConditionalAssignment:
-  Enabled: false
-
-Layout/ExtraSpacing:
-  Enabled: false
-
-Layout/EmptyLinesAroundBlockBody:
-  Enabled: false
-
-Layout/EmptyLinesAroundModuleBody:
-  Enabled: false
-
-Layout/MultilineOperationIndentation:
-  Enabled: false
-
-Style/EmptyElse:
-  Enabled: false
-
-Style/StringLiteralsInInterpolation:
-  Enabled: false
-
-Layout/MultilineMethodCallIndentation:
-  Enabled: false
-
-Metrics/ModuleLength:
-  Enabled: false
-
-Layout/EmptyLinesAroundMethodBody:
-  Enabled: false
-
-Layout/ClosingParenthesisIndentation:
-  Enabled: false
-
-Style/UnneededInterpolation:
-  Enabled: false
-
-Layout/ElseAlignment:
-  Enabled: false
-
-Style/FrozenStringLiteralComment:
-  Enabled: false
-
-Layout/FirstParameterIndentation:
-  Enabled: false
-
-Style/IfInsideElse:
-  Enabled: false
-
-Layout/IndentAssignment:
-  Enabled: false
-
-Layout/SpaceAroundBlockParameters:
-  Enabled: false
-
-Style/ParallelAssignment:
-  Enabled: false
-
-Performance/RedundantBlockCall:
-  Enabled: false
-
-Performance/RegexpMatch:
-  Enabled: false
-
-Style/IdenticalConditionalBranches:
-  Enabled: false
-
-Style/CommandLiteral:
-  Enabled: false
-
-Lint/NestedMethodDefinition:
-  Enabled: false
-
-Layout/SpaceInsideStringInterpolation:
-  Enabled: false
-
-Style/NestedModifier:
-  Enabled: false
-
-Style/NestedParenthesizedCalls:
-  Enabled: false
-
-Layout/RescueEnsureAlignment:
-  Enabled: false
-
-Style/TrailingUnderscoreVariable:
-  Enabled: false
-
-Lint/LiteralInInterpolation:
-  Enabled: false
-
-Layout/InitialIndentation:
-  Enabled: false
-
-Style/StructInheritance:
-  Enabled: false
-
-Style/SymbolLiteral:
-  Enabled: false
-
-Style/IfUnlessModifierOfIfUnless:
-  Enabled: false
-
-Style/ZeroLengthPredicate:
-  Enabled: false
-
-Bundler/OrderedGems:
-  Enabled: false
-
-Layout/EmptyLineAfterMagicComment:
-  Enabled: false
-
-Layout/EmptyLinesAroundBeginBody:
-  Enabled: false
-
-Layout/EmptyLinesAroundExceptionHandlingKeywords:
-  Enabled: false
-
-Layout/IndentHeredoc:
-  Enabled: false
-
-Layout/MultilineArrayBraceLayout:
-  Enabled: false
-
-Layout/MultilineHashBraceLayout:
-  Enabled: false
-
-Layout/MultilineMethodCallBraceLayout:
-  Enabled: false
-
-Layout/MultilineMethodDefinitionBraceLayout:
-  Enabled: false
-
-Layout/SpaceInsidePercentLiteralDelimiters:
-  Enabled: false
-
-Lint/EmptyWhen:
-  Enabled: false
-
-Lint/InheritException:
-  Enabled: false
-
-Lint/ScriptPermission:
   Enabled: false
 
 Metrics/BlockLength:
   Enabled: false
 
+Metrics/BlockNesting:
+  Enabled: false
+
+Metrics/ClassLength:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/ModuleLength:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+Naming/BinaryOperatorParameterName:
+  Enabled: false
+
+Naming/BlockParameterName:
+  Exclude:
+    - 'lib/puppet/util/windows/daemon.rb'
+    - 'lib/puppet/util/windows/user.rb'
+
+Naming/ClassAndModuleCamelCase:
+  Exclude:
+    - 'lib/puppet/ffi/windows/structs.rb'
+    - 'lib/puppet/pops/validation/checker4_0.rb'
+    - 'lib/puppet/pops/validation/validator_factory_4_0.rb'
+    - 'lib/puppet/util/windows/root_certs.rb'
+    - 'lib/puppet/util/windows/security.rb'
+    - 'lib/puppet/util/windows/user.rb'
+
+Naming/ConstantName:
+  Exclude:
+    - 'lib/puppet/graph/relationship_graph.rb'
+    - 'lib/puppet/indirector/hiera.rb'
+    - 'lib/puppet/provider/package/sun.rb'
+    - 'lib/puppet/resource/type.rb'
+    - 'lib/puppet/type/schedule.rb'
+    - 'lib/puppet/type/tidy.rb'
+    - 'lib/puppet/util.rb'
+    - 'lib/puppet/util/colors.rb'
+    - 'lib/puppet/util/execution.rb'
+    - 'lib/puppet/util/symbolic_file_mode.rb'
+    - 'lib/puppet/util/tagging.rb'
+    - 'lib/puppet/util/windows/adsi.rb'
+    - 'lib/puppet/util/windows/sid.rb'
+    - 'lib/puppet/util/yaml.rb'
+
+Naming/HeredocDelimiterNaming:
+  Enabled: false
+
+# Exclude existing violations to avoid breaking changes
+Naming/MemoizedInstanceVariableName:
+  Exclude:
+    - 'lib/puppet/module_tool/applications/installer.rb'
+    - 'lib/puppet/pops/types/type_factory.rb'
+    - 'lib/puppet/provider/package/portage.rb'
+    - 'lib/puppet/resource.rb'
+
+Naming/MethodName:
+  Exclude:
+    - 'lib/puppet/functions/**/*'
+    - 'lib/puppet/parser/ast/pops_bridge.rb'
+    - 'lib/puppet/pops/**/*'
+    - 'lib/puppet/util/windows/**/*'
+
+Naming/MethodParameterName:
+  Enabled: false
+
+Naming/PredicateName:
+  ForbiddenPrefixes: []
+
+Naming/RescuedExceptionsVariableName:
+  Enabled: false
+
+Naming/VariableName:
+  Exclude:
+    - 'ext/windows/service/daemon.rb'
+    - 'lib/puppet/agent.rb'
+    - 'lib/puppet/application/describe.rb'
+    - 'lib/puppet/pops/lookup/hiera_config.rb'
+    - 'lib/puppet/pops/validation/checker4_0.rb'
+    - 'lib/puppet/provider/package/pip.rb'
+    - 'lib/puppet/provider/package/windows/exe_package.rb'
+    - 'lib/puppet/provider/package/windows/msi_package.rb'
+    - 'lib/puppet/ssl/ssl_provider.rb'
+    - 'lib/puppet/util/windows/adsi.rb'
+    - 'lib/puppet/util/windows/daemon.rb'
+    - 'lib/puppet/util/windows/error.rb'
+    - 'lib/puppet/util/windows/user.rb'
+
+Naming/VariableNumber:
+  Enabled: false
+
+Performance/AncestorsInclude: # new in 1.7
+  Enabled: true
+
+Performance/BigDecimalWithNumericArgument: # new in 1.7
+  Enabled: true
+
+Performance/ConcurrentMonotonicTime: # new in 1.12
+  Enabled: true
+
+Performance/MapCompact: # new in 1.11
+  Enabled: true
+
+Performance/RedundantSortBlock: # new in 1.7
+  Enabled: true
+
+Performance/ReverseFirst: # new in 1.7
+  Enabled: true
+
+RSpec/BeEq: # new in 2.9.0
+  Enabled: true
+
+RSpec/BeNil: # new in 2.9.0
+  Enabled: true
+
+RSpec/ExcessiveDocstringSpacing: # new in 2.5
+  Enabled: true
+
+RSpec/IdenticalEqualityAssertion: # new in 2.4
+  Enabled: true
+
+RSpec/SubjectDeclaration: # new in 2.5
+  Enabled: true
+
+RSpec/VerifiedDoubleReference: # new in 2.10.0
+  Enabled: true
+
+RSpec/FactoryBot/SyntaxMethods: # new in 2.7
+  Enabled: true
+
+RSpec/Rails/AvoidSetupHook: # new in 2.4
+  Enabled: true
+
+Style/AutoResourceCleanup:
+  Enabled: true
+
+Style/CaseEquality:
+  Enabled: true
+
+Style/CaseLikeIf:
+  Enabled: true
+
+Style/ClassCheck:
+  Enabled: true
+
+Style/ClassEqualityComparison:
+  Enabled: true
+
+Style/ClassMethods:
+  Enabled: true
+
+Style/CollectionCompact:
+  Enabled: true
+
+Style/ColonMethodCall:
+  Enabled: true
+
+Style/CombinableLoops:
+  Enabled: true
+  Exclude:
+    - 'lib/puppet/graph/relationship_graph.rb'
+    - 'lib/puppet/pops/types/ruby_generator.rb'
+    - 'lib/puppet/provider/service/init.rb'
+    - 'lib/puppet/util/rdoc/generators/puppet_generator.rb'
+
+Style/ColonMethodDefinition:
+  Enabled: true
+
+Style/DefWithParentheses:
+  Enabled: true
+
+Style/Dir:
+  Enabled: true
+
+Style/DocumentDynamicEvalDefinition:
+  Enabled: true
+
+Style/DoubleCopDisableDirective:
+  Enabled: true
+
+Style/EachForSimpleLoop:
+  Enabled: true
+
+Style/EachWithObject:
+  Enabled: true
+
+Style/EmptyBlockParameter:
+  Enabled: true
+
 Style/EmptyCaseCondition:
+  Enabled: true
+
+Style/EmptyLambdaParameter:
+  Enabled: true
+
+Style/EmptyLiteral:
+  Enabled: true
+
+Style/EvalWithLocation:
+  Enabled: true
+
+Style/EvenOdd:
+  Enabled: true
+
+Style/ExpandPathArguments:
+  Enabled: true
+
+Style/FetchEnvVar:
+  Enabled: true
+
+Style/FileRead:
+  Enabled: true
+
+Style/FileWrite:
+  Enabled: true
+
+Style/FloatDivision:
+  Enabled: true
+
+Style/For:
+  Enabled: true
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+
+Style/GlobalStdStream:
+  Enabled: true
+
+Style/GlobalVars:
+  Enabled: true
+
+Style/HashAsLastArrayItem:
+  Enabled: true
+
+Style/HashConversion:
+  Enabled: true
+
+# HashEachMethods does not guarantee the receiver is a Hash, so
+# this will not work since numerous puppet classes define #value
+# not #each_value
+Style/HashEachMethods:
   Enabled: false
 
-Style/EmptyMethod:
-  Enabled: false
+Style/HashLikeCase:
+  Enabled: true
+  Exclude:
+    - 'lib/puppet/util/command_line/trollop.rb'
 
-Style/FormatStringToken:
-  Enabled: false
+Style/HashTransformKeys:
+  Enabled: true
+
+Style/HashTransformValues:
+  Enabled: true
+
+Style/IdenticalConditionalBranches:
+  Enabled: true
+
+Style/IfInsideElse:
+  Enabled: true
+
+Style/IfUnlessModifierOfIfUnless:
+  Enabled: true
+
+Style/IfWithBooleanLiteralBranches:
+  Enabled: true
+
+Style/IfWithSemicolon:
+  Enabled: true
+
+Style/InfiniteLoop:
+  Enabled: true
 
 Style/InverseMethods:
-  Enabled: false
+  Enabled: true
 
-Style/MethodMissing:
-  Enabled: false
+Style/KeywordParametersOrder:
+  Enabled: true
 
-Style/MixinGrouping:
-  Enabled: false
+Style/Lambda:
+  Enabled: true
 
-Style/MultilineIfModifier:
-  Enabled: false
+Style/LambdaCall:
+  Enabled: true
 
-Style/MultilineMemoization:
-  Enabled: false
+Style/LineEndConcatenation:
+  Enabled: true
 
-Style/MultipleComparison:
-  Enabled: false
+Style/MapCompactWithConditionalBlock:
+  Enabled: true
 
-Style/NumericLiteralPrefix:
-  Enabled: false
+Style/MapToHash:
+  Enabled: true
 
-Style/NumericPredicate:
-  Enabled: false
-
-Style/SymbolArray:
-  Enabled: false
-
-Style/TernaryParentheses:
-  Enabled: false
-
-Style/YodaCondition:
-  Enabled: false
-
-GetText/DecorateFunctionMessage:
-  Enabled: false
-
-GetText/DecorateString:
-  Enabled: false
-
-GetText/DecorateStringFormattingUsingPercent:
-  Enabled: false
-
-Style/SafeNavigation:
-  Enabled: false
+Style/MapToSet:
+  Enabled: true

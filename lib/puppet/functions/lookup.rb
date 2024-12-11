@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Uses the Puppet lookup system to retrieve a value for a given key. By default,
 # this returns the first value found (and fails compilation if no values are
 # available), but you can configure it to merge multiple values into one, fail
@@ -95,7 +97,7 @@
 # or `{'strategy' => 'hash'}` --- Same as the string versions of these merge behaviors.
 # * `{'strategy' => 'deep', <DEEP OPTION> => <VALUE>, ...}` --- Same as `'deep'`,
 # but can adjust the merge with additional options. The available options are:
-#     * `'knockout_prefix'` (string or undef) --- A string prefix to indicate a
+#     * `'knockout_prefix'` (string) --- A string prefix to indicate a
 #     value should be _removed_ from the final result. If a value is exactly equal
 #     to the prefix, it will knockout the entire element. Defaults to `undef`, which
 #     disables this feature.
@@ -123,7 +125,6 @@
 #
 # @since 4.0.0
 Puppet::Functions.create_function(:lookup, Puppet::Functions::InternalFunction) do
-
   local_types do
     type 'NameType         = Variant[String, Array[String]]'
     type 'ValueType        = Type'
@@ -145,7 +146,6 @@ Puppet::Functions.create_function(:lookup, Puppet::Functions::InternalFunction) 
       default_values_hash => Optional[Hash[String,Any]],\
       merge               => Optional[MergeType]\
     }]"
-
   end
 
   dispatch :lookup_1 do
@@ -186,7 +186,7 @@ Puppet::Functions.create_function(:lookup, Puppet::Functions::InternalFunction) 
     optional_block_param 'BlockType',                     :block
   end
 
-  def lookup_1(scope, name, value_type=nil, merge=nil)
+  def lookup_1(scope, name, value_type = nil, merge = nil)
     do_lookup(scope, name, value_type, nil, false, {}, {}, merge)
   end
 
@@ -194,7 +194,7 @@ Puppet::Functions.create_function(:lookup, Puppet::Functions::InternalFunction) 
     do_lookup(scope, name, value_type, default_value, true, {}, {}, merge)
   end
 
-  def lookup_3(scope, name, value_type=nil, merge=nil, &block)
+  def lookup_3(scope, name, value_type = nil, merge = nil, &block)
     do_lookup(scope, name, value_type, nil, false, {}, {}, merge, &block)
   end
 
@@ -208,17 +208,17 @@ Puppet::Functions.create_function(:lookup, Puppet::Functions::InternalFunction) 
 
   def do_lookup(scope, name, value_type, default_value, has_default, override, default_values_hash, merge, &block)
     Puppet::Pops::Lookup.lookup(name, value_type, default_value, has_default, merge,
-      Puppet::Pops::Lookup::Invocation.new(scope, override, default_values_hash), &block)
+                                Puppet::Pops::Lookup::Invocation.new(scope, override, default_values_hash), &block)
   end
 
   def hash_args(options_hash)
     [
-        options_hash['value_type'],
-        options_hash['default_value'],
-        options_hash.include?('default_value'),
-        options_hash['override'] || {},
-        options_hash['default_values_hash'] || {},
-        options_hash['merge']
+      options_hash['value_type'],
+      options_hash['default_value'],
+      options_hash.include?('default_value'),
+      options_hash['override'] || {},
+      options_hash['default_values_hash'] || {},
+      options_hash['merge']
     ]
   end
 end

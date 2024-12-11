@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Puppet::Type.type(:file).provide :posix do
   desc "Uses POSIX functionality to manage file ownership and permissions."
 
@@ -10,8 +12,22 @@ Puppet::Type.type(:file).provide :posix do
   require 'etc'
   require_relative '../../../puppet/util/selinux'
 
-  def self.post_resource_eval
-    Selinux.matchpathcon_fini if Puppet::Util::SELinux.selinux_support?
+  class << self
+    def selinux_handle
+      return nil unless Puppet::Util::SELinux.selinux_support?
+
+      # selabel_open takes 3 args: backend, options, and nopt. The backend param
+      # is a constant, SELABEL_CTX_FILE, which happens to be 0. Since options is
+      # nil, nopt can be 0 since nopt represents the # of options specified.
+      @selinux_handle ||= Selinux.selabel_open(Selinux::SELABEL_CTX_FILE, nil, 0)
+    end
+
+    def post_resource_eval
+      if @selinux_handle
+        Selinux.selabel_close(@selinux_handle)
+        @selinux_handle = nil
+      end
+    end
   end
 
   def uid2name(id)
@@ -25,15 +41,17 @@ Puppet::Type.type(:file).provide :posix do
     end
 
     if user.uid == ""
-      return nil
+      nil
     else
-      return user.name
+      user.name
     end
   end
 
   # Determine if the user is valid, and if so, return the UID
   def name2uid(value)
-    Integer(value) rescue uid(value) || false
+    Integer(value)
+  rescue
+    uid(value) || false
   end
 
   def gid2name(id)
@@ -47,14 +65,16 @@ Puppet::Type.type(:file).provide :posix do
     end
 
     if group.gid == ""
-      return nil
+      nil
     else
-      return group.name
+      group.name
     end
   end
 
   def name2gid(value)
-    Integer(value) rescue gid(value) || false
+    Integer(value)
+  rescue
+    gid(value) || false
   end
 
   def owner
@@ -69,7 +89,7 @@ Puppet::Type.type(:file).provide :posix do
     # large UIDs instead of negative ones.  This isn't a Ruby bug,
     # it's an OS X bug, since it shows up in perl, too.
     if currentvalue > Puppet[:maximum_uid].to_i
-      self.warning _("Apparently using negative UID (%{currentvalue}) on a platform that does not consistently handle them") % { currentvalue: currentvalue }
+      warning _("Apparently using negative UID (%{currentvalue}) on a platform that does not consistently handle them") % { currentvalue: currentvalue }
       currentvalue = :silly
     end
 
@@ -101,7 +121,7 @@ Puppet::Type.type(:file).provide :posix do
     # large GIDs instead of negative ones.  This isn't a Ruby bug,
     # it's an OS X bug, since it shows up in perl, too.
     if currentvalue > Puppet[:maximum_uid].to_i
-      self.warning _("Apparently using negative GID (%{currentvalue}) on a platform that does not consistently handle them") % { currentvalue: currentvalue }
+      warning _("Apparently using negative GID (%{currentvalue}) on a platform that does not consistently handle them") % { currentvalue: currentvalue }
       currentvalue = :silly
     end
 
@@ -126,19 +146,17 @@ Puppet::Type.type(:file).provide :posix do
   def mode
     stat = resource.stat
     if stat
-      return (stat.mode & 007777).to_s(8).rjust(4, '0')
+      (stat.mode & 0o07777).to_s(8).rjust(4, '0')
     else
-      return :absent
+      :absent
     end
   end
 
   def mode=(value)
-    begin
-      File.chmod(value.to_i(8), resource[:path])
-    rescue => detail
-      error = Puppet::Error.new(_("failed to set mode %{mode} on %{path}: %{message}") % { mode: mode, path: resource[:path], message: detail.message })
-      error.set_backtrace detail.backtrace
-      raise error
-    end
+    File.chmod(value.to_i(8), resource[:path])
+  rescue => detail
+    error = Puppet::Error.new(_("failed to set mode %{mode} on %{path}: %{message}") % { mode: mode, path: resource[:path], message: detail.message })
+    error.set_backtrace detail.backtrace
+    raise error
   end
 end

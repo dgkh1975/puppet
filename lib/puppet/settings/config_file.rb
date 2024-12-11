@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../puppet/settings/ini_file'
 
 ##
@@ -6,7 +8,6 @@ require_relative '../../puppet/settings/ini_file'
 # Parses puppet configuration files
 #
 class Puppet::Settings::ConfigFile
-
   ##
   # @param value_converter [Proc] a function that will convert strings into ruby types
   def initialize(value_converter)
@@ -21,7 +22,7 @@ class Puppet::Settings::ConfigFile
   # @return A Struct with a +sections+ array representing each configuration section
   def parse_file(file, text, allowed_section_names = [])
     result = Conf.new
-    if !allowed_section_names.empty?
+    unless allowed_section_names.empty?
       allowed_section_names << 'main' unless allowed_section_names.include?('main')
     end
 
@@ -77,17 +78,17 @@ class Puppet::Settings::ConfigFile
   Meta = Struct.new(:owner, :group, :mode)
   NO_META = Meta.new(nil, nil, nil)
 
-private
+  private
 
   def unique_sections_in(ini, file, allowed_section_names)
     ini.section_lines.collect do |section|
       if !allowed_section_names.empty? && !allowed_section_names.include?(section.name)
         error_location_str = Puppet::Util::Errors.error_location(file, section.line_number)
         message = _("Illegal section '%{name}' in config file at %{error_location}.") %
-            { name: section.name, error_location: error_location_str }
-        #TRANSLATORS 'puppet.conf' is the name of the puppet configuration file and should not be translated.
+                  { name: section.name, error_location: error_location_str }
+        # TRANSLATORS 'puppet.conf' is the name of the puppet configuration file and should not be translated.
         message += ' ' + _("The only valid puppet.conf sections are: [%{allowed_sections_list}].") %
-            { allowed_sections_list: allowed_section_names.join(", ") }
+                         { allowed_sections_list: allowed_section_names.join(", ") }
         message += ' ' + _("Please use the directory environments feature to specify environments.")
         message += ' ' + _("(See https://puppet.com/docs/puppet/latest/environments_about.html)")
         raise(Puppet::Error, message)
@@ -122,10 +123,11 @@ private
   def extract_fileinfo(string)
     result = {}
     value = string.sub(/\{\s*([^}]+)\s*\}/) do
-      params = $1
+      params = ::Regexp.last_match(1)
       params.split(/\s*,\s*/).each do |str|
-        if str =~ /^\s*(\w+)\s*=\s*([\w]+)\s*$/
-          param, value = $1.intern, $2
+        if str =~ /^\s*(\w+)\s*=\s*(\w+)\s*$/
+          param = ::Regexp.last_match(1).intern
+          value = ::Regexp.last_match(2)
           result[param] = value
           unless [:owner, :mode, :group].include?(param)
             raise ArgumentError, _("Invalid file option '%{parameter}'") % { parameter: param }

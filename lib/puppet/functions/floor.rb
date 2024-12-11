@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Returns the largest `Integer` less or equal to the argument.
 # Takes a single numeric value as an argument.
 #
@@ -24,7 +26,7 @@ Puppet::Functions.create_function(:floor) do
 
   def on_string(x)
     Puppet.warn_once('deprecations', 'floor_function_numeric_coerce_string',
-      _("The floor() function's auto conversion of String to Float is deprecated - change to convert input before calling"))
+                     _("The floor() function's auto conversion of String to Float is deprecated - change to convert input before calling"))
 
     begin
       Float(x).floor
@@ -33,5 +35,4 @@ Puppet::Functions.create_function(:floor) do
       raise(ArgumentError, _('floor(): cannot convert given value to a floating point value.'))
     end
   end
-
 end

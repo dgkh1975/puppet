@@ -202,15 +202,19 @@ describe "apply", unless: Puppet::Util::Platform.jruby? do
       compile_to_catalog('include mod', node)
     end
 
-    it 'can apply the catalog' do
-      catalog = compile_to_catalog('include mod', node)
-
-      Puppet[:environment] = env_name
-      apply.command_line.args = ['--catalog', file_containing('manifest', catalog.to_json)]
-
-      expect {
-        apply.run
-      }.to output(%r{Notify\[The Street 23\]/message: defined 'message' as 'The Street 23'}).to_stdout
+    it 'can apply the catalog with no warning' do
+      logs = []
+      Puppet::Util::Log.with_destination(Puppet::Test::LogCollector.new(logs)) do
+        catalog = compile_to_catalog('include mod', node)
+        Puppet[:environment] = env_name
+        handler = Puppet::Network::FormatHandler.format(:rich_data_json)
+        apply.command_line.args = ['--catalog', file_containing('manifest', handler.render(catalog))]
+        expect {
+          apply.run
+        }.to output(%r{Notify\[The Street 23\]/message: defined 'message' as 'The Street 23'}).to_stdout
+      end
+      # expected to have no warnings
+      expect(logs.select { |log| log.level == :warning }.map { |log| log.message }).to be_empty
     end
   end
 
@@ -438,6 +442,17 @@ class amod::bad_type {
     end
 
     context 'and the file is not serialized with rich_data' do
+      # do not want to stub out behavior in tests
+      before :each do
+        Puppet[:strict] = :warning
+      end
+
+      around :each do |test|
+        Puppet.override(rich_data: false) do
+          test.run
+        end
+      end
+
       it 'will notify a string that is the result of Regexp#inspect (from Runtime3xConverter)' do
         catalog = compile_to_catalog(execute, node)
         apply.command_line.args = ['--catalog', file_containing('manifest', catalog.to_json)]
@@ -629,7 +644,7 @@ class amod::bad_type {
           apply.run
         }.to exit_with(0)
          .and output(/Applied catalog/).to_stdout
-         .and output(/Report processor failed: certificate verify failed \[self signed certificate in certificate chain for CN=Unknown CA\]/).to_stderr
+         .and output(/Report processor failed: certificate verify failed \[self.signed certificate in certificate chain for CN=Unknown CA\]/).to_stderr
       end
     end
 
@@ -665,6 +680,18 @@ class amod::bad_type {
   end
 
   context 'rich data' do
+    let(:deferred_file) { tmpfile('deferred') }
+    let(:deferred_manifest) do <<~END
+      file { '#{deferred_file}':
+        ensure => file,
+        content => '123',
+      } ->
+      notify { 'deferred':
+        message => Deferred('binary_file', ['#{deferred_file}'])
+      }
+      END
+    end
+
     it "calls a deferred 4x function" do
       apply.command_line.args = ['-e', 'notify { "deferred3x": message => Deferred("join", [[1,2,3], ":"]) }']
 
@@ -680,6 +707,96 @@ class amod::bad_type {
         apply.run
       }.to exit_with(0) # for some reason apply returns 0 instead of 2
        .and output(%r{Notice: /Stage\[main\]/Main/Notify\[deferred4x\]/message: defined 'message' as 'I am deferred'}).to_stdout
+    end
+
+    it "fails to apply a deferred function with an unsatisfied prerequisite" do
+      Puppet[:preprocess_deferred] = true
+
+      apply.command_line.args = ['-e', deferred_manifest]
+      expect {
+        apply.run
+      }.to exit_with(1) # for some reason apply returns 0 instead of 2
+       .and output(/Compiled catalog/).to_stdout
+       .and output(%r{The given file '#{deferred_file}' does not exist}).to_stderr
+    end
+
+    it "applies a deferred function and its prerequisite in the same run" do
+      apply.command_line.args = ['-e', deferred_manifest]
+      expect {
+        apply.run
+      }.to exit_with(0) # for some reason apply returns 0 instead of 2
+        .and output(%r{defined 'message' as Binary\("MTIz"\)}).to_stdout
+    end
+
+    it "validates the deferred resource before applying any resources" do
+      Puppet[:preprocess_deferred] = true
+      undeferred_file = tmpfile('undeferred')
+
+      manifest = <<~END
+      file { '#{undeferred_file}':
+        ensure => file,
+      }
+      file { '#{deferred_file}':
+          ensure => file,
+          content => Deferred('inline_epp', ['<%= 42 %>']),
+          source => 'http://example.com/content',
+      }
+      END
+      apply.command_line.args = ['-e', manifest]
+      expect {
+        apply.run
+      }.to exit_with(1)
+        .and output(/Compiled catalog/).to_stdout
+        .and output(/Validation of File.* failed: You cannot specify more than one of content, source, target/).to_stderr
+
+      # validation happens before all resources are applied, so this shouldn't exist
+      expect(File).to_not be_exist(undeferred_file)
+    end
+
+    it "evaluates resources before validating the deferred resource" do
+      manifest = <<~END
+        notify { 'runs before file': } ->
+        file { '#{deferred_file}':
+          ensure => file,
+          content => Deferred('inline_epp', ['<%= 42 %>']),
+          source => 'http://example.com/content',
+      }
+      END
+      apply.command_line.args = ['-e', manifest]
+      expect {
+        apply.run
+      }.to exit_with(1)
+        .and output(/Notify\[runs before file\]/).to_stdout
+        .and output(/Validation of File.* failed: You cannot specify more than one of content, source, target/).to_stderr
+    end
+
+    it "applies deferred sensitive file content" do
+      manifest = <<~END
+      file { '#{deferred_file}':
+        ensure => file,
+        content => Deferred('new', [Sensitive, "hello\n"])
+      }
+      END
+      apply.command_line.args = ['-e', manifest]
+      expect {
+        apply.run
+      }.to exit_with(0)
+        .and output(/ensure: changed \[redacted\] to \[redacted\]/).to_stdout
+    end
+
+    it "applies nested deferred sensitive file content" do
+      manifest = <<~END
+      $vars = {'token' => Deferred('new', [Sensitive, "hello"])}
+      file { '#{deferred_file}':
+        ensure => file,
+        content => Deferred('inline_epp', ['<%= $token %>', $vars])
+      }
+      END
+      apply.command_line.args = ['-e', manifest]
+      expect {
+        apply.run
+      }.to exit_with(0)
+        .and output(/ensure: changed \[redacted\] to \[redacted\]/).to_stdout
     end
   end
 end

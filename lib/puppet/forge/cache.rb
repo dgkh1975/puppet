@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'uri'
 
 require_relative '../../puppet/forge'
@@ -7,7 +9,6 @@ class Puppet::Forge
   #
   # Provides methods for reading files from local cache, filesystem or network.
   class Cache
-
     # Instantiate new cache for the +repository+ instance.
     def initialize(repository, options = {})
       @repository = repository
@@ -37,12 +38,12 @@ class Puppet::Forge
 
     # Return contents of file at the given URI's +uri+.
     def read_retrieve(uri)
-      return uri.read
+      uri.read
     end
 
     # Return Pathname for repository's cache directory, create it if needed.
     def path
-      (self.class.base_path + @repository.cache_key).tap{ |o| o.mkpath }
+      (self.class.base_path + @repository.cache_key).tap(&:mkpath)
     end
 
     # Return the base Pathname for all the caches.

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/util/package/version/range'
 require_relative '../../../puppet/util/package/version/debian'
 
@@ -12,14 +14,14 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
     These options should be specified as an array where each element is either a
      string or a hash."
 
-  has_feature :versionable, :install_options, :virtual_packages
+  has_feature :versionable, :install_options, :virtual_packages, :version_ranges
 
   commands :aptget => "/usr/bin/apt-get"
   commands :aptcache => "/usr/bin/apt-cache"
   commands :aptmark => "/usr/bin/apt-mark"
   commands :preseed => "/usr/bin/debconf-set-selections"
 
-  defaultfor :osfamily => :debian
+  defaultfor 'os.family' => :debian
 
   ENV['DEBIAN_FRONTEND'] = "noninteractive"
 
@@ -43,14 +45,14 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
   def query
     hash = super
 
-    if !%i(absent purged).include?(hash[:ensure]) && aptmark('showmanual', @resource[:name]).strip == @resource[:name]
+    if !%i[absent purged].include?(hash[:ensure]) && aptmark('showmanual', @resource[:name]).strip == @resource[:name]
       hash[:mark] = :manual
     end
 
     hash
   end
 
-  def initialize(value={})
+  def initialize(value = {})
     super(value)
     @property_flush = {}
   end
@@ -76,6 +78,8 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
   # Debian boxes, and the only thing that differs is that it can
   # install packages from remote sites.
 
+  # Double negation confuses Rubocop's Layout cops
+  # rubocop:disable Layout
   def checkforcdrom
     have_cdrom = begin
                    !!(File.read("/etc/apt/sources.list") =~ /^[^#]*cdrom:/)
@@ -83,10 +87,10 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
                    # This is basically pathological...
                    false
                  end
+  # rubocop:enable Layout
 
     if have_cdrom and @resource[:allowcdrom] != :true
-      raise Puppet::Error,
-        _("/etc/apt/sources.list contains a cdrom source; not installing.  Use 'allowcdrom' to override this failure.")
+      raise Puppet::Error, _("/etc/apt/sources.list contains a cdrom source; not installing.  Use 'allowcdrom' to override this failure.")
     end
   end
 
@@ -104,7 +108,7 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
       end
     end
 
-    return versions.sort.last if versions.any?
+    return versions.max if versions.any?
 
     Puppet.debug("No available version for package #{@resource[:name]} is included in range #{should_range}")
     should_range
@@ -113,7 +117,7 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
   # Install a package using 'apt-get'.  This function needs to support
   # installing a specific version.
   def install
-    self.run_preseed if @resource[:responsefile]
+    run_preseed if @resource[:responsefile]
     should = @resource[:ensure]
 
     if should.is_a?(String)
@@ -129,7 +133,7 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
     end
 
     checkforcdrom
-    cmd = %w{-q -y}
+    cmd = %w[-q -y]
 
     config = @resource[:configfiles]
     if config
@@ -153,41 +157,42 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
     cmd += install_options if @resource[:install_options]
     cmd << :install
 
+    # rubocop:disable Style/RedundantCondition
     if source
       cmd << source
     else
       cmd << str
     end
+    # rubocop:enable Style/RedundantCondition
 
-    self.unhold if self.properties[:mark] == :hold
+    unhold if properties[:mark] == :hold
     begin
       aptget(*cmd)
     ensure
-      self.hold if @resource[:mark] == :hold
+      hold if @resource[:mark] == :hold
     end
 
     # If a source file was specified, we must make sure the expected version was installed from specified file
-    if source && !%i(present installed).include?(should)
-      is = self.query
-      raise Puppet::Error, _("Could not find package %{name}") % { name: self.name } unless is
+    if source && !%i[present installed].include?(should)
+      is = query
+      raise Puppet::Error, _("Could not find package %{name}") % { name: name } unless is
 
       version = is[:ensure]
 
       raise Puppet::Error, _("Failed to update to version %{should}, got version %{version} instead") % { should: should, version: version } unless
         insync?(version)
     end
-
   end
 
   # What's the latest package version available?
   def latest
-    output = aptcache :policy,  @resource[:name]
+    output = aptcache :policy, @resource[:name]
 
     if output =~ /Candidate:\s+(\S+)\s/
-      return $1
+      Regexp.last_match(1)
     else
-      self.err _("Could not find latest version")
-      return nil
+      err _("Could not find latest version")
+      nil
     end
   end
 
@@ -197,26 +202,26 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
   def run_preseed
     response = @resource[:responsefile]
     if response && Puppet::FileSystem.exist?(response)
-      self.info(_("Preseeding %{response} to debconf-set-selections") % { response: response })
+      info(_("Preseeding %{response} to debconf-set-selections") % { response: response })
 
       preseed response
     else
-      self.info _("No responsefile specified or non existent, not preseeding anything")
+      info _("No responsefile specified or non existent, not preseeding anything")
     end
   end
 
   def uninstall
-    self.run_preseed if @resource[:responsefile]
+    run_preseed if @resource[:responsefile]
     args = ['-y', '-q']
-    args << '--allow-change-held-packages' if self.properties[:mark] == :hold
+    args << '--allow-change-held-packages' if properties[:mark] == :hold
     args << :remove << @resource[:name]
     aptget(*args)
   end
 
   def purge
-    self.run_preseed if @resource[:responsefile]
+    run_preseed if @resource[:responsefile]
     args = ['-y', '-q']
-    args << '--allow-change-held-packages' if self.properties[:mark] == :hold
+    args << '--allow-change-held-packages' if properties[:mark] == :hold
     args << :remove << '--purge' << @resource[:name]
     aptget(*args)
     # workaround a "bug" in apt, that already removed packages are not purged
@@ -233,7 +238,7 @@ Puppet::Type.type(:package).provide :apt, :parent => :dpkg, :source => :dpkg do
 
     return false unless is && is != :absent
 
-    #if 'should' is a range and 'is' a debian version we should check if 'should' includes 'is'
+    # if 'should' is a range and 'is' a debian version we should check if 'should' includes 'is'
     should = @resource[:ensure]
 
     return false unless is.is_a?(String) && should.is_a?(String)

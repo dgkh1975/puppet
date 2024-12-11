@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Puppet::Network # :nodoc:
   # A struct-like class for passing around a client request.  It's mostly
   # just used for validation and authorization.
@@ -5,7 +7,7 @@ module Puppet::Network # :nodoc:
     attr_accessor :name, :ip, :authenticated, :handler, :method
 
     def authenticated?
-      self.authenticated
+      authenticated
     end
 
     # A common way of talking about the full call.  Individual servers
@@ -18,12 +20,13 @@ module Puppet::Network # :nodoc:
     end
 
     def initialize(name, ip, authenticated)
-      @name, @ip, @authenticated = name, ip, authenticated
+      @name = name
+      @ip = ip
+      @authenticated = authenticated
     end
 
     def to_s
-      "#{self.name}(#{self.ip})"
+      "#{name}(#{ip})"
     end
   end
 end
-

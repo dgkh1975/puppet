@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../../../puppet/provider/nameservice/pw'
 
 Puppet::Type.type(:group).provide :pw, :parent => Puppet::Provider::NameService::PW do
@@ -6,8 +8,8 @@ Puppet::Type.type(:group).provide :pw, :parent => Puppet::Provider::NameService:
   commands :pw => "pw"
   has_features :manages_members
 
-  defaultfor :operatingsystem => [:freebsd, :dragonfly]
-  confine    :operatingsystem => [:freebsd, :dragonfly]
+  defaultfor 'os.name' => [:freebsd, :dragonfly]
+  confine    'os.name' => [:freebsd, :dragonfly]
 
   options :members, :flag => "-M", :method => :mem
 
@@ -48,4 +50,3 @@ Puppet::Type.type(:group).provide :pw, :parent => Puppet::Provider::NameService:
     super(param, value)
   end
 end
-

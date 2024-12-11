@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "PUPPET\-FILEBUCKET" "8" "October 2021" "Puppet, Inc." "Puppet manual"
+.TH "PUPPET\-FILEBUCKET" "8" "November 2024" "Puppet, Inc." "Puppet manual"
 .
 .SH "NAME"
 \fBpuppet\-filebucket\fR \- Store and retrieve files in a filebucket
@@ -35,6 +35,14 @@ This is a stand\-alone filebucket client for sending files to a local or central
 .
 .P
 Note that \'filebucket\' defaults to using a network\-based filebucket available on the server named \'puppet\'\. To use this, you\'ll have to be running as a user with valid Puppet certificates\. Alternatively, you can use your local file bucket by specifying \'\-\-local\', or by specifying \'\-\-bucket\' with a local path\.
+.
+.P
+\fBImportant\fR: When you enable and use the backup option, and by extension the filebucket resource, you must ensure that sufficient disk space is available for the file backups\. Generally, you can provide the disk space by using one of the following two options:
+.
+.IP "\(bu" 4
+Use a \fBfind\fR command and \fBcrontab\fR entry to retain only the last X days of file backups\. For example:
+.
+.IP "" 0
 .
 .IP "" 4
 .
@@ -146,6 +154,7 @@ $ puppet filebucket \-l \-f "2015\-05\-11 09:30:00" list
 
 $ puppet filebucket \-l \-t "2015\-05\-11 09:30:00" list
 d43a6ecaa892a1962398ac9170ea9bf2 2015\-05\-11 09:27:56 /tmp/TestFile
+
 ## Manage files in a specific local filebucket
 $ puppet filebucket \-b /tmp/TestBucket backup /tmp/TestFile2
 /tmp/TestFile2: d41d8cd98f00b204e9800998ecf8427e

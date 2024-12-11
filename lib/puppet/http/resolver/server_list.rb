@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 # Use the server_list setting to resolve a service. This resolver is only used
 # if server_list is set either on the command line or in the configuration file.
 #
 # @api public
 class Puppet::HTTP::Resolver::ServerList < Puppet::HTTP::Resolver
-
   # Create a server list resolver.
   #
   # @param [Puppet::HTTP::Client] client
@@ -15,7 +16,7 @@ class Puppet::HTTP::Resolver::ServerList < Puppet::HTTP::Resolver
   #   used to resolve. If a service is not included in this array, this resolver
   #   will return nil.
   #
-  def initialize(client, server_list_setting:, default_port:, services: )
+  def initialize(client, server_list_setting:, default_port:, services:)
     @client = client
     @server_list_setting = server_list_setting
     @default_port = default_port
@@ -70,10 +71,10 @@ class Puppet::HTTP::Resolver::ServerList < Puppet::HTTP::Resolver
         end
       rescue Puppet::HTTP::HTTPError => detail
         if index < @server_list_setting.value.length - 1
-          Puppet.warning(_("Unable to connect to server from server_list setting: %{detail}") % {detail: detail} +
+          Puppet.warning(_("Unable to connect to server from server_list setting: %{detail}") % { detail: detail } +
                              ' ' + _("Trying with next server from server_list."))
         else
-          Puppet.log_exception(detail, _("Unable to connect to server from server_list setting: %{detail}") % {detail: detail})
+          Puppet.log_exception(detail, _("Unable to connect to server from server_list setting: %{detail}") % { detail: detail })
         end
       end
     end
